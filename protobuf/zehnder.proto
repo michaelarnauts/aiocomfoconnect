@@ -1,0 +1,712 @@
+syntax = "proto2";
+option java_package = "com.zehnder.proto";
+option optimize_for = SPEED;
+
+import "nanopb.proto";
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Discovery messages
+///////////////////////////////////////////////////////////////////////////////////////////////////
+message DiscoveryOperation {
+    optional SearchGatewayRequest searchGatewayRequest = 1;
+    optional SearchGatewayResponse searchGatewayResponse = 2;
+}
+
+message SearchGatewayRequest {
+}
+
+message SearchGatewayResponse {
+    enum GatewayType {
+        lanc = 0;
+        season = 1;
+    }
+    required string ipaddress = 1 [(nanopb).max_size = 16];
+    required bytes uuid = 2 [(nanopb).max_size = 16];
+    required uint32 version = 3;
+    optional GatewayType type = 4 [default = lanc];
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Message-type
+// Raw value is encoded as 16-bit network-order on the wire (not default enum encoding, which is varint)
+///////////////////////////////////////////////////////////////////////////////////////////////////
+message GatewayOperation {
+    enum OperationType {
+        NoOperation = 0;	
+
+        SetAddressRequestType = 1;
+        RegisterAppRequestType = 2;
+        StartSessionRequestType = 3;
+        CloseSessionRequestType = 4;
+        ListRegisteredAppsRequestType = 5;
+        DeregisterAppRequestType = 6;
+        ChangePinRequestType = 7;
+        GetRemoteAccessIdRequestType = 8;
+        SetRemoteAccessIdRequestType = 9;
+        GetSupportIdRequestType = 10;
+        SetSupportIdRequestType = 11;
+        GetWebIdRequestType = 12;
+        SetWebIdRequestType = 13;
+        SetPushIdRequestType = 14;
+        DebugRequestType = 15;
+        UpgradeRequestType = 16;
+        SetDeviceSettingsRequestType = 17;
+        VersionRequestType = 18;
+
+        SetAddressConfirmType  = 51;
+        RegisterAppConfirmType = 52;
+        StartSessionConfirmType = 53;
+        CloseSessionConfirmType = 54;
+        ListRegisteredAppsConfirmType = 55;
+        DeregisterAppConfirmType = 56;
+        ChangePinConfirmType = 57;
+        GetRemoteAccessIdConfirmType = 58;
+        SetRemoteAccessIdConfirmType = 59;
+        GetSupportIdConfirmType = 60;
+        SetSupportIdConfirmType = 61;
+        GetWebIdConfirmType = 62;
+        SetWebIdConfirmType = 63;
+        SetPushIdConfirmType = 64;
+        DebugConfirmType = 65;
+        UpgradeConfirmType = 66;
+        SetDeviceSettingsConfirmType = 67;
+        VersionConfirmType = 68;
+
+        GatewayNotificationType = 100;
+        KeepAliveType = 101;
+        FactoryResetType = 102; //REMOVE IN PRODUCTION! FOR AUTOMATIC TEST
+
+
+        // ComfoNetII-specific messages
+        CnTimeRequestType = 30;
+        CnTimeConfirmType = 31;
+        CnNodeRequestType = 42;
+        CnNodeNotificationType = 32;
+
+        CnRmiRequestType = 33;
+        CnRmiResponseType = 34;
+        CnRmiAsyncRequestType = 35;
+        CnRmiAsyncConfirmType = 36;
+        CnRmiAsyncResponseType = 37;
+
+        CnRpdoRequestType = 38;
+        CnRpdoConfirmType = 39;
+        CnRpdoNotificationType = 40;
+
+        CnAlarmNotificationType = 41;
+
+        CnFupReadRegisterRequestType = 70;
+        CnFupReadRegisterConfirmType = 71;
+        CnFupProgramBeginRequestType = 72;
+        CnFupProgramBeginConfirmType = 73;
+        CnFupProgramRequestType = 74;
+        CnFupProgramConfirmType = 75;
+        CnFupProgramEndRequestType = 76;
+        CnFupProgramEndConfirmType = 77;
+        CnFupReadRequestType = 78;
+        CnFupReadConfirmType = 79;
+        CnFupResetRequestType = 80;
+        CnFupResetConfirmType = 81;
+
+        CnWhoAmIRequestType = 82;
+        CnWhoAmIConfirmType = 83;
+
+        //WiFi setup
+        WiFiSettingsRequestType = 120;
+        WiFiSettingsConfirmType = 121;
+        WiFiNetworksRequestType = 122;
+        WiFiNetworksConfirmType = 123;
+        WiFiJoinNetworkRequestType = 124;
+        WiFiJoinNetworkConfirmType = 125;
+    }
+    optional OperationType type = 1 [default = NoOperation];
+
+    enum GatewayResult {
+        OK = 0;             // The request was successful
+        BAD_REQUEST = 1;    // Something was wrong with the request
+        INTERNAL_ERROR = 2; // The request was ok, but the handling of the request failed
+        NOT_REACHABLE = 3;  // The backend cannot route the request
+        OTHER_SESSION = 4;  // The gateway already has an active session with another client
+        NOT_ALLOWED = 5;    // Request is not allowed
+        NO_RESOURCES = 6;   // Not enough resources, e.g., memory, to complete request
+        NOT_EXIST = 7;      // ComfoNet node or property does not exist
+        RMI_ERROR = 8;      // The RMI failed, the message contains the error response
+    }
+    optional GatewayResult result = 2 [default = OK];
+    optional string resultDescription = 3;
+    optional uint32 reference = 4;  // App-supplied reference for a request. If set in the request, it must be echoed in the confirm. If used, must be non-zero.
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// This is the base-message for all notifications. 
+// The Gateway sends this message to the Backend and the connected App (if any).
+// The Gateway specifies the list of currently registered PushUUIDs in this message. 
+// The Backend uses this list to send out the push-notifications if needed (depending on the contents of the push-message).
+// TODO: Tell Gateway which notifications to forward to the Backend and which to forward to the App only 
+///////////////////////////////////////////////////////////////////////////////////////////////////
+message GatewayNotification {
+    repeated bytes pushUUIDs = 1;
+    optional CnAlarmNotification alarm = 2;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// KeepAlive message
+// This message is used to keep the session alive and to check for half-open TCP connections.
+///////////////////////////////////////////////////////////////////////////////////////////////////
+message KeepAlive {
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// FactoryReset message
+// This message is used to reset the Gateway to Factory defaults
+///////////////////////////////////////////////////////////////////////////////////////////////////
+message FactoryReset {
+    required bytes resetKey = 1 [(nanopb).max_size = 16]; // should contain the GatewayUUID
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// SetDeviceSettings message
+// This message is used to set the MAC address and serial number of the device
+///////////////////////////////////////////////////////////////////////////////////////////////////
+message SetDeviceSettingsRequest {
+    required bytes macAddress = 1 [(nanopb).max_size = 16];
+    required string serialNumber = 2 [(nanopb).max_size = 16];
+}
+
+message SetDeviceSettingsConfirm {
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Associates a GatewayUUID or AppUUID with a Backend-connection. 
+// This way the Backend knows on which TCP-connection the specified UUID can be reached.
+//
+// Authentication:
+// The uuid in this message is the same as the srcuuid in the message-header.
+// This message is not authenticated.
+///////////////////////////////////////////////////////////////////////////////////////////////////
+message SetAddressRequest {
+    required bytes uuid = 1 [(nanopb).max_size = 16];
+}
+
+message SetAddressConfirm {
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Used to register an AppUUID at the Gateway. It is only handled on the local connection!
+// The Gateway keeps a list of registered AppUUIDs and devicenames in eeprom/flash.
+// When too many apps are registered, NO_RESOURCES is returned.
+//
+// Authentication:
+// This is the only request that is not authenticated by srcuuid (since it is not yet known at the Gateway).
+// This request is authenticated by Pin-code in the message.
+// The uuid in this message is the same as the srcuuid in the message-header.
+// Note: this message is only allowed on the local connection!!
+////////////////////////////////////////////////////////////////////////////////////////////////
+message RegisterAppRequest {
+    required bytes uuid = 1 [(nanopb).max_size = 16];
+    required uint32 pin = 2;        // 0..9999
+    required string devicename = 3 [(nanopb).max_size = 32];
+}
+
+message RegisterAppConfirm {
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Starts a new session at the Gateway. If the Gateway currently already has an active session
+// it responds with result OTHER_SESSION, and fill in the devicename.
+// The client asks the user if it want to close the old session and start a new one. In this case
+// the takeover-flag is set to True
+//
+// Authentication:
+// This message is authenticated by srcuuid
+///////////////////////////////////////////////////////////////////////////////////////////////////
+message StartSessionRequest {
+    optional bool takeover = 1;
+}
+
+message StartSessionConfirm {
+    optional string devicename = 1 [(nanopb).max_size = 32];
+    optional bool resumed = 2;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Inform other side that the session is closed. CloseSessionConfirm is only sent back when
+// an error occurred. 
+//
+// Authentication:
+// None
+///////////////////////////////////////////////////////////////////////////////////////////////////
+message CloseSessionRequest {
+}
+
+message CloseSessionConfirm {
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Used to get a list of currently registered AppUUIDs at the Gateway.
+//
+// Authentication:
+// This message is authenticated by srcuuid (must be a registered AppUUID or WebUUID).
+// SupportUUID is not allowed.
+///////////////////////////////////////////////////////////////////////////////////////////////////
+message ListRegisteredAppsRequest {
+}
+
+message ListRegisteredAppsConfirm {
+    message App {
+        required bytes uuid = 1 [(nanopb).max_size = 16];
+        required string devicename = 2 [(nanopb).max_size = 32];
+    }
+    repeated App apps = 1;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Used to deregister a mobile app from the Gateway. 
+// The Gateway removes the specified uuid from the list of registered AppUUIDs. 
+// The devicename for this uuid is also removed.
+//
+// Authentication:
+// This message is authenticated by srcuuid (must be a registered AppUUID or WebUUID).
+// SupportUUID is not allowed. 
+///////////////////////////////////////////////////////////////////////////////////////////////////
+message DeregisterAppRequest {
+    required bytes uuid = 1 [(nanopb).max_size = 16];
+}
+
+message DeregisterAppConfirm {
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Used to change the Pin-code of the Gateway.
+// The default Pin-code is 0000. The Pin-code is also reset to 0000 when a factory reset is performed.
+//
+// Authentication:
+// This message is authenticated by srcuuid (must be a registered AppUUID or WebUUID).
+// The old Pin-code is also verified
+///////////////////////////////////////////////////////////////////////////////////////////////////
+message ChangePinRequest {
+    required uint32 oldpin = 1;
+    required uint32 newpin = 2;
+}
+
+message ChangePinConfirm {
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// This returns the currently set RemoteUUID at the Gateway or nothing if not set.
+// 
+// Authentication:
+// This message is authenticated by srcuuid (must be a registered AppUUID).
+// SupportUUID/WebUUID are not allowed.
+///////////////////////////////////////////////////////////////////////////////////////////////////
+message GetRemoteAccessIdRequest {
+}
+
+message GetRemoteAccessIdConfirm {
+    optional bytes uuid = 1 [(nanopb).max_size = 16];    //the currently set RemoteUUID
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// The RemoteUUID is set at the Gateway when the user enables remote access from the App.
+// The Gateway stores the RemoteUUID in eeprom/flash and uses it to set its address at the Backend. 
+// When the Gateway has not received a RemoteUUID yet, it cannot set the address at the Backend and 
+// therefore there is no need to setup the connection to the Backend.
+// The App uses this RemoteUUID to gain access to the Gateway via the Backend. 
+// The Backend routes messages from the App to the Gateway that registered this id with SetAddress.
+// Setting the RemoteUUID to a new value requires other Apps that still use the old value (or no value) 
+// to get an updated RemoteAccessId.
+// Remote access can be disabled by keeping the uuid in the request empty. In this case the Gateway 
+// will remove the current RemoteUUID (if any) and close the connection to the Backend.
+//
+// Authentication:
+// This message is authenticated by srcuuid (must be a registered AppUUID).
+// Note: this message is only allowed on the local connection!!
+///////////////////////////////////////////////////////////////////////////////////////////////////
+message SetRemoteAccessIdRequest {
+    optional bytes uuid = 1 [(nanopb).max_size = 16];
+}
+
+message SetRemoteAccessIdConfirm {
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// This returns the currently set SupportUUID at the Gateway or nothing if not set.
+//
+// Authentication:
+// This message is authenticated by srcuuid (must be a registered AppUUID or WebUUID).
+///////////////////////////////////////////////////////////////////////////////////////////////////
+message GetSupportIdRequest {
+}
+
+message GetSupportIdConfirm {
+    optional bytes uuid = 1 [(nanopb).max_size = 16];    //the currently set SupportUUID
+    optional uint32 remainingTime = 2;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// The SupportUUID is set at the Gateway when the user enables remote support from the App.
+// The Gateway stores the SupportUUID in eeprom/flash and uses it to authenticate incoming 
+// requests (same way as AppUUID, WebUUID).
+// The SupportUUID is only valid for a limited time (to be determined). 
+// The Gateway is responsible from removing the SupportUUID when the time is expired.
+// The SupportUUID can be removed from the Gateway by keeping the uuid in the request empty.
+//
+// Authentication:
+// This message is authenticated by srcuuid (must be a registered AppUUID).
+///////////////////////////////////////////////////////////////////////////////////////////////////
+message SetSupportIdRequest {
+    optional bytes uuid = 1 [(nanopb).max_size = 16];
+    optional uint32 validTime = 2; //number of seconds the SupportUUID is valid
+}
+
+message SetSupportIdConfirm {
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// This returns the currently set WebUUID at the Gateway or nothing if not set.
+// 
+// Authentication:
+// This message is authenticated by srcuuid (must be a registered AppUUID).
+///////////////////////////////////////////////////////////////////////////////////////////////////
+message GetWebIdRequest {
+}
+
+message GetWebIdConfirm {
+    optional bytes uuid = 1 [(nanopb).max_size = 16];    //the currently set WebUUID
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// The WebUUID is set at the Gateway when the user enables remote login for the Web-portal (from a registered App).
+// The Gateway stores the WebUUID in eeprom/flash and uses it to authenticate incoming requests (same way as AppUUID).
+// The WebUUID can be removed from the Gateway by keeping the uuid in the request empty.
+//
+// Authentication:
+// This message is authenticated by srcuuid (must be a registered AppUUID).
+///////////////////////////////////////////////////////////////////////////////////////////////////
+message SetWebIdRequest {
+    optional bytes uuid = 1 [(nanopb).max_size = 16];
+}
+
+message SetWebIdConfirm {
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// The PushUUID is set at the Gateway when the user enables push-support in the App. 
+// Multiple PushUUIDs can be set at the Gateway (one per AppUUID).
+// The Gateway stores the PushUUIDs in eeprom/flash and uses them when a notification is received 
+// from the ComfoNet-side. The notification is forwarded to the Backend and the connected App (if any) 
+// using the GatewayNotification (see TODO) messages.
+// The PushUUID can be removed from the Gateway by keeping the uuid in the request empty 
+// (for the AppUUID indicated by the srcuuid).
+//
+// Authentication:
+// This message is authenticated by srcuuid (must be a registered AppUUID).
+///////////////////////////////////////////////////////////////////////////////////////////////////
+message SetPushIdRequest {
+    optional bytes uuid = 1 [(nanopb).max_size = 16];
+}
+
+message SetPushIdConfirm {
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Firmware upgrade of the Gateway.
+// The chunks must be the consecutive bytes of the binary.
+// When the upgrade finishes, the Gateway reboots. So, when successful, the UPGRADE_FINISH is
+// not confirmed.
+//
+// Authentication:
+// This message is authenticated by srcuuid; must be a registered AppUUID via LAN or SupportUUID.
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+message UpgradeRequest {
+    enum UpgradeRequestCommand {
+        UPGRADE_START = 0;
+        UPGRADE_CONTINUE = 1;
+        UPGRADE_FINISH = 2;
+        UPGRADE_ABORT = 3;
+    }
+    optional UpgradeRequestCommand command = 1 [ default = UPGRADE_CONTINUE ];
+    optional bytes chunk = 2; // at most 256 bytes
+}
+
+message UpgradeConfirm {
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Gateway-specific debugging operations
+///////////////////////////////////////////////////////////////////////////////////////////////////
+message DebugRequest {
+    enum DebugRequestCommand {
+        DBG_ECHO = 0;
+        DBG_SLEEP = 1;
+        DBG_SESSION_ECHO = 2;
+		DBG_PRINT_SETTINGS = 3;
+		DBG_ALARM = 4;
+        DBG_LED = 5;
+        DBG_GPI = 6;
+        DBG_GPO = 7;
+        DBG_RS232_WRITE = 8;
+        DBG_RS232_READ = 9;
+        DBG_CAN_WRITE = 10;
+        DBG_CAN_READ = 11;
+        DBG_KNX_WRITE = 12;
+        DBG_KNX_READ = 13;
+        DBG_TOGGLE = 14;
+        DBG_REBOOT = 15;
+        DBG_CLOUD = 16;
+        DBG_EEPROM_READ = 17;
+        DBG_EEPROM_WRITE = 18;
+    }
+    required DebugRequestCommand command = 1;
+    optional int32 argument = 2;
+}
+
+message DebugConfirm {
+    required int32 result = 1;
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// ComfoNetII messages
+//
+// All messages below shall only be used within a session.
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+message VersionRequest {
+}
+
+message VersionConfirm {
+    required uint32 gatewayVersion = 1;                         // current software version of the Gateway
+    required string serialNumber = 2 [(nanopb).max_size = 16];  // Gateway's serial number
+    required uint32 comfoNetVersion = 3;                        // current version implemented by the Gateway
+}
+
+// Wrapper for CN_clkSetTime()
+message CnTimeRequest {
+    optional uint32 setTime = 1;
+}
+
+// Wrapper for CN_clkGetTime()
+message CnTimeConfirm {
+    required uint32 currentTime = 1;
+}
+
+// Wrapper for CN_nmtFindNode() / CN_nmtRegisterCallback()
+// When a session is started, every existing node is notified to the app as soon as possible.
+// This request (re)triggers discovery of the nodes. There is no confirm to this request, but the Gateway will respond quickly
+// with (at least) the discovery of the Gateway itself using a CnNodeNotification.
+message CnNodeRequest {
+}
+
+message CnNodeNotification {
+    required uint32 nodeId = 1 [(nanopb).int_size = IS_8];
+    optional uint32 productId = 2 [(nanopb).int_size = IS_8, default = 0];
+    optional uint32 zoneId = 3 [(nanopb).int_size = IS_8];
+
+	enum NodeModeType {
+		NODE_LEGACY = 0;	// mode is NODE_OFFLINE when productId = 0, otherwise mode is NODE_NORMAL
+		NODE_OFFLINE = 1;
+		NODE_NORMAL = 2;
+		NODE_UPDATE = 3;
+	}
+	optional NodeModeType mode = 4 [default = NODE_LEGACY ];
+}
+
+// Blocking wrapper for CN_rmiSend()
+// The Gateway stalls till the RMI operation completes.
+message CnRmiRequest {
+    required uint32 nodeId = 1 [(nanopb).int_size = IS_8];
+    required bytes message = 2;
+}
+
+// In-order wrapper for CN_rmiRecv()
+message CnRmiResponse {
+    optional uint32 result = 1 [ default = 0 ];     // ComfoNet error code
+    optional bytes message = 2;
+}
+
+// Non-blocking wrapper for CN_rmiSend()
+// The response to this request is CnRmiAsyncConfirm.
+// Overlapped RMI requests can be achieved by issuing multiple CnRmiAsyncRequest before CnRmiAsyncResponses are received.
+message CnRmiAsyncRequest {
+    required uint32 nodeId = 1 [(nanopb).int_size = IS_8];
+    required bytes message = 2;
+}
+
+// Confirm of receipt of CnRmiAsyncRequest
+// After this confirmation, the actual RMI response is sent using CnRmiAsyncResponse.
+message CnRmiAsyncConfirm {
+    optional uint32 result = 1 [ default = 0 ];     // ComfoNet error code
+}
+
+// Out-of-order wrapper for CN_rmiRecv()
+// When there multiple outstanding async RMI requests, these requests will finish in the same order as the requests were issued.
+// However, the time between request/response may be large. Moreover, other protobuf messages can be processed meanwhile.
+message CnRmiAsyncResponse {
+    optional uint32 result = 1 [ default = 0 ];     // ComfoNet error code
+    optional bytes message = 2;
+}
+
+// Wrapper for CN_rpdoCreate().
+// All RPDOs will be deleted when a session is closed.
+message CnRpdoRequest {
+    required uint32 pdid = 1 [(nanopb).int_size = IS_16];
+    optional uint32 zone = 2 [(nanopb).int_size = IS_8, default = 0xff];
+    optional uint32 type = 3;   // when no type is specified, a previously registered RPDO with given PDID is deleted
+    optional uint32 timeout = 4 [default = 0xffffffff];
+    optional uint32 interval = 5 [default = 0]; // interval of RPDO notification
+}
+
+message CnRpdoConfirm {
+}
+
+message CnRpdoNotification {
+    required uint32 pdid = 1 [(nanopb).int_size = IS_16];
+    required bytes data = 2 [(nanopb).max_size = 8];        // the data may (always) be padded to 8 bytes
+    optional uint32 zone = 3 [(nanopb).int_size = IS_8, default = 0x01];
+}
+
+message CnAlarmNotification {
+    optional uint32 zone = 1 [(nanopb).int_size = IS_8];
+    optional uint32 productId = 2 [(nanopb).int_size = IS_8];
+    optional uint32 productVariant = 3 [(nanopb).int_size = IS_8];
+    optional string serialNumber = 4 [(nanopb).max_size = 32];
+    optional uint32 swProgramVersion = 5;
+    optional bytes errors = 6 [(nanopb).max_size = 32];
+    optional uint32 errorId = 7 [(nanopb).int_size = IS_8];
+    optional uint32 nodeId = 8 [(nanopb).int_size = IS_8];
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// FUP messages
+//
+// All messages below shall only be used within a session, connected either locally or using
+// the supportUUID.
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Wrapper for CN_fupReadNormalRegister() and CN_fupReadIndexedRegister()
+message CnFupReadRegisterRequest {
+    required uint32 node = 1 [(nanopb).int_size = IS_8];
+    required uint32 registerId = 2 [(nanopb).int_size = IS_8];
+    optional uint32 index = 3 [(nanopb).int_size = IS_8];
+}
+
+message CnFupReadRegisterConfirm {
+    required uint32 value = 1;
+}
+
+// Wrapper for CN_fupEraseMemoryBlock() and CN_fupProgramMemoryBlockBegin()
+// Since the flash is erased upon a begin request, it may take several minutes before the request is confirmed.
+message CnFupProgramBeginRequest {
+    repeated uint32 node = 1 [(nanopb).int_size = IS_8, (nanopb).max_count = 32];
+    optional uint32 block = 2 [(nanopb).int_size = IS_8, default = 0];
+}
+
+message CnFupProgramBeginConfirm {
+}
+
+// Wrapper for CN_fupWriteData() and CN_fupRequestToSend()
+message CnFupProgramRequest {
+    required bytes chunk = 1; // at most 256 bytes
+}
+
+message CnFupProgramConfirm {
+}
+
+// Wrapper for CN_fupProgramMemoryBlockEnd() and CN_fupVerifyMemoryBlock()
+message CnFupProgramEndRequest {
+}
+
+message CnFupProgramEndConfirm {
+}
+
+// Wrapper for CN_fupReadBegin(), CN_fupReadData(), CN_fupClearToSend(), and CN_fupReadEnd()
+message CnFupReadRequest {
+    required uint32 node = 1 [(nanopb).int_size = IS_8];
+    optional uint32 block = 2 [(nanopb).int_size = IS_8, default = 0];
+}
+
+// One or more confirms to one CnFupReadRequest, but always ends with the last bool set to true.
+// In case of an error, the last CnFupReadConfirm has both a GatewayOperation.result and CnFupReadConfirm.last (possibly without chunk) set.
+message CnFupReadConfirm {
+    optional bytes chunk = 1;   // at most 256 bytes at a time
+    optional bool last = 2 [default = false];
+}
+
+// Wrapper for CN_fupReset()
+message CnFupResetRequest {
+    required uint32 node = 1 [(nanopb).int_size = IS_8];
+}
+
+message CnFupResetConfirm {
+}
+
+// Wrapper for ComfoNet WhoAmI
+message CnWhoAmIRequest {
+    optional uint32 nodeId = 1 [(nanopb).int_size = IS_8];
+    optional uint32 zone = 2 [(nanopb).int_size = IS_8];
+}
+
+message CnWhoAmIConfirm {
+}
+
+// WiFi config
+enum WiFiSecurity {
+    UNKNOWN = 0;
+    OPEN = 1;
+    WPA_WPA2 = 2;
+    WEP = 3;            //do not use
+    IEEE_802_1X = 4;    //do not use
+}
+
+enum WiFiMode {
+    AP = 0;
+    STA = 1;
+}
+
+message WiFiNetwork {
+    required string ssid = 1 [(nanopb).max_size = 32];
+    required WiFiSecurity security = 2 [default = WPA_WPA2];
+    required int32 rssi = 3 [(nanopb).int_size = IS_8];		 // Wi-FI Signal Strength;
+}
+
+message WiFiSettingsRequest {
+}
+
+message WiFiSettingsConfirm {
+    enum WiFiJoinResult {
+        OK = 0;
+        SCAN_FAIL = 1;
+        JOIN_FAIL = 2;
+        AUTH_FAIL = 3;
+        ASSOC_FAIL = 4;
+        CONN_INPROGRESS = 5;
+    }
+    required WiFiMode mode = 1;
+    optional WiFiNetwork current = 2;
+    optional WiFiJoinResult joinResult = 3 [default = OK];   //result of last join-request
+}
+
+message WiFiNetworksRequest {
+    optional bool forceScan = 1 [default = false];
+}
+
+message WiFiNetworksConfirm {
+    repeated WiFiNetwork networks = 1;                              //visible networks from last scan (only in AP mode)
+    optional uint32 scanAge = 2;                                    //number of seconds since last scan (only in AP mode)
+}
+
+message WiFiJoinNetworkRequest {
+    required WiFiMode mode = 1;
+    optional string ssid = 2 [(nanopb).max_size = 32];             
+    optional string password = 3 [(nanopb).max_size = 64];
+    optional WiFiSecurity security = 4 [default = WPA_WPA2];
+}
+
+message WiFiJoinNetworkConfirm {    
+}
+
+
+
