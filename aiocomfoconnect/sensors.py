@@ -95,7 +95,7 @@ SENSORS: Dict[int, Sensor] = {
     SENSOR_OPERATING_MODE: Sensor("operating_mode", None, 56, TYPE_CN_UINT8),
     SENSOR_FAN_SPEED_MODE: Sensor("Fan Speed", None, 65, TYPE_CN_UINT8),
     SENSOR_BYPASS_ACTIVATION_STATE: Sensor("Bypass Activation State", None, 66, TYPE_CN_UINT8),  # 0 = auto, 1 = open, 2 = closed
-    SENSOR_PROFILE_TEMPERATURE: Sensor("profile_temperature", UNIT_CELCIUS, 67, TYPE_CN_UINT8),
+    SENSOR_PROFILE_TEMPERATURE: Sensor("Temperature Profile Mode", None, 67, TYPE_CN_UINT8),  # 0 = normal, 1 = cold, 2 = warm
     SENSOR_FAN_MODE_SUPPLY: Sensor("Supply Fan Mode", None, 70, TYPE_CN_UINT8),
     SENSOR_FAN_MODE_EXHAUST: Sensor("Exhaust Fan Mode", None, 71, TYPE_CN_UINT8),
     SENSOR_NEXT_CHANGE_FAN: Sensor("Fan Speed Next Change", None, 81, TYPE_CN_UINT32),

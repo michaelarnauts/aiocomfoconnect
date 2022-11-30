@@ -62,9 +62,9 @@ class ComfoConnect(Bridge):
         del self._sensors[sensor.id]
         del self._sensors_values[sensor.id]
 
-    async def get_property(self, unit: int, subunit: int, id: int, type: int) -> any:
-        """Get a property."""
-        result = await self.cmd_rmi_request(bytes([0x01, unit, subunit, 0x10, id]))
+    async def get_property(self, unit: int, subunit: int, id: int, type: int = None, node_id=1) -> any:
+        """Get a property and convert to the right type."""
+        result = await self.cmd_rmi_request(bytes([0x01, unit, subunit, 0x10, id]), node_id=node_id)
 
         if type == TYPE_CN_STRING:
             return result.message.decode("utf-8").rstrip("\x00")
@@ -77,9 +77,9 @@ class ComfoConnect(Bridge):
 
         return result.message
 
-    async def get_properties(self, unit: int, subunit: int, ids: List[int]) -> any:
+    async def get_properties(self, unit: int, subunit: int, ids: List[int], node_id=1) -> any:
         """Get multiple properties."""
-        result = await self.cmd_rmi_request(bytestring([0x02, unit, subunit, 0x01, 0x10 | len(ids), bytes(ids)]))
+        result = await self.cmd_rmi_request(bytestring([0x02, unit, subunit, 0x01, 0x10 | len(ids), bytes(ids)]), node_id=node_id)
 
         return result.message
 

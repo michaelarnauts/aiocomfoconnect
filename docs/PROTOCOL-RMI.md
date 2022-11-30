@@ -1,8 +1,17 @@
 # RMI Protocol
 
+## Nodes
+
+A RMI message is send towards a Node. There are two known nodes.
+
+| Node | Description                   |
+|------|-------------------------------|
+| 0x01 | The Ventilation Unit itself   |
+| 0x30 | The ComfoConnect LAN C device |
+
 ## Units
 
-The Ventilation is seperated into multiple Units, and sometimes even SubUnits. Here is a list of some existing units:
+The Ventilation Unit is seperated into multiple Units, and sometimes even SubUnits. Here is a list of some existing units:
 
 | ID   | # of SubUnits | Name              | Responsible for                                                                             |
 |------|---------------|-------------------|---------------------------------------------------------------------------------------------|
@@ -38,6 +47,7 @@ If an error occurs the reason can be one of the following:
 | 11     | Unknown Command                             |
 | 12     | Unknown Unit                                |
 | 13     | Unknown SubUnit                             |
+| 14     | Unknown property                            |
 | 15     | Type can not have a range                   |
 | 30     | Value given not in Range                    |
 | 32     | Property not gettable or settable           |
@@ -79,7 +89,7 @@ There are three commands which always exist on a given Unit:
   This reads the following property values:
     - 0x03: ???
     - 0x04: Serial Number
-    - 0x06: ???
+    - 0x06: Firmware version
     - 0x05: ???
     - 0x14: Ventilation Unit Name
 
@@ -98,67 +108,88 @@ All other commands are >= `0x80` and dependent on the SubUnit. Please do not try
 break your configuration, and even worse would be calling ANY >= `0x80` command on NODE (`0x01`). It can probably completely brick your ventilation. (It enters
 factory mode or tries to perform an update.)
 
-### Known properties
+### Known properties for Node 0x01 (Ventilation Unit)
 
-| Unit              | SubUnit | Property | Access | Format | Description                                     |
-|-------------------|:--------|----------|--------|--------|-------------------------------------------------|
-| NODE              | 0x01    | 0x01     |        |        | ?? 0x01                                         |
-| NODE              | 0x01    | 0x02     |        |        | ?? 0x01                                         |
-| NODE              | 0x01    | 0x03     |        |        | ?? 0x02                                         |
-| NODE              | 0x01    | 0x04     | ro     | STRING | Serial number                                   |
-| NODE              | 0x01    | 0x05     |        |        | ?? 0x02                                         |
-| NODE              | 0x01    | 0x06     |        | UINT32 | Firmware version (See `version_decode()`)       |
-| NODE              | 0x01    | 0x07     |        |        | ?? b'\x00T\x10@' = 00541040                     |
-| NODE              | 0x01    | 0x08     | ro     | STRING | Model number (ComfoAir Q450 B R RF ST Quality)  |
-| NODE              | 0x01    | 0x09     |        |        | ?? b'\x04\x00\x00\x00' = 04000000               |
-| NODE              | 0x01    | 0x0A     |        |        | ?? b'\x00\x04\xf0\xc0' = 0004f0c0               |
-| NODE              | 0x01    | 0x0B     | ro     | STRING | Article number                                  |
-| NODE              | 0x01    | 0x0C     |        |        | ?? b'NULL\x00'                                  |
-| NODE              | 0x01    | 0x0D     | ro     | STRING | Current Country                                 |
-| NODE              | 0x01    | 0x14     | ro     | STRING | Ventilation Unit Name (ComfoAirQ)               |
-| TEMPHUMCONTROL    | 0x01    | 0x02     | rw     | INT16  | RMOT for heating period                         |
-| TEMPHUMCONTROL    | 0x01    | 0x03     | rw     | INT16  | RMOT for cooling period                         |
-| TEMPHUMCONTROL    | 0x01    | 0x04     | rw     | UINT8  | Passive temperature control (off, autoonly, on) |
-| TEMPHUMCONTROL    | 0x01    | 0x05     | rw     | UINT8  | unknown (off, autoonly, on)                     |
-| TEMPHUMCONTROL    | 0x01    | 0x06     | rw     | UINT8  | Humidity comfort control (off, autoonly, on)    |
-| TEMPHUMCONTROL    | 0x01    | 0x07     | rw     | UINT8  | Humidity protection (off, autoonly, on)         |
-| TEMPHUMCONTROL    | 0x01    | 0x08     | rw     | UINT8  | unknown (off, autoonly, on)                     |
-| TEMPHUMCONTROL    | 0x01    | 0x0A     | rw     | INT16  | Target temperature for profile: Heating         |
-| TEMPHUMCONTROL    | 0x01    | 0x0B     | rw     | INT16  | Target temperature for profile: Normal          |
-| TEMPHUMCONTROL    | 0x01    | 0x0C     | rw     | INT16  | Target temperature for profile: Cooling         |
-| VENTILATIONCONFIG | 0x01    | 0x03     | rw     | UINT16 | Ventilation speed in "Away" Level               |
-| VENTILATIONCONFIG | 0x01    | 0x04     | rw     | UINT16 | Ventilation speed in "Low" Level                |
-| VENTILATIONCONFIG | 0x01    | 0x05     | rw     | UINT16 | Ventilation speed in "Medium" Level             |
-| VENTILATIONCONFIG | 0x01    | 0x06     | rw     | UINT16 | Ventilation speed in "High" Level               |
-| VENTILATIONCONFIG | 0x01    | 0x18     | rw     | INT16  | Unbalance in percent                            |
-| NODECONFIGURATION | 0x01    | 0x00     |        |        | ?? LANGUAGE                                     |
-| NODECONFIGURATION | 0x01    | 0x01     |        |        | ?? DATE                                         |
-| NODECONFIGURATION | 0x01    | 0x02     |        |        | ?? CONTINUECOMMISSIONING                        |
-| NODECONFIGURATION | 0x01    | 0x03     |        |        | Maintainer password (`2468\0x00`)               |
-| NODECONFIGURATION | 0x01    | 0x04     |        |        | Orientation (`\x00`= LEFT, `\x01`= RIGHT)       |
-| NODECONFIGURATION | 0x01    | 0x05     |        |        | ?? DRAIN (1)                                    |
-| NODECONFIGURATION | 0x01    | 0x06     |        |        | ?? DRAINNONE (`0x00`)                           |
-| NODECONFIGURATION | 0x01    | 0x07     |        |        | ?? DRAINWARNING (`\0x00`)                       |
-| NODECONFIGURATION | 0x01    | 0x08     |        |        | ?? FILTER (`\0x00`)                             |
-| NODECONFIGURATION | 0x01    | 0x09     |        |        | ?? PREHEATERWAIT                                |
-| NODECONFIGURATION | 0x01    | 0x0A     |        |        | ?? PREHEATERWARNING (`\0x00`)                   |
-| NODECONFIGURATION | 0x01    | 0x0B     |        |        | ?? PREHEATERCORRECT (`\0x02`)                   |
-| NODECONFIGURATION | 0x01    | 0x0C     |        |        | ?? FLOWUNIT (`\0x01`)                           |
-| NODECONFIGURATION | 0x01    | 0x0D     |        |        | ?? ALTITUDE                                     |
-| NODECONFIGURATION | 0x01    | 0x0E     |        |        | ?? FIREPLACE                                    |
-| NODECONFIGURATION | 0x01    | 0x0F     |        |        | ?? OPENALL                                      |
-| NODECONFIGURATION | 0x01    | 0x10     |        |        | ?? OPENCONFIRM                                  |
-| NODECONFIGURATION | 0x01    | 0x11     |        |        | ?? MAXFLOWTEST                                  |
-| NODECONFIGURATION | 0x01    | 0x12     |        |        | ?? MEDFLOWTEST                                  |
-| NODECONFIGURATION | 0x01    | 0x13     |        |        | ?? MEDFLOWREADY                                 |
-| NODECONFIGURATION | 0x01    | 0x14     |        |        | ?? FINETUNETEST                                 |
-| NODECONFIGURATION | 0x01    | 0x15     |        |        | ?? FINALTEST                                    |
-| NODECONFIGURATION | 0x01    | 0x16     |        |        | ?? FINALREADY                                   |
-| NODECONFIGURATION | 0x01    | 0x17     |        |        | ?? FINALREADYWARNING                            |
-| NODECONFIGURATION | 0x01    | 0x18     |        |        | ?? FINALREADYWARNINGOK                          |
-| NODECONFIGURATION | 0x01    | 0x19     |        |        | ?? FINISHED                                     |
-| NODECONFIGURATION | 0x01    | 0x1A     |        |        | ?? ERROR                                        |
-| NODECONFIGURATION | 0x01    | 0x1B     |        |        | ?? SAVECONFIG                                   |
+| Unit              | SubUnit | Property | Access | Format | Description                                                            |
+|-------------------|---------|----------|--------|--------|------------------------------------------------------------------------|
+| NODE              | 0x01    | 0x01     |        | UINT8  | ?? `01` = 1                                                            |
+| NODE              | 0x01    | 0x02     |        | UINT8  | ?? `01` = 1                                                            |
+| NODE              | 0x01    | 0x03     |        | UINT8  | ?? `02` = 2                                                            |
+| NODE              | 0x01    | 0x04     | ro     | STRING | Serial number (BEA009999999999)                                        |
+| NODE              | 0x01    | 0x05     |        | UINT8  | ?? `02` = 2                                                            |
+| NODE              | 0x01    | 0x06     | ro     | UINT32 | Firmware version (See `version_decode()`)                              |
+| NODE              | 0x01    | 0x07     |        | UINT32 | ?? `00541040` = 1074811904                                             |
+| NODE              | 0x01    | 0x08     | ro     | STRING | Model number (ComfoAir Q450 B R RF ST Quality)                         |
+| NODE              | 0x01    | 0x09     |        | UINT32 | ?? `04000000` = 4                                                      |
+| NODE              | 0x01    | 0x0A     |        | UINT32 | ?? `0004f0c0` = 3236955136                                             |
+| NODE              | 0x01    | 0x0B     | ro     | STRING | Article number (471502004)                                             |
+| NODE              | 0x01    | 0x0C     |        | STRING | ?? NULL                                                                |
+| NODE              | 0x01    | 0x0D     | ro     | STRING | Current Country (BE)                                                   |
+| NODE              | 0x01    | 0x14     | ro     | STRING | Ventilation Unit Name (ComfoAirQ)                                      |
+| TEMPHUMCONTROL    | 0x01    | 0x01     |        | UINT8  | ?? `01` = 1                                                            |
+| TEMPHUMCONTROL    | 0x01    | 0x02     | rw     | INT16  | RMOT for heating period (180 -> 18°C)                                  |
+| TEMPHUMCONTROL    | 0x01    | 0x03     | rw     | INT16  | RMOT for cooling period (200 -> 20°C)                                  |
+| TEMPHUMCONTROL    | 0x01    | 0x04     | rw     | UINT8  | Passive temperature control (0=off, 1=autoonly, 2=on)                  |
+| TEMPHUMCONTROL    | 0x01    | 0x05     | rw     | UINT8  | ?? `00` = 0                                                            |
+| TEMPHUMCONTROL    | 0x01    | 0x06     | rw     | UINT8  | Humidity comfort control (o=off, 1=autoonly, 2=on)                     |
+| TEMPHUMCONTROL    | 0x01    | 0x07     | rw     | UINT8  | Humidity protection (0=off, 1=autoonly, 2=on)                          |
+| TEMPHUMCONTROL    | 0x01    | 0x08     | rw     | UINT8  | ?? `00` = 0                                                            |
+| TEMPHUMCONTROL    | 0x01    | 0x0A     | rw     | INT16  | Target temperature for profile: Heating (230 -> 23°C)                  |
+| TEMPHUMCONTROL    | 0x01    | 0x0B     | rw     | INT16  | Target temperature for profile: Normal (210 -> 21°C)                   |
+| TEMPHUMCONTROL    | 0x01    | 0x0C     | rw     | INT16  | Target temperature for profile: Cooling (190 -> 19°C)                  |
+| TEMPHUMCONTROL    | 0x01    | 0x0D     |        | UINT8  | ?? `00` = 0                                                            |
+| VENTILATIONCONFIG | 0x01    | 0x01     |        | UINT8  | ?? `01` = 1                                                            |
+| VENTILATIONCONFIG | 0x01    | 0x02     |        | UINT8  | ?? `0f` = 15                                                           |
+| VENTILATIONCONFIG | 0x01    | 0x03     | rw     | INT16  | Ventilation speed in "Away" Level (75)                                 |
+| VENTILATIONCONFIG | 0x01    | 0x04     | rw     | INT16  | Ventilation speed in "Low" Level (110)                                 |
+| VENTILATIONCONFIG | 0x01    | 0x05     | rw     | INT16  | Ventilation speed in "Medium" Level (180)                              |
+| VENTILATIONCONFIG | 0x01    | 0x06     | rw     | INT16  | Ventilation speed in "High" Level (370)                                |
+| VENTILATIONCONFIG | 0x01    | 0x07     |        | UINT8  | Height above sea level (0=0-500, 1=500-1000, 2=1000-1500, 3=1500-2000) |
+| VENTILATIONCONFIG | 0x01    | 0x08     |        | INT16  | ?? `8b01` = 395,420                                                    |
+| VENTILATIONCONFIG | 0x01    | 0x09     |        | UINT8  | Ventilation control mode (0=flow control, 1=constant flow)             |
+| VENTILATIONCONFIG | 0x01    | 0x0a     |        | INT16  | ?? `ecff` = -20                                                        |
+| VENTILATIONCONFIG | 0x01    | 0x0b     |        | INT16  | Bathroom switch, activation delay (`300` = 300 sec)                    |
+| VENTILATIONCONFIG | 0x01    | 0x0c     |        | UINT8  | Bathroom switch, deactivation delay (`30` = 30 min)                    |
+| VENTILATIONCONFIG | 0x01    | 0x0d     |        | UINT8  | Bathroom switch, mode (0=fixed, 1=mirrored)                            |
+| VENTILATIONCONFIG | 0x01    | 0x0e     |        | UINT8  | ?? `03` = 3                                                            |
+| VENTILATIONCONFIG | 0x01    | 0x0f     |        | UINT8  | ?? `00` = 0                                                            |
+| VENTILATIONCONFIG | 0x01    | 0x11     |        | INT16  | ?? `c800` = 200                                                        |
+| VENTILATIONCONFIG | 0x01    | 0x12     |        | INT16  | Unbalance (`9dff` = -99 -> -9.9)                                       |
+| VENTILATIONCONFIG | 0x01    | 0x13     |        | INT16  | ?? `0000` = 0                                                          |
+| VENTILATIONCONFIG | 0x01    | 0x14     |        | INT16  | ?? `0000` = 0                                                          |
+| VENTILATIONCONFIG | 0x01    | 0x15     |        | INT16  | ?? `980d` = 3480                                                       |
+| VENTILATIONCONFIG | 0x01    | 0x16     |        | INT16  | ?? `660c` = 3174                                                       |
+| VENTILATIONCONFIG | 0x01    | 0x17     |        | INT16  | ?? `0000` = 0                                                          |
+| VENTILATIONCONFIG | 0x01    | 0x18     |        | INT16  | ?? `0000` = 0                                                          |
+| VENTILATIONCONFIG | 0x01    | 0x19     |        | INT16  | ?? `8107` = 1921                                                       |
+| VENTILATIONCONFIG | 0x01    | 0x1a     |        | INT16  | ?? `a106` = 1697                                                       |
+| VENTILATIONCONFIG | 0x01    | 0x1b     |        | INT16  | ?? `0f05` = 1295                                                       |
+| VENTILATIONCONFIG | 0x01    | 0x1c     |        | INT16  | ?? `0c05` = 1292                                                       |
+| VENTILATIONCONFIG | 0x01    | 0x1d     |        | INT16  | ?? `5304` = 1107                                                       |
+| VENTILATIONCONFIG | 0x01    | 0x1e     |        | INT16  | ?? `1304` = 1043                                                       |
+| NODECONFIGURATION | 0x01    | 0x01     |        | UINT8  | ?? `01` = 1                                                            |
+| NODECONFIGURATION | 0x01    | 0x03     |        | STRING | Maintainer password (2468)                                             |
+| NODECONFIGURATION | 0x01    | 0x04     |        | UINT8  | Orientation (0=left, 1=right)                                          |
+| NODECONFIGURATION | 0x01    | 0x05     |        | UINT8  | ?? `01` = 1                                                            |
+| NODECONFIGURATION | 0x01    | 0x06     |        | UINT8  | ?? `00` = 0                                                            |
+| NODECONFIGURATION | 0x01    | 0x07     |        | UINT8  | ?? `00` = 0                                                            |
+| NODECONFIGURATION | 0x01    | 0x08     |        | UINT8  | ?? `01` = 1                                                            |
+| NODECONFIGURATION | 0x01    | 0x0A     |        | UINT8  | ?? `00` = 0                                                            |
+| NODECONFIGURATION | 0x01    | 0x0B     |        | UINT8  | ?? `02` = 2                                                            |
+| NODECONFIGURATION | 0x01    | 0x0C     |        | UINT8  | ?? `01` = 1                                                            |
+
+### Known properties for Node 0x30 (ComfoConnect LAN C)
+
+| Unit              | SubUnit | Property | Access | Format | Description                                                            |
+|-------------------|---------|----------|--------|--------|------------------------------------------------------------------------|
+| NODE              | 0x01    | 0x01     |        | UINT8  | ?? `ff` = 255                                                          |
+| NODE              | 0x01    | 0x02     |        | UINT8  | ?? `05` = 5                                                            |
+| NODE              | 0x01    | 0x03     |        | UINT8  | ?? `00` = 0                                                            |
+| NODE              | 0x01    | 0x04     | ro     | STRING | Serial number (DEM0999999999)                                          |
+| NODE              | 0x01    | 0x05     |        | UINT8  | ?? `01` = 1                                                            |
+| NODE              | 0x01    | 0x06     | ro     | UINT32 | Firmware version (See `version_decode()`)                              |
+| NODE              | 0x01    | 0x07     |        | UINT32 | ?? `008c10c0` = 3222309888                                             |
+| NODE              | 0x01    | 0x14     | ro     | STRING | Unit Name (ComfoConnect LAN C)                                         |
 
 ## SCHEDULE Unit commands
 
