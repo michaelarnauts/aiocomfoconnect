@@ -44,8 +44,6 @@ class ComfoConnect(Bridge):
 
         if self.INITIAL_SENSOR_DELAY:
             _LOGGER.debug("Holding sensors for %s second(s)", self.INITIAL_SENSOR_DELAY)
-            if loop is None:
-                loop = asyncio.get_event_loop()
             self._sensor_hold = loop.call_later(self.INITIAL_SENSOR_DELAY, self._unhold_sensors)
 
         await super().connect(uuid, loop)
@@ -83,11 +81,11 @@ class ComfoConnect(Bridge):
 
         return result.message
 
-    async def set_property(self, prop: Property, value: int):
+    async def set_property(self, unit: int, subunit: int, id: int, value: int, node_id=1) -> any:
         """Set a property."""
-        raise NotImplementedError()
-        # result = await self.cmd_rmi_request(bytes([0x03, prop.unit, prop.subunit, prop.id, value]))
-        # return result.message
+        result = await self.cmd_rmi_request(bytes([0x03, unit, subunit, id, value]), node_id=node_id)
+
+        return result.message
 
     def _sensor_callback(self, sensor_id, sensor_value):
         """Callback function for sensor updates."""
