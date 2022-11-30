@@ -107,7 +107,7 @@ factory mode or tries to perform an update.)
 | NODE              | 0x01    | 0x03     |        |        | ?? 0x02                                         |
 | NODE              | 0x01    | 0x04     | ro     | STRING | Serial number                                   |
 | NODE              | 0x01    | 0x05     |        |        | ?? 0x02                                         |
-| NODE              | 0x01    | 0x06     |        |        | ?? b'\x00\x10\x10\xc0' = 001010c0               |
+| NODE              | 0x01    | 0x06     |        | UINT32 | Firmware version (See `version_decode()`)       |
 | NODE              | 0x01    | 0x07     |        |        | ?? b'\x00T\x10@' = 00541040                     |
 | NODE              | 0x01    | 0x08     | ro     | STRING | Model number (ComfoAir Q450 B R RF ST Quality)  |
 | NODE              | 0x01    | 0x09     |        |        | ?? b'\x04\x00\x00\x00' = 04000000               |

@@ -7,7 +7,7 @@ from typing import List, Literal
 
 from aiocomfoconnect import Bridge
 from aiocomfoconnect.const import *
-from aiocomfoconnect.properties import TYPE_PROP_STRING, Property
+from aiocomfoconnect.properties import Property
 from aiocomfoconnect.sensors import Sensor
 from aiocomfoconnect.util import bytestring
 
@@ -62,21 +62,24 @@ class ComfoConnect(Bridge):
         del self._sensors[sensor.id]
         del self._sensors_values[sensor.id]
 
-    async def get_property(self, prop: Property) -> any:
+    async def get_property(self, unit: int, subunit: int, id: int, type: int) -> any:
         """ Get a property. """
-        result = await self.cmd_rmi_request(bytes([0x01, prop.unit, prop.subunit, prop.type, prop.id]))
+        result = await self.cmd_rmi_request(bytes([0x01, unit, subunit, 0x10, id]))
 
-        try:
-            if prop.type == TYPE_PROP_STRING:
-                return result.message.decode("utf-8")
-        except UnicodeDecodeError:
-            pass
+        if type == TYPE_CN_STRING:
+            return result.message.decode("utf-8").rstrip("\x00")
+        elif type in [TYPE_CN_INT8, TYPE_CN_INT16, TYPE_CN_INT64]:
+            return int.from_bytes(result.message, byteorder="little", signed=True)
+        elif type in [TYPE_CN_UINT8, TYPE_CN_UINT16, TYPE_CN_UINT32]:
+            return int.from_bytes(result.message, byteorder="little", signed=False)
+        elif type in [TYPE_CN_BOOL]:
+            return result.message[0] == 1
 
         return result.message
 
-    async def get_properties(self, unit: int, subunit: int, type: int, ids: List[int]) -> any:
+    async def get_properties(self, unit: int, subunit: int, ids: List[int]) -> any:
         """ Get multiple properties. """
-        result = await self.cmd_rmi_request(bytestring([0x02, unit, subunit, 0x01, type | len(ids), bytes(ids)]))
+        result = await self.cmd_rmi_request(bytestring([0x02, unit, subunit, 0x01, 0x10 | len(ids), bytes(ids)]))
 
         return result.message
 
