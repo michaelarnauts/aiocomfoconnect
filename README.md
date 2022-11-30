@@ -129,6 +129,12 @@ if __name__ == "__main__":
 
 ## Development Notes
 
+### Protocol Documentation
+
+- [ComfoConnect LAN C Protocol](docs/PROTOCOL.md)
+- [PDO Sensors](docs/PROTOCOL-PDO.md)
+- [RMI commands](docs/PROTOCOL-RMI.md)
+
 ### Decode network traffic
 
 You can use the `scripts/decode_pcap.py` file to decode network traffic between the Mobile App and the ComfoConnect LAN C. 
