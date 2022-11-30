@@ -10,7 +10,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class BridgeDiscoveryProtocol(asyncio.DatagramProtocol):
-    """ UDP Protocol for the ComfoConnect LAN C bridge discovery. """
+    """UDP Protocol for the ComfoConnect LAN C bridge discovery."""
 
     def __init__(self, target: str = None, timeout: int = 5):
         loop = asyncio.get_running_loop()
@@ -22,7 +22,7 @@ class BridgeDiscoveryProtocol(asyncio.DatagramProtocol):
         self._timeout = loop.call_later(timeout, self.disconnect)
 
     def connection_made(self, transport: asyncio.transports.DatagramTransport):
-        """ Called when a connection is made."""
+        """Called when a connection is made."""
         _LOGGER.debug("Socket has been created")
         self.transport = transport
 
@@ -31,10 +31,10 @@ class BridgeDiscoveryProtocol(asyncio.DatagramProtocol):
             self.transport.sendto(b"\x0a\x00", (self._target, Bridge.PORT))
         else:
             _LOGGER.debug("Sending discovery request to broadcast:%d", Bridge.PORT)
-            self.transport.sendto(b"\x0a\x00", ('<broadcast>', Bridge.PORT))
+            self.transport.sendto(b"\x0a\x00", ("<broadcast>", Bridge.PORT))
 
     def datagram_received(self, data: Union[bytes, Text], addr: tuple[str | Any, int]):
-        """ Called when some datagram is received. """
+        """Called when some datagram is received."""
         if data == b"\x0a\x00":
             _LOGGER.debug("Ignoring discovery request from %s:%d", addr[0], addr[1])
             return
@@ -45,10 +45,7 @@ class BridgeDiscoveryProtocol(asyncio.DatagramProtocol):
         parser = zehnder_pb2.DiscoveryOperation()
         parser.ParseFromString(data)
 
-        self._bridges.append(Bridge(
-            host=parser.searchGatewayResponse.ipaddress,
-            uuid=parser.searchGatewayResponse.uuid.hex()
-        ))
+        self._bridges.append(Bridge(host=parser.searchGatewayResponse.ipaddress, uuid=parser.searchGatewayResponse.uuid.hex()))
 
         # When we have passed a target, we only want to listen for that one
         if self._target:
@@ -56,7 +53,7 @@ class BridgeDiscoveryProtocol(asyncio.DatagramProtocol):
             self.disconnect()
 
     def disconnect(self):
-        """ Disconnect the socket. """
+        """Disconnect the socket."""
         if self.transport:
             self.transport.close()
         self._future.set_result(self._bridges)
@@ -65,15 +62,15 @@ class BridgeDiscoveryProtocol(asyncio.DatagramProtocol):
         return self._future
 
 
-async def discover_bridges(host: str = None, timeout: int = 1, loop = None) -> List[Bridge]:
-    """ Discover a bridge by IP. """
+async def discover_bridges(host: str = None, timeout: int = 1, loop=None) -> List[Bridge]:
+    """Discover a bridge by IP."""
 
     if loop is None:
         loop = asyncio.get_event_loop()
 
     transport, protocol = await loop.create_datagram_endpoint(
         lambda: BridgeDiscoveryProtocol(host, timeout),
-        local_addr=('0.0.0.0', 0),
+        local_addr=("0.0.0.0", 0),
         allow_broadcast=False if host else True,
     )
 

@@ -16,25 +16,25 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def main(args):
-    """ Main function. """
-    if args.action == 'discover':
+    """Main function."""
+    if args.action == "discover":
         await run_discover(args.host)
 
-    elif args.action == 'register':
+    elif args.action == "register":
         await run_register(args.host, args.uuid, args.name, args.pin)
 
-    elif args.action == 'set-speed':
+    elif args.action == "set-speed":
         await run_set_speed(args.host, args.uuid, args.speed)
 
-    elif args.action == 'show-sensors':
+    elif args.action == "show-sensors":
         await run_show_sensors(args.host, args.uuid)
 
     else:
-        raise Exception('Unknown action: ' + args.action)
+        raise Exception("Unknown action: " + args.action)
 
 
 async def run_discover(host: str = None):
-    """ Discover all bridges on the network. """
+    """Discover all bridges on the network."""
     bridges = await discover_bridges(host)
     print("Discovered bridges:")
     for bridge in bridges:
@@ -43,11 +43,11 @@ async def run_discover(host: str = None):
 
 
 async def run_register(host: str, uuid: str, name: str, pin: int):
-    """ Connect to a bridge. """
+    """Connect to a bridge."""
     # Discover bridge so we know the UUID
     bridges = await discover_bridges(host)
     if not bridges:
-        raise Exception('No bridge found')
+        raise Exception("No bridge found")
 
     # Connect to the bridge
     comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid)
@@ -57,7 +57,7 @@ async def run_register(host: str, uuid: str, name: str, pin: int):
         # Login with the bridge
         await comfoconnect.cmd_start_session()
 
-        print(f'UUID {uuid} is already registered.')
+        print(f"UUID {uuid} is already registered.")
 
     except ComfoConnectNotAllowed:
         # We probably are not registered yet...
@@ -67,20 +67,20 @@ async def run_register(host: str, uuid: str, name: str, pin: int):
         await comfoconnect.cmd_start_session()
 
     # ListRegisteredApps
-    print('Registered applications:')
+    print("Registered applications:")
     reply = await comfoconnect.cmd_list_registered_apps()
     for app in reply.apps:
-        print('* %s: %s' % (app.uuid.hex(), app.devicename))
+        print("* %s: %s" % (app.uuid.hex(), app.devicename))
 
     await comfoconnect.disconnect()
 
 
-async def run_set_speed(host: str, uuid: str, speed: Literal['away', 'low', 'medium', 'high']):
-    """ Connect to a bridge. """
+async def run_set_speed(host: str, uuid: str, speed: Literal["away", "low", "medium", "high"]):
+    """Connect to a bridge."""
     # Discover bridge so we know the UUID
     bridges = await discover_bridges(host)
     if not bridges:
-        raise Exception('No bridge found')
+        raise Exception("No bridge found")
 
     # Connect to the bridge
     comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid)
@@ -93,17 +93,17 @@ async def run_set_speed(host: str, uuid: str, speed: Literal['away', 'low', 'med
 
 
 async def run_show_sensors(host: str, uuid: str):
-    """ Connect to a bridge. """
+    """Connect to a bridge."""
     loop = asyncio.get_running_loop()
 
     # Discover bridge so we know the UUID
     bridges = await discover_bridges(host, loop=loop)
     if not bridges:
-        raise Exception('No bridge found')
+        raise Exception("No bridge found")
 
     def sensor_callback(sensor, value):
-        """ Print sensor updates. """
-        print("{sensor:>40}: {value} {unit}".format(sensor=sensor.name, value=value, unit=sensor.unit or ''))
+        """Print sensor updates."""
+        print("{sensor:>40}: {value} {unit}".format(sensor=sensor.name, value=value, unit=sensor.unit or ""))
 
     # Connect to the bridge
     comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid, callback=sensor_callback)
@@ -119,28 +119,28 @@ async def run_show_sensors(host: str, uuid: str):
     await comfoconnect.disconnect()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--debug', '-d', help='Enable debug logging', default=False, action='store_true')
-    subparsers = parser.add_subparsers(required=True, dest='action')
+    parser.add_argument("--debug", "-d", help="Enable debug logging", default=False, action="store_true")
+    subparsers = parser.add_subparsers(required=True, dest="action")
 
-    p_discover = subparsers.add_parser('discover', help='discover ComfoConnect LAN C devices on your network')
-    p_discover.add_argument('--host', help='Host address of the bridge')
+    p_discover = subparsers.add_parser("discover", help="discover ComfoConnect LAN C devices on your network")
+    p_discover.add_argument("--host", help="Host address of the bridge")
 
-    p_register = subparsers.add_parser('register', help='register on a ComfoConnect LAN C device')
-    p_register.add_argument('--pin', help='PIN code to register on the bridge', default=DEFAULT_PIN)
-    p_register.add_argument('--host', help='Host address of the bridge')
-    p_register.add_argument('--uuid', help='UUID of this app', default=DEFAULT_UUID)
-    p_register.add_argument('--name', help='Name of this app', default=DEFAULT_NAME)
+    p_register = subparsers.add_parser("register", help="register on a ComfoConnect LAN C device")
+    p_register.add_argument("--pin", help="PIN code to register on the bridge", default=DEFAULT_PIN)
+    p_register.add_argument("--host", help="Host address of the bridge")
+    p_register.add_argument("--uuid", help="UUID of this app", default=DEFAULT_UUID)
+    p_register.add_argument("--name", help="Name of this app", default=DEFAULT_NAME)
 
-    p_set_speed = subparsers.add_parser('set-speed', help='set the fan speed')
-    p_set_speed.add_argument('speed', help='Fan speed', choices=['low', 'medium', 'high', 'away'])
-    p_set_speed.add_argument('--host', help='Host address of the bridge')
-    p_set_speed.add_argument('--uuid', help='UUID of this app', default=DEFAULT_UUID)
+    p_set_speed = subparsers.add_parser("set-speed", help="set the fan speed")
+    p_set_speed.add_argument("speed", help="Fan speed", choices=["low", "medium", "high", "away"])
+    p_set_speed.add_argument("--host", help="Host address of the bridge")
+    p_set_speed.add_argument("--uuid", help="UUID of this app", default=DEFAULT_UUID)
 
-    p_sensors = subparsers.add_parser('show-sensors', help='show the sensor values')
-    p_sensors.add_argument('--host', help='Host address of the bridge')
-    p_sensors.add_argument('--uuid', help='UUID of this app', default=DEFAULT_UUID)
+    p_sensors = subparsers.add_parser("show-sensors", help="show the sensor values")
+    p_sensors.add_argument("--host", help="Host address of the bridge")
+    p_sensors.add_argument("--uuid", help="UUID of this app", default=DEFAULT_UUID)
 
     args = parser.parse_args()
 

@@ -17,20 +17,20 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class EventBus:
-    """ An event bus for async replies."""
+    """An event bus for async replies."""
 
     def __init__(self):
         self.listeners = {}
 
     def add_listener(self, event_name, future):
-        _LOGGER.debug('Adding listener for event %s', event_name)
+        _LOGGER.debug("Adding listener for event %s", event_name)
         if not self.listeners.get(event_name, None):
             self.listeners[event_name] = {future}
         else:
             self.listeners[event_name].add(future)
 
     def emit(self, event_name, event):
-        _LOGGER.debug('Emitting for event %s', event_name)
+        _LOGGER.debug("Emitting for event %s", event_name)
         futures = self.listeners.get(event_name, [])
         for future in futures:
             if isinstance(event, Exception):
@@ -41,7 +41,7 @@ class EventBus:
 
 
 class Bridge:
-    """ ComfoConnect LAN C API. """
+    """ComfoConnect LAN C API."""
 
     PORT = 56747
     KEEPALIVE_INTERVAL = 60
@@ -67,11 +67,11 @@ class Bridge:
         return "<Bridge {0}, UID={1}>".format(self.host, self.uuid)
 
     def set_callback(self, callback: callable):
-        """ Set a callback to be called when a message is received. """
+        """Set a callback to be called when a message is received."""
         self.__sensor_callback = callback
 
     async def connect(self, uuid: str, loop=None):
-        """ Connect to the bridge. """
+        """Connect to the bridge."""
         _LOGGER.debug("Connecting to bridge %s", self.host)
         self._reader, self._writer = await asyncio.open_connection(self.host, self.PORT)
         self._reference = 1  # random.randint(1000, 20000)
@@ -86,7 +86,7 @@ class Bridge:
         self._keepalive_task = loop.create_task(self._send_keepalive())
 
     async def disconnect(self):
-        """ Disconnect from the bridge. """
+        """Disconnect from the bridge."""
         _LOGGER.debug("Disconnecting from bridge %s", self.host)
 
         # Cancel the background tasks
@@ -135,7 +135,7 @@ class Bridge:
         msg_len_buf = await self._reader.readexactly(4)
 
         # Read rest of packet
-        msg_len = int.from_bytes(msg_len_buf, byteorder='big')
+        msg_len = int.from_bytes(msg_len_buf, byteorder="big")
         msg_buf = await self._reader.readexactly(msg_len)
 
         # Decode message
@@ -166,26 +166,23 @@ class Bridge:
         return message
 
     async def _read_messages(self):
-        """ Receive a message from the bridge. """
+        """Receive a message from the bridge."""
         while self._read_task.cancelled() is False:
             try:
                 message = await self._read()
 
                 if message.cmd.type == zehnder_pb2.GatewayOperation.CnRpdoNotificationType:
                     if self.__sensor_callback:
-                        self.__sensor_callback(
-                            message.msg.pdid,
-                            int.from_bytes(message.msg.data, byteorder='little', signed=True)
-                        )
+                        self.__sensor_callback(message.msg.pdid, int.from_bytes(message.msg.data, byteorder="little", signed=True))
                     else:
-                        _LOGGER.info('Unhandled CnRpdoNotificationType since no callback is registered.')
+                        _LOGGER.info("Unhandled CnRpdoNotificationType since no callback is registered.")
 
                 elif message.cmd.type == zehnder_pb2.GatewayOperation.GatewayNotificationType:
-                    _LOGGER.info('Unhandled GatewayNotificationType')
+                    _LOGGER.info("Unhandled GatewayNotificationType")
                     # TODO: We should probably handle these somehow
 
                 elif message.cmd.type == zehnder_pb2.GatewayOperation.CnNodeNotificationType:
-                    _LOGGER.info('Unhandled CnNodeNotificationType')
+                    _LOGGER.info("Unhandled CnNodeNotificationType")
                     # TODO: We should probably handle these somehow
 
                 elif message.cmd.type == zehnder_pb2.GatewayOperation.CnAlarmNotificationType:
@@ -193,7 +190,7 @@ class Bridge:
                     self.__errors[message.msg.nodeId] = message.msg
 
                 elif message.cmd.type == zehnder_pb2.GatewayOperation.CloseSessionRequestType:
-                    _LOGGER.info('The Bridge has asked us to close the connection.')
+                    _LOGGER.info("The Bridge has asked us to close the connection.")
                     return  # Stop the background task
 
                 elif message.cmd.reference:
@@ -207,7 +204,7 @@ class Bridge:
                 return  # Stop the background task
 
             except IncompleteReadError:
-                _LOGGER.info('The other end has closed the connection.')
+                _LOGGER.info("The other end has closed the connection.")
                 return  # Stop the background task
 
             except ComfoConnectError as exc:
@@ -215,16 +212,16 @@ class Bridge:
                     self._event_bus.emit(exc.message.cmd.reference, exc)
 
             except DecodeError as exc:
-                _LOGGER.error('Failed to decode message: %s', exc)
+                _LOGGER.error("Failed to decode message: %s", exc)
 
     async def _send_keepalive(self):
-        """ Send a keepalive message to the bridge. """
+        """Send a keepalive message to the bridge."""
         while not self._keepalive_task.cancelled():
             await asyncio.sleep(self.KEEPALIVE_INTERVAL)
             await self.cmd_keepalive()
 
     def get_errors(self):
-        """ Get the current errors. """
+        """Get the current errors."""
         # zone: 1
         # productId: 1
         # productVariant: 2
@@ -243,9 +240,7 @@ class Bridge:
         result = self._send(
             zehnder_pb2.StartSessionRequest,
             zehnder_pb2.GatewayOperation.StartSessionRequestType,
-            {
-                'takeover': take_over
-            },
+            {"takeover": take_over},
         )
         return result
 
@@ -274,9 +269,9 @@ class Bridge:
             zehnder_pb2.RegisterAppRequest,
             zehnder_pb2.GatewayOperation.RegisterAppRequestType,
             {
-                'uuid': bytes.fromhex(uuid),
-                'devicename': device_name,
-                'pin': pin,
+                "uuid": bytes.fromhex(uuid),
+                "devicename": device_name,
+                "pin": pin,
             },
         )
 
@@ -284,14 +279,12 @@ class Bridge:
         """Remove the specified app from the registration list."""
         _LOGGER.debug("DeregisterAppRequest")
         if uuid == self._local_uuid:
-            raise Exception('You should not deregister yourself.')
+            raise Exception("You should not deregister yourself.")
 
         return self._send(
             zehnder_pb2.DeregisterAppRequest,
             zehnder_pb2.GatewayOperation.DeregisterAppRequestType,
-            {
-                'uuid': bytes.fromhex(uuid)
-            },
+            {"uuid": bytes.fromhex(uuid)},
         )
 
     def cmd_version_request(self):
@@ -316,10 +309,7 @@ class Bridge:
         return self._send(
             zehnder_pb2.CnRmiRequest,
             zehnder_pb2.GatewayOperation.CnRmiRequestType,
-            {
-                'nodeId': node_id or 1,
-                'message': message
-            },
+            {"nodeId": node_id or 1, "message": message},
         )
 
     def cmd_rpdo_request(self, pdid: int, type: int = 1, zone: int = 1, timeout=None):
@@ -328,12 +318,7 @@ class Bridge:
         return self._send(
             zehnder_pb2.CnRpdoRequest,
             zehnder_pb2.GatewayOperation.CnRpdoRequestType,
-            {
-                'pdid': pdid,
-                'type': type,
-                'zone': zone or 1,
-                'timeout': timeout
-            },
+            {"pdid": pdid, "type": type, "zone": zone or 1, "timeout": timeout},
         )
 
     def cmd_keepalive(self):
@@ -433,8 +418,8 @@ class Message(object):
     def encode(self):
         cmd_buf = self.cmd.SerializeToString()
         msg_buf = self.msg.SerializeToString()
-        cmd_len_buf = struct.pack('>H', len(cmd_buf))
-        msg_len_buf = struct.pack('>L', 16 + 16 + 2 + len(cmd_buf) + len(msg_buf))
+        cmd_len_buf = struct.pack(">H", len(cmd_buf))
+        msg_len_buf = struct.pack(">L", 16 + 16 + 2 + len(cmd_buf) + len(msg_buf))
 
         return msg_len_buf + bytes.fromhex(self.src) + bytes.fromhex(self.dst) + cmd_len_buf + cmd_buf + msg_buf
 
@@ -442,9 +427,9 @@ class Message(object):
     def decode(cls, packet):
         src_buf = packet[0:16]
         dst_buf = packet[16:32]
-        cmd_len = struct.unpack('>H', packet[32:34])[0]
-        cmd_buf = packet[34:34 + cmd_len]
-        msg_buf = packet[34 + cmd_len:]
+        cmd_len = struct.unpack(">H", packet[32:34])[0]
+        cmd_buf = packet[34 : 34 + cmd_len]
+        msg_buf = packet[34 + cmd_len :]
 
         # Parse command
         cmd = zehnder_pb2.GatewayOperation()

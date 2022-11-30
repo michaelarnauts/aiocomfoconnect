@@ -130,8 +130,8 @@ ERRORS = {
     94: "ComfoCool supply air temperature sensor error (CCOOL_TEMP ERROR)",
     95: "ComfoHood temperature is too high (HOOD_TEMP ERROR)",
     96: "ComfoHood is activated",
-    97: "QM_Constraint_min_ERR", # Unknown error
-    98: "H_21_qm_min_ERR", # Unknown error
+    97: "QM_Constraint_min_ERR",  # Unknown error
+    98: "H_21_qm_min_ERR",  # Unknown error
     99: "Configuration error",
     100: "Error analysis is in progress…",
     101: "ComfoNet Error",
@@ -159,32 +159,31 @@ ERRORS = {
 }
 
 
-
 class VentilationMode:
-    MANUAL = 'manual'
-    AUTO = 'auto'
+    MANUAL = "manual"
+    AUTO = "auto"
 
 
 class VentilationSetting:
-    AUTO = 'auto'
-    ON = 'on'
-    OFF = 'off'
+    AUTO = "auto"
+    ON = "on"
+    OFF = "off"
 
 
 class VentilationBalance:
-    BALANCE = 'balance'
-    SUPPLY_ONLY = 'supply_only'
-    EXHAUST_ONLY = 'exhaust_only'
+    BALANCE = "balance"
+    SUPPLY_ONLY = "supply_only"
+    EXHAUST_ONLY = "exhaust_only"
 
 
 class VentilationTemperatureProfile:
-    WARM = 'warm'
-    NORMAL = 'normal'
-    COOL = 'cool'
+    WARM = "warm"
+    NORMAL = "normal"
+    COOL = "cool"
 
 
 class VentilationSpeed:
-    AWAY = 'away'
-    LOW = 'low'
-    MEDIUM = 'medium'
-    HIGH = 'high'
+    AWAY = "away"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
