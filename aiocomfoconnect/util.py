@@ -23,3 +23,13 @@ def version_decode(version):
         v1 = "R"
 
     return "%s%s.%s.%s" % (v1, v2, v3, v4)
+
+
+def pdo_to_can(pdo, node_id=1):
+    """Convert a PDO-ID to a CAN-ID."""
+    return ((pdo << 14) + 0x40 + node_id).to_bytes(4, byteorder="big").hex()
+
+
+def can_to_pdo(can, node_id=1):
+    """Convert a CAN-ID to a PDO-ID."""
+    return (int(can, 16) - 0x40 - node_id) >> 14
