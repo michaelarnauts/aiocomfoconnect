@@ -141,7 +141,7 @@ SENSORS: Dict[int, Sensor] = {
     220: Sensor("Outdoor Air Temperature (?)", None, 220, TYPE_CN_INT16, lambda x: x / 10),
     SENSOR_TEMPERATURE_SUPPLY: Sensor("Supply Air Temperature", UNIT_CELCIUS, 221, TYPE_CN_INT16, lambda x: x / 10),
     SENSOR_UNIT_AIRFLOW: Sensor("Device Airflow Unit", None, 224, TYPE_CN_UINT8, lambda x: "m3ph" if x == 3 else "lps"),
-    SENSOR_COMFORTCONTROL_MODE: Sensor("comfortcontrol_mode", None, 225, TYPE_CN_UINT8),
+    SENSOR_COMFORTCONTROL_MODE: Sensor("Sensor based ventilation mode", None, 225, TYPE_CN_UINT8),
     SENSOR_FAN_SPEED_MODE_MODULATED: Sensor("Fan Speed (modulated)", None, 226, TYPE_CN_UINT16),
     SENSOR_BYPASS_STATE: Sensor("Bypass State", UNIT_PERCENT, 227, TYPE_CN_UINT8),
     SENSOR_FROSTPROTECTION_UNBALANCE: Sensor("frostprotection_unbalance", None, 228, TYPE_CN_UINT8),

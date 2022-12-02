@@ -83,8 +83,8 @@ Numbers are stored in little endian format.
 | 220  | CN_INT16  | ?? Outdoor Air Temperature (Preheated)           | value in °C (75 -> 7.5 °C)                                                                                       |
 | 221  | CN_INT16  | ?? Temperature: Supply Air (PostHeated)          | value in °C (170 -> 17.0 °C)                                                                                     |
 | 224  | CN_UINT8  | Device Airflow Unit                              | 1=kg/h, 2=l/s, 3=m³/h                                                                                            |
-| 225  | CN_UINT8  |                                                  | 0=disabled, 1=active, 2=overruling (1)                                                                           |
-| 226  | CN_UINT16 | Fan Speed                                        | 0, 100, 200, 300                                                                                                 |
+| 225  | CN_UINT8  | Sensor based ventilation mode                    | 0=disabled, 1=active, 2=overruling                                                                               |
+| 226  | CN_UINT16 | Fan Speed (modulated)                            | 0, 100, 200, 300 (0-300 when modulating and PDO 225=2)                                                           |
 | 227  | CN_UINT8  | Bypass state                                     | value in % (100% = fully open)                                                                                   |
 | 228  | CN_UINT8  | ?? FrostProtectionUnbalance                      | 0                                                                                                                |
 | 229  | CN_BOOL   |                                                  | 1                                                                                                                |
