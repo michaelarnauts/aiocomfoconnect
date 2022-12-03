@@ -37,13 +37,13 @@ $ python -m aiocomfoconnect set-speed show-sensors --host 192.168.1.213
 - `async get_speed()`: Get the ventilation speed.
 - `async set_speed(speed)`: Set the ventilation speed. (away / low / medium / high)
 - `async get_bypass()`: Get the bypass mode.
-- `async set_bypass(mode, timeout=3600)`: Set the bypass mode. (auto / on / off)
+- `async set_bypass(mode, timeout=-1)`: Set the bypass mode. (auto / on / off)
 - `async get_balance_mode()`: Get the balance mode.
-- `async set_balance_mode(mode, timeout=3600)`: Set the balance mode. (balance / supply only / exhaust only)
+- `async set_balance_mode(mode, timeout=-1)`: Set the balance mode. (balance / supply only / exhaust only)
 - `async get_boost()`: Get the boost mode.
-- `async set_boost(mode, timeout=3600)`: Set the boost mode. (boolean)
+- `async set_boost(mode, timeout=-1)`: Set the boost mode. (boolean)
 - `async get_away()`: Get the away mode.
-- `async set_away(mode, timeout=3600)`: Set the away mode. (boolean)
+- `async set_away(mode, timeout=-1)`: Set the away mode. (boolean)
 - `async get_temperature_profile()`: Get the temperature profile.
 - `async set_temperature_profile(profile)`: Set the temperature profile. (warm / normal / cool)
 - `async get_sensor_ventmode_temperature_passive()`: Get the sensor based ventilation passive temperature control setting.
@@ -94,7 +94,7 @@ if __name__ == "__main__":
 import asyncio
 
 from aiocomfoconnect import ComfoConnect
-from aiocomfoconnect.const import SPEED_LOW
+from aiocomfoconnect.const import VentilationSpeed
 from aiocomfoconnect.sensors import SENSORS
 
 
@@ -106,7 +106,7 @@ async def main(local_uuid, host, uuid):
         print(f"{sensor.name} = {value}")
 
     # Connect to the Bridge
-    comfoconnect = ComfoConnect(host, uuid, callback=sensor_callback)
+    comfoconnect = ComfoConnect(host, uuid, sensor_callback=sensor_callback)
     await comfoconnect.connect(local_uuid)
 
     # Register all sensors
@@ -114,7 +114,7 @@ async def main(local_uuid, host, uuid):
         await comfoconnect.register_sensor(SENSORS[key])
 
     # Set speed to LOW
-    await comfoconnect.set_speed(SPEED_LOW)
+    await comfoconnect.set_speed(VentilationSpeed.LOW)
 
     # Wait 2 minutes so we can see some sensor updates
     await asyncio.sleep(120)
@@ -124,7 +124,7 @@ async def main(local_uuid, host, uuid):
 
 
 if __name__ == "__main__":
-    asyncio.run(main('00000000000000000000000000001337', '192.168.1.20', '00000000000000000000000000000055'))  # Replace with your bridge's IP and UUID
+    asyncio.run(main(local_uuid='00000000000000000000000000001337', host='192.168.1.20', uuid='00000000000000000000000000000055'))  # Replace with your bridge's IP and UUID
 ```
 
 ## Development Notes

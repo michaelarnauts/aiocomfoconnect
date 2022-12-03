@@ -58,7 +58,7 @@ SUBUNIT_06 = 0x06
 SUBUNIT_07 = 0x07
 SUBUNIT_08 = 0x08
 
-ERRORS = {
+ERRORS_BASE = {
     21: "DANGER! OVERHEATING! Two or more sensors are detecting an incorrect temperature. Ventilation has stopped.",
     22: "Temperature too high for ComfoAir Q (TEMP_HRU ERROR)",
     23: "The extract air temperature sensor has a malfunction (SENSOR_ETA ERROR)",
@@ -102,7 +102,10 @@ ERRORS = {
     67: "Option Box was present, but is no longer detected (OPTION_BOX CONNECT ERROR)",
     68: "Pre-heater was present, but is no longer detected (PREHEAT_PRES ERROR)",
     69: "Postheater was present, but is no longer detected (POSTHEAT_CONNECT ERROR)",
-    # Firmware 1.4.0 and higher
+}
+
+ERRORS = {
+    **ERRORS_BASE,
     70: "Analog input 1 was present, but is no longer detected (ANALOG_1_PRES ERROR)",
     71: "Analog input 2 was present, but is no longer detected (ANALOG_2_PRES ERROR)",
     72: "Analog input 3 was present, but is no longer detected (ANALOG_3_PRES ERROR)",
@@ -138,24 +141,27 @@ ERRORS = {
     102: "The number of CO2 sensors has decreased – one or more sensors are no longer detected",
     103: "More than 8 sensors detected in a zone",
     104: "CO₂ Sensor C error",
-    # Firmware 1.4.0
-    # 70: "ComfoHood was present, but is no longer detected (HOOD_CONNECT ERROR)",
-    # 71: "ComfoCool was present, but is no longer detected (CCOOL_CONNECT ERROR)",
-    # 72: "ComfoFond was present, but is no longer detected (GROUND_HEAT_CONNECT ERROR)",
-    # 73: "The filters of the Ventilation Unit must be replaced now",
-    # 74: "It is necessary to replace or clean the external filter",
-    # 75: "Order new filters now, because the remaining filter life time is limited",
-    # 76: "Service mode is active (SERVICE MODE)",
-    # 77: "Preheater has no communication with the ComfoAir unit (PREHEAT ERROR , 1081)",
-    # 78: "ComfoHood temperature error (HOOD_TEMP ERROR)",
-    # 79: "Postheater temperature error (POSTHEAT_TEMP ERROR)",
-    # 80: "Outdoor temperature of ComfoFond error (GROUND_HEAT_TEMP ERROR)",
-    # 81: "Bypass is in manual mode",
-    # 82: "ComfoCool is overheating",
-    # 83: "ComfoCool compressor error (CCOOL_COMPRESSOR ERROR)",
-    # 84: "ComfoCool room temperature sensor error (CCOOL_TEMP ERROR)",
-    # 85: "ComfoCool condensor temperature sensor error (CCOOL_TEMP ERROR)",
-    # 86: "ComfoCool supply air temperature sensor error (CCOOL_TEMP ERROR)",
+}
+
+ERRORS_140 = {
+    **ERRORS_BASE,
+    70: "ComfoHood was present, but is no longer detected (HOOD_CONNECT ERROR)",
+    71: "ComfoCool was present, but is no longer detected (CCOOL_CONNECT ERROR)",
+    72: "ComfoFond was present, but is no longer detected (GROUND_HEAT_CONNECT ERROR)",
+    73: "The filters of the Ventilation Unit must be replaced now",
+    74: "It is necessary to replace or clean the external filter",
+    75: "Order new filters now, because the remaining filter life time is limited",
+    76: "Service mode is active (SERVICE MODE)",
+    77: "Preheater has no communication with the ComfoAir unit (PREHEAT ERROR , 1081)",
+    78: "ComfoHood temperature error (HOOD_TEMP ERROR)",
+    79: "Postheater temperature error (POSTHEAT_TEMP ERROR)",
+    80: "Outdoor temperature of ComfoFond error (GROUND_HEAT_TEMP ERROR)",
+    81: "Bypass is in manual mode",
+    82: "ComfoCool is overheating",
+    83: "ComfoCool compressor error (CCOOL_COMPRESSOR ERROR)",
+    84: "ComfoCool room temperature sensor error (CCOOL_TEMP ERROR)",
+    85: "ComfoCool condensor temperature sensor error (CCOOL_TEMP ERROR)",
+    86: "ComfoCool supply air temperature sensor error (CCOOL_TEMP ERROR)",
 }
 
 

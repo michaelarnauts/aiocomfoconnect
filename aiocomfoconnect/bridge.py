@@ -44,7 +44,6 @@ class Bridge:
     """ComfoConnect LAN C API."""
 
     PORT = 56747
-    KEEPALIVE_INTERVAL = 60
 
     def __init__(self, host: str, uuid: str):
         self.host: str = host
@@ -57,18 +56,20 @@ class Bridge:
 
         self._event_bus: EventBus = None
         self._read_task: asyncio.Task = None
-        self._keepalive_task: asyncio.Task = None
 
-        self.__sensor_callback: callable = None
-
-        self.__errors: Dict[int, any] = {}
+        self.__sensor_callback_fn: callable = None
+        self.__alarm_callback_fn: callable = None
 
     def __repr__(self):
         return "<Bridge {0}, UID={1}>".format(self.host, self.uuid)
 
-    def set_callback(self, callback: callable):
+    def set_sensor_callback(self, callback: callable):
         """Set a callback to be called when a message is received."""
-        self.__sensor_callback = callback
+        self.__sensor_callback_fn = callback
+
+    def set_alarm_callback(self, callback: callable):
+        """Set a callback to be called when an alarm is received."""
+        self.__alarm_callback_fn = callback
 
     async def connect(self, uuid: str, loop=None):
         """Connect to the bridge."""
@@ -77,20 +78,17 @@ class Bridge:
         self._reference = 1  # random.randint(1000, 20000)
         self._local_uuid = uuid
         self._event_bus = EventBus()
-        self.__errors = {}
 
         # We are connected, start the background task
         if loop is None:
             loop = asyncio.get_event_loop()
         self._read_task = loop.create_task(self._read_messages())
-        self._keepalive_task = loop.create_task(self._send_keepalive())
 
     async def disconnect(self):
         """Disconnect from the bridge."""
         _LOGGER.debug("Disconnecting from bridge %s", self.host)
 
-        # Cancel the background tasks
-        self._keepalive_task.cancel()
+        # Cancel the background task
         self._read_task.cancel()
 
         # Disconnect
@@ -172,8 +170,8 @@ class Bridge:
                 message = await self._read()
 
                 if message.cmd.type == zehnder_pb2.GatewayOperation.CnRpdoNotificationType:
-                    if self.__sensor_callback:
-                        self.__sensor_callback(message.msg.pdid, int.from_bytes(message.msg.data, byteorder="little", signed=True))
+                    if self.__sensor_callback_fn:
+                        self.__sensor_callback_fn(message.msg.pdid, int.from_bytes(message.msg.data, byteorder="little", signed=True))
                     else:
                         _LOGGER.info("Unhandled CnRpdoNotificationType since no callback is registered.")
 
@@ -186,8 +184,10 @@ class Bridge:
                     # TODO: We should probably handle these somehow
 
                 elif message.cmd.type == zehnder_pb2.GatewayOperation.CnAlarmNotificationType:
-                    # This currently only saves the last error notification. It might be that other nodes can also send errors, so we should probably save a list of errors.
-                    self.__errors[message.msg.nodeId] = message.msg
+                    if self.__alarm_callback_fn:
+                        self.__alarm_callback_fn(message.msg.nodeId, message.msg)
+                    else:
+                        _LOGGER.info("Unhandled CnAlarmNotificationType since no callback is registered.")
 
                 elif message.cmd.type == zehnder_pb2.GatewayOperation.CloseSessionRequestType:
                     _LOGGER.info("The Bridge has asked us to close the connection.")
@@ -213,26 +213,6 @@ class Bridge:
 
             except DecodeError as exc:
                 _LOGGER.error("Failed to decode message: %s", exc)
-
-    async def _send_keepalive(self):
-        """Send a keepalive message to the bridge."""
-        while not self._keepalive_task.cancelled():
-            await asyncio.sleep(self.KEEPALIVE_INTERVAL)
-            await self.cmd_keepalive()
-
-    def get_errors(self):
-        """Get the current errors."""
-        # zone: 1
-        # productId: 1
-        # productVariant: 2
-        # serialNumber: "XXXXXXXXXXXXXXX"
-        # swProgramVersion: 3222278144
-        # errors: "\000\000\000\000\000\000@\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
-        # errorId: 54
-        # nodeId: 1
-
-        # errorId contains the error ID, but I think errors contains a bitwise list of all errors, bot sure though...
-        return {error.nodeId: [error.errorId] for error in self.__errors.values()}
 
     def cmd_start_session(self, take_over=False):
         """Starts the session on the device by logging in and optionally disconnecting an already existing session."""

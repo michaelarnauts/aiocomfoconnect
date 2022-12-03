@@ -101,12 +101,18 @@ async def run_show_sensors(host: str, uuid: str):
     if not bridges:
         raise Exception("No bridge found")
 
+    def alarm_callback(node_id, errors):
+        """Print alarm updates."""
+        print(f"Alarm received for Node {node_id}:")
+        for error_id, error in errors.items():
+            print(f"* {error_id}: {error}")
+
     def sensor_callback(sensor, value):
         """Print sensor updates."""
         print("{sensor:>40}: {value} {unit}".format(sensor=sensor.name, value=value, unit=sensor.unit or ""))
 
     # Connect to the bridge
-    comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid, callback=sensor_callback)
+    comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid, sensor_callback=sensor_callback, alarm_callback=alarm_callback)
     await comfoconnect.connect(uuid)
     await comfoconnect.cmd_start_session()
 

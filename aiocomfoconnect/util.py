@@ -6,6 +6,18 @@ def bytestring(arr):
     return b"".join([i if isinstance(i, bytes) else bytes([i]) for i in arr])
 
 
+def bytearray_to_bits(bytearray):
+    """Convert a bytearray to a list of set bits."""
+    bits = []
+    j = 0
+    for byte in bytearray:
+        for i in range(8):
+            if byte & (1 << i):
+                bits.append(j)
+            j += 1
+    return bits
+
+
 def version_decode(version):
     """Decode the version number to a string."""
     v1 = (version >> 30) & 3

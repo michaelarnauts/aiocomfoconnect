@@ -7,9 +7,8 @@ from typing import List, Literal
 
 from aiocomfoconnect import Bridge
 from aiocomfoconnect.const import *
-from aiocomfoconnect.properties import Property
 from aiocomfoconnect.sensors import Sensor
-from aiocomfoconnect.util import bytestring
+from aiocomfoconnect.util import bytearray_to_bits, bytestring
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -17,14 +16,17 @@ _LOGGER = logging.getLogger(__name__)
 class ComfoConnect(Bridge):
     """Abstraction layer over the ComfoConnect LAN C API."""
 
-    INITIAL_SENSOR_DELAY = 1  # 1 second cutoff seems fine
+    INITIAL_SENSOR_DELAY = 2  # 2 seconds cutoff seems fine
 
-    def __init__(self, host: str, uuid: str, callback=None):
+    def __init__(self, host: str, uuid: str, sensor_callback=None, alarm_callback=None):
         """Initialize the ComfoConnect class."""
         super().__init__(host, uuid)
 
-        self.set_callback(self._sensor_callback)  # Set the callback to our _sensor_callback method, so we can proces the callbacks.
-        self._callback = callback
+        self.set_sensor_callback(self._sensor_callback)  # Set the callback to our _sensor_callback method, so we can proces the callbacks.
+        self.set_alarm_callback(self._alarm_callback)  # Set the callback to our _alarm_callback method, so we can proces the callbacks.
+
+        self._sensor_callback_fn = sensor_callback
+        self._alarm_callback_fn = alarm_callback
         self._sensors = {}
         self._sensors_values = {}
         self._sensor_hold = None
@@ -34,9 +36,10 @@ class ComfoConnect(Bridge):
         _LOGGER.debug("Unholding sensors")
         self._sensor_hold = None
 
-        # Emit the current cached values of the sensors, by now, they will have received a second update.
+        # Emit the current cached values of the sensors, by now, they will have received a correct update.
         for sensor_id, sensor in self._sensors.items():
-            self._sensor_callback(sensor_id, self._sensors_values[sensor_id])
+            if self._sensors_values[sensor_id] is not None:
+                self._sensor_callback(sensor_id, self._sensors_values[sensor_id])
 
     async def connect(self, uuid: str, loop=None):
         """Connect to the bridge."""
@@ -89,7 +92,7 @@ class ComfoConnect(Bridge):
 
     def _sensor_callback(self, sensor_id, sensor_value):
         """Callback function for sensor updates."""
-        if self._callback is None:
+        if self._sensor_callback_fn is None:
             return
 
         sensor = self._sensors.get(sensor_id)
@@ -107,7 +110,21 @@ class ComfoConnect(Bridge):
             val = sensor.value_fn(sensor_value)
         else:
             val = round(sensor_value, 2)
-        self._callback(sensor, val)
+        self._sensor_callback_fn(sensor, val)
+
+    def _alarm_callback(self, node_id, alarm):
+        """Callback function for alarm updates."""
+        if self._alarm_callback_fn is None:
+            return
+
+        if alarm.swProgramVersion <= 3222278144:
+            # Firmware 1.4.0 and below
+            error_messages = ERRORS_140
+        else:
+            error_messages = ERRORS
+
+        errors = {bit: error_messages[bit] for bit in bytearray_to_bits(alarm.errors)}
+        self._alarm_callback_fn(node_id, errors)
 
     async def get_mode(self):
         """Get the current mode."""
@@ -370,10 +387,6 @@ class ComfoConnect(Bridge):
             await self.cmd_rmi_request(bytes([0x03, UNIT_TEMPHUMCONTROL, SUBUNIT_01, 0x07, 0x00]))
         else:
             raise ValueError("Invalid mode: %s" % mode)
-
-    def get_errors(self):
-        """Get the current errors."""
-        return {nodeId: [ERRORS.get(error) for error in errors] for nodeId, errors in super().get_errors().items()}
 
     async def clear_errors(self):
         """Clear the errors."""
