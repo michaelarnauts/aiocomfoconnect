@@ -48,3 +48,9 @@ class ComfoConnectNotExist(ComfoConnectError):
 
 class ComfoConnectRmiError(ComfoConnectError):
     pass
+
+
+class AioComfoConnectNotConnected(Exception):
+    """An error occured because the bridge is not connected."""
+
+    pass

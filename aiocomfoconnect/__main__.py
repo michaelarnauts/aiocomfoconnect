@@ -9,7 +9,10 @@ from typing import Literal
 from aiocomfoconnect import DEFAULT_NAME, DEFAULT_PIN, DEFAULT_UUID
 from aiocomfoconnect.comfoconnect import ComfoConnect
 from aiocomfoconnect.discovery import discover_bridges
-from aiocomfoconnect.exceptions import ComfoConnectNotAllowed
+from aiocomfoconnect.exceptions import (
+    AioComfoConnectNotConnected,
+    ComfoConnectNotAllowed,
+)
 from aiocomfoconnect.sensors import SENSORS
 
 _LOGGER = logging.getLogger(__name__)
@@ -51,12 +54,10 @@ async def run_register(host: str, uuid: str, name: str, pin: int):
 
     # Connect to the bridge
     comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid)
-    await comfoconnect.connect(uuid)
 
     try:
         # Login with the bridge
-        await comfoconnect.cmd_start_session()
-
+        await comfoconnect.connect(uuid)
         print(f"UUID {uuid} is already registered.")
 
     except ComfoConnectNotAllowed:
@@ -64,7 +65,7 @@ async def run_register(host: str, uuid: str, name: str, pin: int):
         await comfoconnect.cmd_register_app(uuid, name, pin)
 
         # Connect to the bridge
-        await comfoconnect.cmd_start_session()
+        await comfoconnect.cmd_start_session(True)
 
     # ListRegisteredApps
     print("Registered applications:")
@@ -85,7 +86,6 @@ async def run_set_speed(host: str, uuid: str, speed: Literal["away", "low", "med
     # Connect to the bridge
     comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid)
     await comfoconnect.connect(uuid)
-    await comfoconnect.cmd_start_session()
 
     await comfoconnect.set_speed(speed)
 
@@ -94,10 +94,8 @@ async def run_set_speed(host: str, uuid: str, speed: Literal["away", "low", "med
 
 async def run_show_sensors(host: str, uuid: str):
     """Connect to a bridge."""
-    loop = asyncio.get_running_loop()
-
     # Discover bridge so we know the UUID
-    bridges = await discover_bridges(host, loop=loop)
+    bridges = await discover_bridges(host)
     if not bridges:
         raise Exception("No bridge found")
 
@@ -114,14 +112,27 @@ async def run_show_sensors(host: str, uuid: str):
     # Connect to the bridge
     comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid, sensor_callback=sensor_callback, alarm_callback=alarm_callback)
     await comfoconnect.connect(uuid)
-    await comfoconnect.cmd_start_session()
 
     # Register all sensors
     for key in SENSORS:
         await comfoconnect.register_sensor(SENSORS[key])
 
-    # Wait for updates
-    await asyncio.sleep(60)
+    try:
+        while True:
+            # Wait for updates and send a keepalive every 60 seconds
+            await asyncio.sleep(60)
+
+            try:
+                print(f"Sending keepalive...")
+                await comfoconnect.cmd_keepalive()
+            except AioComfoConnectNotConnected as ex:
+                # Reconnect when connection has been dropped
+                await comfoconnect.connect(uuid)
+
+    except KeyboardInterrupt:
+        pass
+
+    print("Disconnecting...")
     await comfoconnect.disconnect()
 
 

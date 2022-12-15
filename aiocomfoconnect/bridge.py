@@ -45,7 +45,7 @@ class Bridge:
 
     PORT = 56747
 
-    def __init__(self, host: str, uuid: str):
+    def __init__(self, host: str, uuid: str, loop=None):
         self.host: str = host
         self.uuid: str = uuid
         self._local_uuid: str = None
@@ -60,6 +60,8 @@ class Bridge:
         self.__sensor_callback_fn: callable = None
         self.__alarm_callback_fn: callable = None
 
+        self._loop = loop or asyncio.get_running_loop()
+
     def __repr__(self):
         return "<Bridge {0}, UID={1}>".format(self.host, self.uuid)
 
@@ -71,18 +73,16 @@ class Bridge:
         """Set a callback to be called when an alarm is received."""
         self.__alarm_callback_fn = callback
 
-    async def connect(self, uuid: str, loop=None):
+    async def connect(self, uuid: str):
         """Connect to the bridge."""
         _LOGGER.debug("Connecting to bridge %s", self.host)
         self._reader, self._writer = await asyncio.open_connection(self.host, self.PORT)
-        self._reference = 1  # random.randint(1000, 20000)
+        self._reference = 1
         self._local_uuid = uuid
         self._event_bus = EventBus()
 
         # We are connected, start the background task
-        if loop is None:
-            loop = asyncio.get_event_loop()
-        self._read_task = loop.create_task(self._read_messages())
+        self._read_task = self._loop.create_task(self._read_messages())
 
     async def disconnect(self):
         """Disconnect from the bridge."""
@@ -97,8 +97,16 @@ class Bridge:
         # Wait for background task to finish
         await self._read_task
 
+    def is_connected(self) -> bool:
+        """Returns True if the bridge is connected."""
+        return self._writer is not None and not self._writer.is_closing()
+
     def _send(self, request, request_type, params: dict = None, reply: bool = True):
         """Sends a command and wait for a response if the request is known to return a result."""
+        # Check if we are actually connected
+        if not self.is_connected():
+            raise AioComfoConnectNotConnected()
+
         # Construct the message
         cmd = zehnder_pb2.GatewayOperation()
         cmd.type = request_type
@@ -204,7 +212,7 @@ class Bridge:
                 return  # Stop the background task
 
             except IncompleteReadError:
-                _LOGGER.info("The other end has closed the connection.")
+                _LOGGER.info("The connection was closed.")
                 return  # Stop the background task
 
             except ComfoConnectError as exc:

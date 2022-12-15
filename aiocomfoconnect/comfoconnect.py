@@ -18,9 +18,9 @@ class ComfoConnect(Bridge):
 
     INITIAL_SENSOR_DELAY = 2  # 2 seconds cutoff seems fine
 
-    def __init__(self, host: str, uuid: str, sensor_callback=None, alarm_callback=None):
+    def __init__(self, host: str, uuid: str, loop=None, sensor_callback=None, alarm_callback=None):
         """Initialize the ComfoConnect class."""
-        super().__init__(host, uuid)
+        super().__init__(host, uuid, loop)
 
         self.set_sensor_callback(self._sensor_callback)  # Set the callback to our _sensor_callback method, so we can proces the callbacks.
         self.set_alarm_callback(self._alarm_callback)  # Set the callback to our _alarm_callback method, so we can proces the callbacks.
@@ -41,15 +41,22 @@ class ComfoConnect(Bridge):
             if self._sensors_values[sensor_id] is not None:
                 self._sensor_callback(sensor_id, self._sensors_values[sensor_id])
 
-    async def connect(self, uuid: str, loop=None):
+    async def connect(self, uuid: str, start_session=True):
         """Connect to the bridge."""
-        loop = loop or asyncio.get_running_loop()
+        await super().connect(uuid)
+
+        self._sensors_values = {}
 
         if self.INITIAL_SENSOR_DELAY:
             _LOGGER.debug("Holding sensors for %s second(s)", self.INITIAL_SENSOR_DELAY)
-            self._sensor_hold = loop.call_later(self.INITIAL_SENSOR_DELAY, self._unhold_sensors)
+            self._sensor_hold = self._loop.call_later(self.INITIAL_SENSOR_DELAY, self._unhold_sensors)
 
-        await super().connect(uuid, loop)
+        if start_session:
+            await self.cmd_start_session(True)
+
+            # Register the sensors again (in case we lost the connection)
+            for sensor in self._sensors.values():
+                await self.cmd_rpdo_request(sensor.id, sensor.type)
 
     async def register_sensor(self, sensor: Sensor):
         """Register a sensor on the bridge."""
