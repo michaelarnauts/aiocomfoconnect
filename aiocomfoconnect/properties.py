@@ -19,7 +19,7 @@ class Property:
     unit: int
     subunit: int
     property_id: int
-    type: int
+    property_type: int
 
 
 PROPERTY_SERIAL_NUMBER = Property(UNIT_NODE, 0x01, 0x04, TYPE_CN_STRING)

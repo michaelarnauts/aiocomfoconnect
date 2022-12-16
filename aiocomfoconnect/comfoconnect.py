@@ -31,6 +31,7 @@ from aiocomfoconnect.const import (
     VentilationSpeed,
     VentilationTemperatureProfile,
 )
+from aiocomfoconnect.properties import Property
 from aiocomfoconnect.sensors import Sensor
 from aiocomfoconnect.util import bytearray_to_bits, bytestring
 
@@ -93,7 +94,11 @@ class ComfoConnect(Bridge):
         del self._sensors[sensor.id]
         del self._sensors_values[sensor.id]
 
-    async def get_property(self, unit: int, subunit: int, property_id: int, property_type: int = None, node_id=1) -> any:
+    async def get_property(self, prop: Property, node_id=1) -> any:
+        """Get a property and convert to the right type."""
+        return await self.get_single_property(prop.unit, prop.subunit, prop.property_id, prop.property_type, node_id=node_id)
+
+    async def get_single_property(self, unit: int, subunit: int, property_id: int, property_type: int = None, node_id=1) -> any:
         """Get a property and convert to the right type."""
         result = await self.cmd_rmi_request(bytes([0x01, unit, subunit, 0x10, property_id]), node_id=node_id)
 
@@ -108,7 +113,7 @@ class ComfoConnect(Bridge):
 
         return result.message
 
-    async def get_properties(self, unit: int, subunit: int, property_ids: List[int], node_id=1) -> any:
+    async def get_multiple_properties(self, unit: int, subunit: int, property_ids: List[int], node_id=1) -> any:
         """Get multiple properties."""
         result = await self.cmd_rmi_request(bytestring([0x02, unit, subunit, 0x01, 0x10 | len(property_ids), bytes(property_ids)]), node_id=node_id)
 
