@@ -1,4 +1,6 @@
-""" ComfoConnect Bridge discovery. """
+""" Bridge discovery """
+from __future__ import annotations
+
 import asyncio
 import logging
 from typing import Any, List, Text, Union
@@ -42,7 +44,7 @@ class BridgeDiscoveryProtocol(asyncio.DatagramProtocol):
         _LOGGER.debug("Data received from %s: %s", addr, data)
 
         # Decode the response
-        parser = zehnder_pb2.DiscoveryOperation()
+        parser = zehnder_pb2.DiscoveryOperation()  # pylint: disable=no-member
         parser.ParseFromString(data)
 
         self._bridges.append(Bridge(host=parser.searchGatewayResponse.ipaddress, uuid=parser.searchGatewayResponse.uuid.hex()))
@@ -59,6 +61,7 @@ class BridgeDiscoveryProtocol(asyncio.DatagramProtocol):
         self._future.set_result(self._bridges)
 
     def get_bridges(self):
+        """Return the discovered bridges."""
         return self._future
 
 
@@ -71,7 +74,7 @@ async def discover_bridges(host: str = None, timeout: int = 1, loop=None) -> Lis
     transport, protocol = await loop.create_datagram_endpoint(
         lambda: BridgeDiscoveryProtocol(host, timeout),
         local_addr=("0.0.0.0", 0),
-        allow_broadcast=False if host else True,
+        allow_broadcast=not host,
     )
 
     try:

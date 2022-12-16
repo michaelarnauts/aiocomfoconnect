@@ -1,4 +1,4 @@
-""" ComfoConnect consts. """
+""" Constants """
 
 # PDO Types
 TYPE_CN_BOOL = 0x00
@@ -11,6 +11,7 @@ TYPE_CN_INT64 = 0x08
 TYPE_CN_STRING = 0x09
 TYPE_CN_TIME = 0x10
 TYPE_CN_VERSION = 0x11
+
 
 # ComfoConnect Units
 UNIT_NODE = 0x01
@@ -166,29 +167,39 @@ ERRORS_140 = {
 
 
 class VentilationMode:
+    """Enum for ventilation modes."""
+
     MANUAL = "manual"
     AUTO = "auto"
 
 
 class VentilationSetting:
+    """Enum for ventilation settings."""
+
     AUTO = "auto"
     ON = "on"
     OFF = "off"
 
 
 class VentilationBalance:
+    """Enum for ventilation balance."""
+
     BALANCE = "balance"
     SUPPLY_ONLY = "supply_only"
     EXHAUST_ONLY = "exhaust_only"
 
 
 class VentilationTemperatureProfile:
+    """Enum for ventilation temperature profiles."""
+
     WARM = "warm"
     NORMAL = "normal"
     COOL = "cool"
 
 
 class VentilationSpeed:
+    """Enum for ventilation speeds."""
+
     AWAY = "away"
     LOW = "low"
     MEDIUM = "medium"

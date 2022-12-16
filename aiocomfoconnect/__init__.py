@@ -1,3 +1,5 @@
+""" aiocomfoconnect library """
+
 from .bridge import Bridge  # noqa
 from .comfoconnect import ComfoConnect  # noqa
 from .discovery import discover_bridges  # noqa

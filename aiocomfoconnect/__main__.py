@@ -1,9 +1,10 @@
-""" Provide an example CLI for Zehnder ComfoConnect LAN C. """
+""" aiocomfoconnect CLI application """
 from __future__ import annotations
 
-import argparse as argparse
+import argparse
 import asyncio
 import logging
+import sys
 from typing import Literal
 
 from aiocomfoconnect import DEFAULT_NAME, DEFAULT_PIN, DEFAULT_UUID
@@ -67,7 +68,7 @@ async def run_register(host: str, uuid: str, name: str, pin: int):
         except ComfoConnectNotAllowed:
             await comfoconnect.disconnect()
             print("Registration failed. Please check the PIN.")
-            exit(1)
+            sys.exit(1)
 
         print(f"UUID {uuid} is now registered.")
 
@@ -79,7 +80,7 @@ async def run_register(host: str, uuid: str, name: str, pin: int):
     print("Registered applications:")
     reply = await comfoconnect.cmd_list_registered_apps()
     for app in reply.apps:
-        print("* %s: %s" % (app.uuid.hex(), app.devicename))
+        print(f"* {app.uuid.hex()}: {app.devicename}")
 
     await comfoconnect.disconnect()
 
@@ -97,7 +98,7 @@ async def run_set_speed(host: str, uuid: str, speed: Literal["away", "low", "med
         await comfoconnect.connect(uuid)
     except ComfoConnectNotAllowed:
         print("Could not connect to bridge. Please register first.")
-        exit(1)
+        sys.exit(1)
 
     await comfoconnect.set_speed(speed)
 
@@ -119,7 +120,7 @@ async def run_show_sensors(host: str, uuid: str):
 
     def sensor_callback(sensor, value):
         """Print sensor updates."""
-        print("{sensor:>40}: {value} {unit}".format(sensor=sensor.name, value=value, unit=sensor.unit or ""))
+        print(f"{sensor.name:>40}: {value} {sensor.unit or ''}")
 
     # Connect to the bridge
     comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid, sensor_callback=sensor_callback, alarm_callback=alarm_callback)
@@ -127,11 +128,11 @@ async def run_show_sensors(host: str, uuid: str):
         await comfoconnect.connect(uuid)
     except ComfoConnectNotAllowed:
         print("Could not connect to bridge. Please register first.")
-        exit(1)
+        sys.exit(1)
 
     # Register all sensors
-    for key in SENSORS:
-        await comfoconnect.register_sensor(SENSORS[key])
+    for sensor in SENSORS.values():
+        await comfoconnect.register_sensor(sensor)
 
     try:
         while True:
@@ -139,9 +140,9 @@ async def run_show_sensors(host: str, uuid: str):
             await asyncio.sleep(60)
 
             try:
-                print(f"Sending keepalive...")
+                print("Sending keepalive...")
                 await comfoconnect.cmd_keepalive()
-            except AioComfoConnectNotConnected as ex:
+            except AioComfoConnectNotConnected:
                 # Reconnect when connection has been dropped
                 await comfoconnect.connect(uuid)
 
@@ -175,14 +176,14 @@ if __name__ == "__main__":
     p_sensors.add_argument("--host", help="Host address of the bridge")
     p_sensors.add_argument("--uuid", help="UUID of this app", default=DEFAULT_UUID)
 
-    args = parser.parse_args()
+    arguments = parser.parse_args()
 
-    if args.debug:
+    if arguments.debug:
         logging.basicConfig(level=logging.DEBUG)
     else:
         logging.basicConfig(level=logging.WARNING)
 
     try:
-        asyncio.run(main(args), debug=True)
+        asyncio.run(main(arguments), debug=True)
     except KeyboardInterrupt:
         pass

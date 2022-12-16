@@ -1,4 +1,5 @@
-""" ComfoConnect Property definitions. """
+""" Property definitions """
+from __future__ import annotations
 
 from dataclasses import dataclass
 
@@ -13,9 +14,11 @@ from .const import (
 
 @dataclass
 class Property:
+    """Dataclass for a Property"""
+
     unit: int
     subunit: int
-    id: int
+    property_id: int
     type: int
 
 

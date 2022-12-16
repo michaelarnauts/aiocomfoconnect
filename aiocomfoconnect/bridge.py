@@ -1,4 +1,4 @@
-""" ComfoConnect LAN C API. """
+""" ComfoConnect Bridge API """
 from __future__ import annotations
 
 import asyncio
@@ -9,7 +9,18 @@ from asyncio import IncompleteReadError, StreamReader, StreamWriter
 from google.protobuf.message import DecodeError
 from google.protobuf.message import Message as ProtobufMessage
 
-from .exceptions import *
+from .exceptions import (
+    AioComfoConnectNotConnected,
+    ComfoConnectBadRequest,
+    ComfoConnectError,
+    ComfoConnectInternalError,
+    ComfoConnectNoResources,
+    ComfoConnectNotAllowed,
+    ComfoConnectNotExist,
+    ComfoConnectNotReachable,
+    ComfoConnectOtherSession,
+    ComfoConnectRmiError,
+)
 from .protobuf import zehnder_pb2
 
 _LOGGER = logging.getLogger(__name__)
@@ -22,6 +33,7 @@ class EventBus:
         self.listeners = {}
 
     def add_listener(self, event_name, future):
+        """Add a listener to the event bus."""
         _LOGGER.debug("Adding listener for event %s", event_name)
         if not self.listeners.get(event_name, None):
             self.listeners[event_name] = {future}
@@ -29,6 +41,7 @@ class EventBus:
             self.listeners[event_name].add(future)
 
     def emit(self, event_name, event):
+        """Emit an event to the event bus."""
         _LOGGER.debug("Emitting for event %s", event_name)
         futures = self.listeners.get(event_name, [])
         for future in futures:
@@ -62,7 +75,7 @@ class Bridge:
         self._loop = loop or asyncio.get_running_loop()
 
     def __repr__(self):
-        return "<Bridge {0}, UID={1}>".format(self.host, self.uuid)
+        return f"<Bridge {self.host}, UID={self.uuid}>"
 
     def set_sensor_callback(self, callback: callable):
         """Set a callback to be called when a message is received."""
@@ -103,14 +116,14 @@ class Bridge:
         """Returns True if the bridge is connected."""
         return self._writer is not None and not self._writer.is_closing()
 
-    def _send(self, request, request_type, params: dict = None, reply: bool = True):
+    def _send(self, request, request_type, params: dict = None, reply: bool = True) -> Message:
         """Sends a command and wait for a response if the request is known to return a result."""
         # Check if we are actually connected
         if not self.is_connected():
             raise AioComfoConnectNotConnected()
 
         # Construct the message
-        cmd = zehnder_pb2.GatewayOperation()
+        cmd = zehnder_pb2.GatewayOperation()  # pylint: disable=no-member
         cmd.type = request_type
         cmd.reference = self._reference
 
@@ -138,7 +151,7 @@ class Bridge:
 
         return fut
 
-    async def _read(self):
+    async def _read(self) -> Message:
         # Read packet size
         msg_len_buf = await self._reader.readexactly(4)
 
@@ -152,6 +165,7 @@ class Bridge:
         _LOGGER.debug("RX %s", message)
 
         # Check status code
+        # pylint: disable=no-member
         if message.cmd.result == zehnder_pb2.GatewayOperation.OK:
             pass
         elif message.cmd.result == zehnder_pb2.GatewayOperation.BAD_REQUEST:
@@ -179,6 +193,7 @@ class Bridge:
             try:
                 message = await self._read()
 
+                # pylint: disable=no-member
                 if message.cmd.type == zehnder_pb2.GatewayOperation.CnRpdoNotificationType:
                     if self.__sensor_callback_fn:
                         self.__sensor_callback_fn(message.msg.pdid, int.from_bytes(message.msg.data, byteorder="little", signed=True))
@@ -186,12 +201,10 @@ class Bridge:
                         _LOGGER.info("Unhandled CnRpdoNotificationType since no callback is registered.")
 
                 elif message.cmd.type == zehnder_pb2.GatewayOperation.GatewayNotificationType:
-                    _LOGGER.info("Unhandled GatewayNotificationType")
-                    # TODO: We should probably handle these somehow
+                    _LOGGER.debug("Unhandled GatewayNotificationType")
 
                 elif message.cmd.type == zehnder_pb2.GatewayOperation.CnNodeNotificationType:
-                    _LOGGER.info("Unhandled CnNodeNotificationType")
-                    # TODO: We should probably handle these somehow
+                    _LOGGER.debug("Unhandled CnNodeNotificationType")
 
                 elif message.cmd.type == zehnder_pb2.GatewayOperation.CnAlarmNotificationType:
                     if self.__alarm_callback_fn:
@@ -208,7 +221,7 @@ class Bridge:
                     self._event_bus.emit(message.cmd.reference, message.msg)
 
                 else:
-                    _LOGGER.error("Unhandled message type %s: %s", message.cmd.type, message)
+                    _LOGGER.warning("Unhandled message type %s: %s", message.cmd.type, message)
 
             except asyncio.exceptions.CancelledError:
                 return  # Stop the background task
@@ -227,6 +240,7 @@ class Bridge:
     def cmd_start_session(self, take_over: bool = False):
         """Starts the session on the device by logging in and optionally disconnecting an already existing session."""
         _LOGGER.debug("StartSessionRequest")
+        # pylint: disable=no-member
         result = self._send(
             zehnder_pb2.StartSessionRequest,
             zehnder_pb2.GatewayOperation.StartSessionRequestType,
@@ -237,6 +251,7 @@ class Bridge:
     def cmd_close_session(self):
         """Stops the current session."""
         _LOGGER.debug("CloseSessionRequest")
+        # pylint: disable=no-member
         result = self._send(
             zehnder_pb2.CloseSessionRequest,
             zehnder_pb2.GatewayOperation.CloseSessionRequestType,
@@ -247,6 +262,7 @@ class Bridge:
     def cmd_list_registered_apps(self):
         """Returns a list of all the registered clients."""
         _LOGGER.debug("ListRegisteredAppsRequest")
+        # pylint: disable=no-member
         return self._send(
             zehnder_pb2.ListRegisteredAppsRequest,
             zehnder_pb2.GatewayOperation.ListRegisteredAppsRequestType,
@@ -255,6 +271,7 @@ class Bridge:
     def cmd_register_app(self, uuid: str, device_name: str, pin: int):
         """Register a new app by specifying our own uuid, device_name and pin code."""
         _LOGGER.debug("RegisterAppRequest")
+        # pylint: disable=no-member
         return self._send(
             zehnder_pb2.RegisterAppRequest,
             zehnder_pb2.GatewayOperation.RegisterAppRequestType,
@@ -271,6 +288,7 @@ class Bridge:
         if uuid == self._local_uuid:
             raise Exception("You should not deregister yourself.")
 
+        # pylint: disable=no-member
         return self._send(
             zehnder_pb2.DeregisterAppRequest,
             zehnder_pb2.GatewayOperation.DeregisterAppRequestType,
@@ -280,6 +298,7 @@ class Bridge:
     def cmd_version_request(self):
         """Returns version information."""
         _LOGGER.debug("VersionRequest")
+        # pylint: disable=no-member
         return self._send(
             zehnder_pb2.VersionRequest,
             zehnder_pb2.GatewayOperation.VersionRequestType,
@@ -288,6 +307,7 @@ class Bridge:
     def cmd_time_request(self):
         """Returns the current time on the device."""
         _LOGGER.debug("CnTimeRequest")
+        # pylint: disable=no-member
         return self._send(
             zehnder_pb2.CnTimeRequest,
             zehnder_pb2.GatewayOperation.CnTimeRequestType,
@@ -296,24 +316,27 @@ class Bridge:
     def cmd_rmi_request(self, message, node_id: int = 1):
         """Sends a RMI request."""
         _LOGGER.debug("CnRmiRequest")
+        # pylint: disable=no-member
         return self._send(
             zehnder_pb2.CnRmiRequest,
             zehnder_pb2.GatewayOperation.CnRmiRequestType,
             {"nodeId": node_id or 1, "message": message},
         )
 
-    def cmd_rpdo_request(self, pdid: int, type: int = 1, zone: int = 1, timeout=None):
+    def cmd_rpdo_request(self, pdid: int, pdo_type: int = 1, zone: int = 1, timeout=None):
         """Register a RPDO request."""
         _LOGGER.debug("CnRpdoRequest")
+        # pylint: disable=no-member
         return self._send(
             zehnder_pb2.CnRpdoRequest,
             zehnder_pb2.GatewayOperation.CnRpdoRequestType,
-            {"pdid": pdid, "type": type, "zone": zone or 1, "timeout": timeout},
+            {"pdid": pdid, "type": pdo_type, "zone": zone or 1, "timeout": timeout},
         )
 
     def cmd_keepalive(self):
         """Sends a keepalive."""
         _LOGGER.debug("KeepAlive")
+        # pylint: disable=no-member
         return self._send(
             zehnder_pb2.KeepAlive,
             zehnder_pb2.GatewayOperation.KeepAliveType,
@@ -321,7 +344,10 @@ class Bridge:
         )
 
 
-class Message(object):
+class Message:
+    """A message that is sent to the bridge."""
+
+    # pylint: disable=no-member
     REQUEST_MAPPING = {
         zehnder_pb2.GatewayOperation.SetAddressRequestType: zehnder_pb2.SetAddressRequest,
         zehnder_pb2.GatewayOperation.RegisterAppRequestType: zehnder_pb2.RegisterAppRequest,
@@ -396,16 +422,10 @@ class Message(object):
         self.dst: str = dst
 
     def __str__(self):
-        return "%s -> %s: %s %s\n%s\n%s" % (
-            self.src,
-            self.dst,
-            self.cmd.SerializeToString().hex(),
-            self.msg.SerializeToString().hex(),
-            self.cmd,
-            self.msg,
-        )
+        return f"{self.src} -> {self.dst}: {self.cmd.SerializeToString().hex()} {self.msg.SerializeToString().hex()}\n{self.cmd}\n{self.msg}"
 
-    def encode(self):
+    def encode(self) -> bytes:
+        """Encode the message into a byte array"""
         cmd_buf = self.cmd.SerializeToString()
         msg_buf = self.msg.SerializeToString()
         cmd_len_buf = struct.pack(">H", len(cmd_buf))
@@ -414,7 +434,8 @@ class Message(object):
         return msg_len_buf + bytes.fromhex(self.src) + bytes.fromhex(self.dst) + cmd_len_buf + cmd_buf + msg_buf
 
     @classmethod
-    def decode(cls, packet):
+    def decode(cls, packet) -> Message:
+        """Decode a packet from a byte buffer"""
         src_buf = packet[0:16]
         dst_buf = packet[16:32]
         cmd_len = struct.unpack(">H", packet[32:34])[0]

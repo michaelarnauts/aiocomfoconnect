@@ -1,4 +1,5 @@
-""" ComfoConnect Sensor definitions. """
+""" Sensor definitions. """
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Callable, Dict
@@ -84,9 +85,11 @@ UNIT_M3H = "m³/h"
 
 @dataclass
 class Sensor:
+    """Dataclass for a Sensor"""
+
     name: str
     unit: str | None
-    id: int
+    id: int  # pylint: disable=invalid-name
     type: int
     value_fn: Callable[[int], any] = None
 
@@ -128,8 +131,8 @@ SENSORS: Dict[int, Sensor] = {
     SENSOR_DAYS_TO_REPLACE_FILTER: Sensor("Days remaining to replace the filter", None, 192, TYPE_CN_UINT16),
     SENSOR_UNIT_TEMPERATURE: Sensor("Device Temperature Unit", None, 208, TYPE_CN_UINT8, lambda x: "celcius" if x == 0 else "farenheit"),
     SENSOR_RMOT: Sensor("Running Mean Outdoor Temperature (RMOT)", UNIT_CELCIUS, 209, TYPE_CN_INT16, lambda x: x / 10),
-    SENSOR_SEASON_HEATING_ACTIVE: Sensor("Heating Season is active", None, 210, TYPE_CN_BOOL, lambda x: True if x else False),
-    SENSOR_SEASON_COOLING_ACTIVE: Sensor("Cooling Season is active", None, 211, TYPE_CN_BOOL, lambda x: True if x else False),
+    SENSOR_SEASON_HEATING_ACTIVE: Sensor("Heating Season is active", None, 210, TYPE_CN_BOOL, bool),
+    SENSOR_SEASON_COOLING_ACTIVE: Sensor("Cooling Season is active", None, 211, TYPE_CN_BOOL, bool),
     SENSOR_TARGET_TEMPERATURE: Sensor("Target Temperature", UNIT_CELCIUS, 212, TYPE_CN_INT16, lambda x: x / 10),
     SENSOR_AVOIDED_HEATING: Sensor("Avoided Heating Power Usage", UNIT_WATT, 213, TYPE_CN_UINT16),
     SENSOR_AVOIDED_HEATING_TOTAL_YEAR: Sensor("Avoided Heating Power Usage (year)", UNIT_KWH, 214, TYPE_CN_UINT16),
@@ -167,14 +170,14 @@ SENSORS: Dict[int, Sensor] = {
     SENSOR_ANALOG_INPUT_3: Sensor("Analog Input 3", None, 371, TYPE_CN_UINT8),
     SENSOR_ANALOG_INPUT_4: Sensor("Analog Input 4", None, 372, TYPE_CN_UINT8),
     384: Sensor("sensor_384", None, 384, TYPE_CN_INT16, lambda x: x / 10),
-    386: Sensor("sensor_386", None, 386, TYPE_CN_BOOL, lambda x: True if x else False),
+    386: Sensor("sensor_386", None, 386, TYPE_CN_BOOL, bool),
     400: Sensor("sensor_400", None, 400, TYPE_CN_INT16, lambda x: x / 10),
     401: Sensor("sensor_401", None, 401, TYPE_CN_UINT8),
-    402: Sensor("sensor_402", None, 402, TYPE_CN_BOOL, lambda x: True if x else False),
+    402: Sensor("sensor_402", None, 402, TYPE_CN_BOOL, bool),
     416: Sensor("sensor_416", None, 416, TYPE_CN_INT16, lambda x: x / 10),
     417: Sensor("sensor_417", None, 417, TYPE_CN_INT16, lambda x: x / 10),
     418: Sensor("sensor_418", None, 418, TYPE_CN_UINT8),
-    419: Sensor("sensor_419", None, 419, TYPE_CN_BOOL, lambda x: True if x else False),
+    419: Sensor("sensor_419", None, 419, TYPE_CN_BOOL, bool),
     784: Sensor("sensor_784", None, 784, TYPE_CN_UINT8),
     785: Sensor("sensor_785", None, 785, TYPE_CN_BOOL),
     802: Sensor("sensor_802", None, 802, TYPE_CN_INT16, lambda x: x / 10),

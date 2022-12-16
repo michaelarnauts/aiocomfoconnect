@@ -17,6 +17,8 @@ grpcio-tools = "^1.50.0"
 dpkt = "^1.9.8"
 black = "^22.10.0"
 isort = "^5.10.1"
+pylint = "^2.15.9"
+pytest = "^7.2.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -26,4 +28,54 @@ build-backend = "poetry.core.masonry.api"
 profile = "black"
 
 [tool.black]
+target-version = ["py39", "py310"]
 line-length = 180
+
+[tool.pylint.MAIN]
+max-line-length = 180
+
+[tool.pylint."MESSAGES CONTROL"]
+# Reasons disabled:
+# format - handled by black
+# locally-disabled - it spams too much
+# duplicate-code - unavoidable
+# cyclic-import - doesn't test if both import on load
+# abstract-class-little-used - prevents from setting right foundation
+# unused-argument - generic callbacks and setup methods create a lot of warnings
+# too-many-* - are not enforced for the sake of readability
+# too-few-* - same as too-many-*
+# abstract-method - with intro of async there are always methods missing
+# inconsistent-return-statements - doesn't handle raise
+# too-many-ancestors - it's too strict.
+# wrong-import-order - isort guards this
+# consider-using-f-string - str.format sometimes more readable
+# ---
+# Enable once current issues are fixed:
+# consider-using-namedtuple-or-dataclass (Pylint CodeStyle extension)
+# consider-using-assignment-expr (Pylint CodeStyle extension)
+disable = [
+    "format",
+    "abstract-method",
+    "cyclic-import",
+    "duplicate-code",
+    "inconsistent-return-statements",
+    "locally-disabled",
+    "not-context-manager",
+    "too-few-public-methods",
+    "too-many-ancestors",
+    "too-many-arguments",
+    "too-many-branches",
+    "too-many-instance-attributes",
+    "too-many-lines",
+    "too-many-locals",
+    "too-many-public-methods",
+    "too-many-return-statements",
+    "too-many-statements",
+    "too-many-boolean-expressions",
+    "unused-argument",
+    "wrong-import-order",
+]
+enable = [
+    #"useless-suppression",  # temporarily every now and then to clean them up
+    "use-symbolic-message-instead",
+]
