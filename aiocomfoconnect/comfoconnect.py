@@ -45,16 +45,15 @@ class ComfoConnect(Bridge):
         """Connect to the bridge."""
         await super().connect(uuid)
 
-        self._sensors_values = {}
-
-        if self.INITIAL_SENSOR_DELAY:
-            _LOGGER.debug("Holding sensors for %s second(s)", self.INITIAL_SENSOR_DELAY)
-            self._sensor_hold = self._loop.call_later(self.INITIAL_SENSOR_DELAY, self._unhold_sensors)
-
         if start_session:
             await self.cmd_start_session(True)
 
+            if self.INITIAL_SENSOR_DELAY:
+                _LOGGER.debug("Holding sensors for %s second(s)", self.INITIAL_SENSOR_DELAY)
+                self._sensor_hold = self._loop.call_later(self.INITIAL_SENSOR_DELAY, self._unhold_sensors)
+
             # Register the sensors again (in case we lost the connection)
+            self._sensors_values = {}
             for sensor in self._sensors.values():
                 await self.cmd_rpdo_request(sensor.id, sensor.type)
 
