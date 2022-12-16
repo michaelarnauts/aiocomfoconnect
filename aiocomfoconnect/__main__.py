@@ -5,6 +5,7 @@ import argparse
 import asyncio
 import logging
 import sys
+from asyncio import Future
 from typing import Literal
 
 from aiocomfoconnect import DEFAULT_NAME, DEFAULT_PIN, DEFAULT_UUID
@@ -32,6 +33,9 @@ async def main(args):
 
     elif args.action == "show-sensors":
         await run_show_sensors(args.host, args.uuid)
+
+    elif args.action == "show-sensor":
+        await run_show_sensor(args.host, args.uuid, args.sensor)
 
     else:
         raise Exception("Unknown action: " + args.action)
@@ -153,6 +157,42 @@ async def run_show_sensors(host: str, uuid: str):
     await comfoconnect.disconnect()
 
 
+async def run_show_sensor(host: str, uuid: str, sensor: int):
+    """Connect to a bridge."""
+    result = Future()
+
+    # Discover bridge so we know the UUID
+    bridges = await discover_bridges(host)
+    if not bridges:
+        raise Exception("No bridge found")
+
+    def sensor_callback(sensor_, value):
+        """Print sensor update."""
+        result.set_result(value)
+
+    # Connect to the bridge
+    # Increase sensor_delay if you get 0 values. This is a bug in the firmware.
+    comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid, sensor_callback=sensor_callback, sensor_delay=0)
+    try:
+        await comfoconnect.connect(uuid)
+    except ComfoConnectNotAllowed:
+        print("Could not connect to bridge. Please register first.")
+        sys.exit(1)
+
+    if not sensor in SENSORS:
+        print(f"Unknown sensor with ID {sensor}")
+        sys.exit(1)
+
+    # Register sensors
+    await comfoconnect.register_sensor(SENSORS[sensor])
+
+    # Wait for value
+    print(await result)
+
+    # Disconnect
+    await comfoconnect.disconnect()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--debug", "-d", help="Enable debug logging", default=False, action="store_true")
@@ -175,6 +215,11 @@ if __name__ == "__main__":
     p_sensors = subparsers.add_parser("show-sensors", help="show the sensor values")
     p_sensors.add_argument("--host", help="Host address of the bridge")
     p_sensors.add_argument("--uuid", help="UUID of this app", default=DEFAULT_UUID)
+
+    p_sensor = subparsers.add_parser("show-sensor", help="show a single sensor value")
+    p_sensor.add_argument("sensor", help="The ID of the sensor", type=int)
+    p_sensor.add_argument("--host", help="Host address of the bridge")
+    p_sensor.add_argument("--uuid", help="UUID of this app", default=DEFAULT_UUID)
 
     arguments = parser.parse_args()
 

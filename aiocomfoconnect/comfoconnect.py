@@ -41,14 +41,13 @@ _LOGGER = logging.getLogger(__name__)
 class ComfoConnect(Bridge):
     """Abstraction layer over the ComfoConnect LAN C API."""
 
-    INITIAL_SENSOR_DELAY = 2  # 2 seconds cutoff seems fine
-
-    def __init__(self, host: str, uuid: str, loop=None, sensor_callback=None, alarm_callback=None):
+    def __init__(self, host: str, uuid: str, loop=None, sensor_callback=None, alarm_callback=None, sensor_delay=2):
         """Initialize the ComfoConnect class."""
         super().__init__(host, uuid, loop)
 
         self.set_sensor_callback(self._sensor_callback)  # Set the callback to our _sensor_callback method, so we can proces the callbacks.
         self.set_alarm_callback(self._alarm_callback)  # Set the callback to our _alarm_callback method, so we can proces the callbacks.
+        self.sensor_delay = sensor_delay
 
         self._sensor_callback_fn: Callable = sensor_callback
         self._alarm_callback_fn: Callable = alarm_callback
@@ -73,9 +72,9 @@ class ComfoConnect(Bridge):
         if start_session:
             await self.cmd_start_session(True)
 
-            if self.INITIAL_SENSOR_DELAY:
-                _LOGGER.debug("Holding sensors for %s second(s)", self.INITIAL_SENSOR_DELAY)
-                self._sensor_hold = self._loop.call_later(self.INITIAL_SENSOR_DELAY, self._unhold_sensors)
+            if self.sensor_delay:
+                _LOGGER.debug("Holding sensors for %s second(s)", self.sensor_delay)
+                self._sensor_hold = self._loop.call_later(self.sensor_delay, self._unhold_sensors)
 
             # Register the sensors again (in case we lost the connection)
             self._sensors_values = {}
