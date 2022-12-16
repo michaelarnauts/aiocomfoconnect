@@ -5,7 +5,6 @@ import asyncio
 import logging
 import struct
 from asyncio import IncompleteReadError, StreamReader, StreamWriter
-from typing import Dict
 
 from google.protobuf.message import DecodeError
 from google.protobuf.message import Message as ProtobufMessage
@@ -95,7 +94,10 @@ class Bridge:
         await self.cmd_close_session()
 
         # Wait for background task to finish
-        await self._read_task
+        try:
+            await self._read_task
+        except asyncio.CancelledError:
+            pass
 
     def is_connected(self) -> bool:
         """Returns True if the bridge is connected."""
