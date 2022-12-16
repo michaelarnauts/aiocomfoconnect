@@ -9,44 +9,50 @@ class ComfoConnectError(Exception):
 
 
 class ComfoConnectBadRequest(ComfoConnectError):
-    """An error occured because the request was invalid."""
+    """Something was wrong with the request."""
 
     pass
 
 
 class ComfoConnectInternalError(ComfoConnectError):
-    """An error occured because something went wrong inside the bridge."""
+    """The request was ok, but the handling of the request failed."""
 
     pass
 
 
 class ComfoConnectNotReachable(ComfoConnectError):
-    """An error occured because the bridge could not reach the ventilation unit."""
+    """The backend cannot route the request."""
 
     pass
 
 
 class ComfoConnectOtherSession(ComfoConnectError):
-    """An error occured because the bridge is already connected to a different device."""
+    """The gateway already has an active session with another client."""
 
     pass
 
 
 class ComfoConnectNotAllowed(ComfoConnectError):
-    """An error occured because you have not authenticated yet."""
+    """Request is not allowed."""
 
     pass
 
 
 class ComfoConnectNoResources(ComfoConnectError):
+    """Not enough resources, e.g., memory, to complete request"""
+
     pass
 
 
 class ComfoConnectNotExist(ComfoConnectError):
+    """ComfoNet node or property does not exist."""
+
     pass
 
 
 class ComfoConnectRmiError(ComfoConnectError):
+    """The RMI failed, the message contains the error response."""
+
     pass
 
 

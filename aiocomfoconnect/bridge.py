@@ -224,7 +224,7 @@ class Bridge:
             except DecodeError as exc:
                 _LOGGER.error("Failed to decode message: %s", exc)
 
-    def cmd_start_session(self, take_over=False):
+    def cmd_start_session(self, take_over: bool = False):
         """Starts the session on the device by logging in and optionally disconnecting an already existing session."""
         _LOGGER.debug("StartSessionRequest")
         result = self._send(
@@ -252,7 +252,7 @@ class Bridge:
             zehnder_pb2.GatewayOperation.ListRegisteredAppsRequestType,
         )
 
-    def cmd_register_app(self, uuid, device_name, pin):
+    def cmd_register_app(self, uuid: str, device_name: str, pin: int):
         """Register a new app by specifying our own uuid, device_name and pin code."""
         _LOGGER.debug("RegisterAppRequest")
         return self._send(
@@ -261,11 +261,11 @@ class Bridge:
             {
                 "uuid": bytes.fromhex(uuid),
                 "devicename": device_name,
-                "pin": pin,
+                "pin": int(pin),
             },
         )
 
-    def cmd_deregister_app(self, uuid):
+    def cmd_deregister_app(self, uuid: str):
         """Remove the specified app from the registration list."""
         _LOGGER.debug("DeregisterAppRequest")
         if uuid == self._local_uuid:

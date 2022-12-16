@@ -62,12 +62,20 @@ async def run_register(host: str, uuid: str, name: str, pin: int):
 
     except ComfoConnectNotAllowed:
         # We probably are not registered yet...
-        await comfoconnect.cmd_register_app(uuid, name, pin)
+        try:
+            await comfoconnect.cmd_register_app(uuid, name, pin)
+        except ComfoConnectNotAllowed:
+            await comfoconnect.disconnect()
+            print("Registration failed. Please check the PIN.")
+            exit(1)
+
+        print(f"UUID {uuid} is now registered.")
 
         # Connect to the bridge
         await comfoconnect.cmd_start_session(True)
 
     # ListRegisteredApps
+    print()
     print("Registered applications:")
     reply = await comfoconnect.cmd_list_registered_apps()
     for app in reply.apps:
@@ -85,7 +93,11 @@ async def run_set_speed(host: str, uuid: str, speed: Literal["away", "low", "med
 
     # Connect to the bridge
     comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid)
-    await comfoconnect.connect(uuid)
+    try:
+        await comfoconnect.connect(uuid)
+    except ComfoConnectNotAllowed:
+        print("Could not connect to bridge. Please register first.")
+        exit(1)
 
     await comfoconnect.set_speed(speed)
 
@@ -111,7 +123,11 @@ async def run_show_sensors(host: str, uuid: str):
 
     # Connect to the bridge
     comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid, sensor_callback=sensor_callback, alarm_callback=alarm_callback)
-    await comfoconnect.connect(uuid)
+    try:
+        await comfoconnect.connect(uuid)
+    except ComfoConnectNotAllowed:
+        print("Could not connect to bridge. Please register first.")
+        exit(1)
 
     # Register all sensors
     for key in SENSORS:
