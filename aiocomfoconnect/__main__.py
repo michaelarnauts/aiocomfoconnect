@@ -171,8 +171,7 @@ async def run_show_sensor(host: str, uuid: str, sensor: int):
         result.set_result(value)
 
     # Connect to the bridge
-    # Increase sensor_delay if you get 0 values. This is a bug in the firmware.
-    comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid, sensor_callback=sensor_callback, sensor_delay=0)
+    comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid, sensor_callback=sensor_callback)
     try:
         await comfoconnect.connect(uuid)
     except ComfoConnectNotAllowed:
