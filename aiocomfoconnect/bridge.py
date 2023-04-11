@@ -5,12 +5,14 @@ import asyncio
 import logging
 import struct
 from asyncio import IncompleteReadError, StreamReader, StreamWriter
+from typing import Awaitable
 
 from google.protobuf.message import DecodeError
 from google.protobuf.message import Message as ProtobufMessage
 
 from .exceptions import (
     AioComfoConnectNotConnected,
+    AioComfoConnectTimeout,
     ComfoConnectBadRequest,
     ComfoConnectError,
     ComfoConnectInternalError,
@@ -24,6 +26,8 @@ from .exceptions import (
 from .protobuf import zehnder_pb2
 
 _LOGGER = logging.getLogger(__name__)
+
+TIMEOUT = 5
 
 
 class EventBus:
@@ -87,8 +91,14 @@ class Bridge:
 
     async def connect(self, uuid: str):
         """Connect to the bridge."""
+        await self.disconnect()
+
         _LOGGER.debug("Connecting to bridge %s", self.host)
-        self._reader, self._writer = await asyncio.open_connection(self.host, self.PORT)
+        try:
+            self._reader, self._writer = await asyncio.wait_for(asyncio.open_connection(self.host, self.PORT), TIMEOUT)
+        except asyncio.TimeoutError as exc:
+            raise AioComfoConnectTimeout() from exc
+
         self._reference = 1
         self._local_uuid = uuid
         self._event_bus = EventBus()
@@ -96,27 +106,32 @@ class Bridge:
         # We are connected, start the background task
         self._read_task = self._loop.create_task(self._read_messages())
 
+        _LOGGER.debug("Connected to bridge %s", self.host)
+
     async def disconnect(self):
         """Disconnect from the bridge."""
         _LOGGER.debug("Disconnecting from bridge %s", self.host)
 
-        # Cancel the background task
-        self._read_task.cancel()
+        if self._read_task:
+            # Cancel the background task
+            self._read_task.cancel()
 
-        # Disconnect
-        await self.cmd_close_session()
+            # Wait for background task to finish
+            try:
+                await self._read_task
+            except asyncio.CancelledError:
+                pass
 
-        # Wait for background task to finish
-        try:
-            await self._read_task
-        except asyncio.CancelledError:
-            pass
+        if self._writer:
+            self._writer.close()
+
+        _LOGGER.debug("Disconnected from bridge %s", self.host)
 
     def is_connected(self) -> bool:
         """Returns True if the bridge is connected."""
         return self._writer is not None and not self._writer.is_closing()
 
-    def _send(self, request, request_type, params: dict = None, reply: bool = True) -> Message:
+    async def _send(self, request, request_type, params: dict = None, reply: bool = True) -> Message:
         """Sends a command and wait for a response if the request is known to return a result."""
         # Check if we are actually connected
         if not self.is_connected():
@@ -149,7 +164,11 @@ class Bridge:
         # Increase message reference for next message
         self._reference += 1
 
-        return fut
+        try:
+            return await asyncio.wait_for(fut, TIMEOUT)
+        except asyncio.TimeoutError as exc:
+            _LOGGER.warning("Timeout while waiting for response from bridge")
+            raise AioComfoConnectTimeout from exc
 
     async def _read(self) -> Message:
         # Read packet size
@@ -237,29 +256,27 @@ class Bridge:
             except DecodeError as exc:
                 _LOGGER.error("Failed to decode message: %s", exc)
 
-    def cmd_start_session(self, take_over: bool = False):
+    def cmd_start_session(self, take_over: bool = False) -> Awaitable[Message]:
         """Starts the session on the device by logging in and optionally disconnecting an already existing session."""
         _LOGGER.debug("StartSessionRequest")
         # pylint: disable=no-member
-        result = self._send(
+        return self._send(
             zehnder_pb2.StartSessionRequest,
             zehnder_pb2.GatewayOperation.StartSessionRequestType,
             {"takeover": take_over},
         )
-        return result
 
-    def cmd_close_session(self):
+    def cmd_close_session(self) -> Awaitable[Message]:
         """Stops the current session."""
         _LOGGER.debug("CloseSessionRequest")
         # pylint: disable=no-member
-        result = self._send(
+        return self._send(
             zehnder_pb2.CloseSessionRequest,
             zehnder_pb2.GatewayOperation.CloseSessionRequestType,
             reply=False,  # Don't wait for a reply
         )
-        return result
 
-    def cmd_list_registered_apps(self):
+    def cmd_list_registered_apps(self) -> Awaitable[Message]:
         """Returns a list of all the registered clients."""
         _LOGGER.debug("ListRegisteredAppsRequest")
         # pylint: disable=no-member
@@ -268,7 +285,7 @@ class Bridge:
             zehnder_pb2.GatewayOperation.ListRegisteredAppsRequestType,
         )
 
-    def cmd_register_app(self, uuid: str, device_name: str, pin: int):
+    def cmd_register_app(self, uuid: str, device_name: str, pin: int) -> Awaitable[Message]:
         """Register a new app by specifying our own uuid, device_name and pin code."""
         _LOGGER.debug("RegisterAppRequest")
         # pylint: disable=no-member
@@ -282,7 +299,7 @@ class Bridge:
             },
         )
 
-    def cmd_deregister_app(self, uuid: str):
+    def cmd_deregister_app(self, uuid: str) -> Awaitable[Message]:
         """Remove the specified app from the registration list."""
         _LOGGER.debug("DeregisterAppRequest")
         if uuid == self._local_uuid:
@@ -295,7 +312,7 @@ class Bridge:
             {"uuid": bytes.fromhex(uuid)},
         )
 
-    def cmd_version_request(self):
+    def cmd_version_request(self) -> Awaitable[Message]:
         """Returns version information."""
         _LOGGER.debug("VersionRequest")
         # pylint: disable=no-member
@@ -304,7 +321,7 @@ class Bridge:
             zehnder_pb2.GatewayOperation.VersionRequestType,
         )
 
-    def cmd_time_request(self):
+    def cmd_time_request(self) -> Awaitable[Message]:
         """Returns the current time on the device."""
         _LOGGER.debug("CnTimeRequest")
         # pylint: disable=no-member
@@ -313,7 +330,7 @@ class Bridge:
             zehnder_pb2.GatewayOperation.CnTimeRequestType,
         )
 
-    def cmd_rmi_request(self, message, node_id: int = 1):
+    def cmd_rmi_request(self, message, node_id: int = 1) -> Awaitable[Message]:
         """Sends a RMI request."""
         _LOGGER.debug("CnRmiRequest")
         # pylint: disable=no-member
@@ -323,7 +340,7 @@ class Bridge:
             {"nodeId": node_id or 1, "message": message},
         )
 
-    def cmd_rpdo_request(self, pdid: int, pdo_type: int = 1, zone: int = 1, timeout=None):
+    def cmd_rpdo_request(self, pdid: int, pdo_type: int = 1, zone: int = 1, timeout=None) -> Awaitable[Message]:
         """Register a RPDO request."""
         _LOGGER.debug("CnRpdoRequest")
         # pylint: disable=no-member
@@ -333,7 +350,7 @@ class Bridge:
             {"pdid": pdid, "type": pdo_type, "zone": zone or 1, "timeout": timeout},
         )
 
-    def cmd_keepalive(self):
+    def cmd_keepalive(self) -> Awaitable[Message]:
         """Sends a keepalive."""
         _LOGGER.debug("KeepAlive")
         # pylint: disable=no-member
