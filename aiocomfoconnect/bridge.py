@@ -96,8 +96,8 @@ class Bridge:
         _LOGGER.debug("Connecting to bridge %s", self.host)
         try:
             self._reader, self._writer = await asyncio.wait_for(asyncio.open_connection(self.host, self.PORT), TIMEOUT)
-        except asyncio.TimeoutError:
-            raise AioComfoConnectTimeout()
+        except asyncio.TimeoutError as exc:
+            raise AioComfoConnectTimeout() from exc
 
         self._reference = 1
         self._local_uuid = uuid
