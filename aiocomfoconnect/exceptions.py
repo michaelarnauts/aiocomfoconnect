@@ -42,4 +42,8 @@ class ComfoConnectRmiError(ComfoConnectError):
 
 
 class AioComfoConnectNotConnected(Exception):
-    """An error occured because the bridge is not connected."""
+    """An error occurred because the bridge is not connected."""
+
+
+class AioComfoConnectTimeout(Exception):
+    """An error occurred because the bridge didn't reply in time."""
