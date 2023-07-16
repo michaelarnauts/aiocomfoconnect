@@ -91,8 +91,8 @@ indicates the length of the `op` field, the rest of the data contains the `msg`.
 | Field                 | Data                                 | Remark                                                |
 |-----------------------|--------------------------------------|-------------------------------------------------------|
 | length (32 bit)       | `0x0000004f`                         | Length of the whole message excluding this field      |
-| src (12 bytes)        | `0xaf154804169043898d2da77148f886be` |                                                       |
-| dst (12 bytes)        | `0x0000000000251010800170b3d54264b4` |                                                       |
+| src (16 bytes)        | `0xaf154804169043898d2da77148f886be` |                                                       |
+| dst (16 bytes)        | `0x0000000000251010800170b3d54264b4` |                                                       |
 | op_length (16 bit     | `0x0004`                             | Length of the `op` message                            |
 | op (variable length)  | `0x08342002`                         | Message with type `GatewayOperation`                  |
 | msg (variable length) | `...`                                | Message with type that is stated in `op.type`         |
