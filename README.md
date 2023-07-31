@@ -22,6 +22,7 @@ $ python -m aiocomfoconnect register --host 192.168.1.213
 
 $ python -m aiocomfoconnect set-speed away --host 192.168.1.213
 $ python -m aiocomfoconnect set-speed low --host 192.168.1.213
+$ python -m aiocomfoconnect set-mode auto --host 192.168.1.213
 $ python -m aiocomfoconnect set-speed medium --host 192.168.1.213
 $ python -m aiocomfoconnect set-speed high --host 192.168.1.213
 
@@ -140,7 +141,7 @@ if __name__ == "__main__":
 
 ### Decode network traffic
 
-You can use the `scripts/decode_pcap.py` file to decode network traffic between the Mobile App and the ComfoConnect LAN C. 
+You can use the `scripts/decode_pcap.py` file to decode network traffic between the Mobile App and the ComfoConnect LAN C.
 Make sure that the first TCP session in the capture is the connection between the bridge and the app. It's therefore recommended to start the capture before you open the app.
 
 ```shell
