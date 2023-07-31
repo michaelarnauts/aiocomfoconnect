@@ -59,64 +59,66 @@ def can_to_pdo(can, node_id=1):
     return (int(can, 16) - 0x40 - node_id) >> 14
 
 
-def calculate_airflow_constraint(value):
-    """Calculate the airflow constraint based on the bitshift value."""
+def calculate_airflow_constraints(value):
+    """Calculate the airflow constraints based on the bitshift value."""
     bits = uint_to_bits(value)
     if 45 not in bits:
         return None
-    if 2 in bits or 3 in bits:
-        return "Resistance"
-    if 4 in bits:
-        return "PreheaterNegative"
-    if 5 in bits or 7 in bits:
-        return "NoiseGuard"
-    if 6 in bits or 8 in bits:
-        return "ResistanceGuard"
-    if 9 in bits:
-        return "FrostProtection"
-    if 10 in bits:
-        return "Bypass"
-    if 12 in bits:
-        return "AnalogInput1"
-    if 13 in bits:
-        return "AnalogInput2"
-    if 14 in bits:
-        return "AnalogInput3"
-    if 15 in bits:
-        return "AnalogInput4"
-    if 16 in bits:
-        return "Hood"
-    if 18 in bits:
-        return "AnalogPreset"
-    if 19 in bits:
-        return "ComfoCool"
-    if 22 in bits:
-        return "PreheaterPositive"
-    if 23 in bits:
-        return "RFSensorFlowPreset"
-    if 24 in bits:
-        return "RFSensorFlowProportional"
-    if 25 in bits:
-        return "TemperatureComfort"
-    if 26 in bits:
-        return "HumidityComfort"
-    if 27 in bits:
-        return "HumidityProtection"
-    if 47 in bits:
-        return "CO2ZoneX1"
-    if 48 in bits:
-        return "CO2ZoneX2"
-    if 49 in bits:
-        return "CO2ZoneX3"
-    if 50 in bits:
-        return "CO2ZoneX4"
-    if 51 in bits:
-        return "CO2ZoneX5"
-    if 52 in bits:
-        return "CO2ZoneX6"
-    if 53 in bits:
-        return "CO2ZoneX7"
-    if 54 in bits:
-        return "CO2ZoneX8"
 
-    return None
+    constraints = []
+    if 2 in bits or 3 in bits:
+        constraints.append("Resistance")
+    if 4 in bits:
+        constraints.append("PreheaterNegative")
+    if 5 in bits or 7 in bits:
+        constraints.append("NoiseGuard")
+    if 6 in bits or 8 in bits:
+        constraints.append("ResistanceGuard")
+    if 9 in bits:
+        constraints.append("FrostProtection")
+    if 10 in bits:
+        constraints.append("Bypass")
+    if 12 in bits:
+        constraints.append("AnalogInput1")
+    if 13 in bits:
+        constraints.append("AnalogInput2")
+    if 14 in bits:
+        constraints.append("AnalogInput3")
+    if 15 in bits:
+        constraints.append("AnalogInput4")
+    if 16 in bits:
+        constraints.append("Hood")
+    if 18 in bits:
+        constraints.append("AnalogPreset")
+    if 19 in bits:
+        constraints.append("ComfoCool")
+    if 22 in bits:
+        constraints.append("PreheaterPositive")
+    if 23 in bits:
+        constraints.append("RFSensorFlowPreset")
+    if 24 in bits:
+        constraints.append("RFSensorFlowProportional")
+    if 25 in bits:
+        constraints.append("TemperatureComfort")
+    if 26 in bits:
+        constraints.append("HumidityComfort")
+    if 27 in bits:
+        constraints.append("HumidityProtection")
+    if 47 in bits:
+        constraints.append("CO2ZoneX1")
+    if 48 in bits:
+        constraints.append("CO2ZoneX2")
+    if 49 in bits:
+        constraints.append("CO2ZoneX3")
+    if 50 in bits:
+        constraints.append("CO2ZoneX4")
+    if 51 in bits:
+        constraints.append("CO2ZoneX5")
+    if 52 in bits:
+        constraints.append("CO2ZoneX6")
+    if 53 in bits:
+        constraints.append("CO2ZoneX7")
+    if 54 in bits:
+        constraints.append("CO2ZoneX8")
+
+    return constraints

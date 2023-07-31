@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Dict
 
-from .util import calculate_airflow_constraint
+from .util import calculate_airflow_constraints
 from .const import (
     TYPE_CN_BOOL,
     TYPE_CN_INT16,
@@ -151,7 +151,7 @@ SENSORS: Dict[int, Sensor] = {
     SENSOR_FAN_SPEED_MODE_MODULATED: Sensor("Fan Speed (modulated)", None, 226, TYPE_CN_UINT16),
     SENSOR_BYPASS_STATE: Sensor("Bypass State", UNIT_PERCENT, 227, TYPE_CN_UINT8),
     SENSOR_FROSTPROTECTION_UNBALANCE: Sensor("frostprotection_unbalance", None, 228, TYPE_CN_UINT8),
-    SENSOR_AIRFLOW_CONSTRAINTS: Sensor("Airflow constraints", None, 230, TYPE_CN_INT64, lambda x: calculate_airflow_constraint(x)),
+    SENSOR_AIRFLOW_CONSTRAINTS: Sensor("Airflow constraints", None, 230, TYPE_CN_INT64, lambda x: calculate_airflow_constraints(x)),
     SENSOR_TEMPERATURE_EXTRACT: Sensor("Extract Air Temperature", UNIT_CELCIUS, 274, TYPE_CN_INT16, lambda x: x / 10),
     SENSOR_TEMPERATURE_EXHAUST: Sensor("Exhaust Air Temperature", UNIT_CELCIUS, 275, TYPE_CN_INT16, lambda x: x / 10),
     SENSOR_TEMPERATURE_OUTDOOR: Sensor("Outdoor Air Temperature", UNIT_CELCIUS, 276, TYPE_CN_INT16, lambda x: x / 10),
