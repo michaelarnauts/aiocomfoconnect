@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "aiocomfoconnect"
-version = "0.1.5"
+version = "0.1.6"
 description = "aiocomfoconnect is an asyncio Python 3 library for communicating with a Zehnder ComfoAir Q350/450/600 ventilation system"
 authors = ["Michaël Arnauts <michael.arnauts@gmail.com>"]
 readme = "README.md"
