@@ -88,7 +88,7 @@ Numbers are stored in little endian format.
 | 227  | CN_UINT8  | Bypass state                                     | value in % (100% = fully open)                                                                                   |
 | 228  | CN_UINT8  | ?? FrostProtectionUnbalance                      | 0                                                                                                                |
 | 229  | CN_BOOL   |                                                  | 1                                                                                                                |
-| 230  | CN_INT64  | Ventilation Constraints Bitset                   | See calculate_airflow_constraint()                                                                               |
+| 230  | CN_INT64  | Ventilation Constraints Bitset                   | See calculate_airflow_constraints()                                                                              |
 | 256  | CN_UINT8  |                                                  | 1=basic, 2=advanced, 3=installer                                                                                 |
 | 257  | CN_UINT8  |                                                  |                                                                                                                  |
 | 274  | CN_INT16  | Temperature: Extract Air                         | value in °C (171 -> 17.1 °C)                                                                                     |
