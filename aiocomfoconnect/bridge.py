@@ -245,7 +245,8 @@ class Bridge:
             except asyncio.exceptions.CancelledError:
                 return  # Stop the background task
 
-            except IncompleteReadError:
+            except IncompleteReadError as exc:
+                _LOGGER.error(exc)
                 _LOGGER.info("The connection was closed.")
                 return  # Stop the background task
 
