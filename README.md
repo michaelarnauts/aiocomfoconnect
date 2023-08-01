@@ -28,6 +28,7 @@ $ python -m aiocomfoconnect set-speed high --host 192.168.1.213
 
 $ python -m aiocomfoconnect show-sensors --host 192.168.1.213
 $ python -m aiocomfoconnect show-sensor 276 --host 192.168.1.213
+$ python -m aiocomfoconnect show-sensor 276 --host 192.168.1.213 -f
 
 $ python -m aiocomfoconnect get-property --host 192.168.1.213 1 1 8 9  # Unit 0x01, SubUnit 0x01, Property 0x08, Type STRING. See PROTOCOL-RMI.md
 ```

@@ -40,7 +40,7 @@ async def main(args):
         await run_show_sensors(args.host, args.uuid)
 
     elif args.action == "show-sensor":
-        await run_show_sensor(args.host, args.uuid, args.sensor)
+        await run_show_sensor(args.host, args.uuid, args.sensor, args.follow)
 
     elif args.action == "get-property":
         await run_get_property(args.host, args.uuid, args.node_id, args.unit, args.subunit, args.property_id, args.property_type)
@@ -190,7 +190,7 @@ async def run_show_sensors(host: str, uuid: str):
     await comfoconnect.disconnect()
 
 
-async def run_show_sensor(host: str, uuid: str, sensor: int):
+async def run_show_sensor(host: str, uuid: str, sensor: int, follow=False):
     """Connect to a bridge."""
     result = Future()
 
@@ -201,7 +201,9 @@ async def run_show_sensor(host: str, uuid: str, sensor: int):
 
     def sensor_callback(sensor_, value):
         """Print sensor update."""
-        result.set_result(value)
+        print(value)
+        if not result.done():
+            result.set_result(value)
 
     # Connect to the bridge
     comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid, sensor_callback=sensor_callback)
@@ -219,7 +221,16 @@ async def run_show_sensor(host: str, uuid: str, sensor: int):
     await comfoconnect.register_sensor(SENSORS[sensor])
 
     # Wait for value
-    print(await result)
+    await result
+
+    # Follow for updates if requested
+    if follow:
+        try:
+            while True:
+                await asyncio.sleep(1)
+
+        except KeyboardInterrupt:
+            pass
 
     # Disconnect
     await comfoconnect.disconnect()
@@ -277,6 +288,7 @@ if __name__ == "__main__":
     p_sensor.add_argument("sensor", help="The ID of the sensor", type=int)
     p_sensor.add_argument("--host", help="Host address of the bridge")
     p_sensor.add_argument("--uuid", help="UUID of this app", default=DEFAULT_UUID)
+    p_sensor.add_argument("--follow", "-f", help="Follow", default=False, action="store_true")
 
     p_sensor = subparsers.add_parser("get-property", help="show a property value")
     p_sensor.add_argument("unit", help="The Unit of the property", type=int)
