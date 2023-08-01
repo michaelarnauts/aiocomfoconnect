@@ -149,7 +149,7 @@ Make sure that the first TCP session in the capture is the connection between th
 
 ```shell
 $ sudo tcpdump -i any -s 0 -w /tmp/capture.pcap tcp and port 56747
-$ python scripts/decode_pcap.py /tmp/capture.pcap
+$ python3 script/decode_pcap.py /tmp/capture.pcap
 ```
 
 ### Generate zehnder_pb2.py file
