@@ -171,11 +171,16 @@ class Bridge:
             raise AioComfoConnectTimeout from exc
 
     async def _read(self) -> Message:
+        _LOGGER.debug("RX before reading")
+
         # Read packet size
         msg_len_buf = await self._reader.readexactly(4)
+        _LOGGER.debug("RX msg_len_buf = %s", msg_len_buf)
 
         # Read rest of packet
         msg_len = int.from_bytes(msg_len_buf, byteorder="big")
+        _LOGGER.debug("RX msg_len = %d", msg_len)
+
         msg_buf = await self._reader.readexactly(msg_len)
 
         # Decode message
