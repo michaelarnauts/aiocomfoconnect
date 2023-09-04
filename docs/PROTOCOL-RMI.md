@@ -217,6 +217,7 @@ factory mode or tries to perform an update.)
 | 0x01    | 0x0b     | AWAY                                              |
 | 0x02    | 0x01     | Bypass control (auto/on/off)                      |
 | 0x03    | 0x01     | Temperature profile (warm/normal/cool)            |
+| 0x05    | 0x01     | Comfocool control                                 |
 | 0x06    | 0x01     | Supply fan control                                |
 | 0x07    | 0x01     | Exhaust fan control                               |
 | 0x08    | 0x01     | Ventilation mode (auto/manual)                    |
