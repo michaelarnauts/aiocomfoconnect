@@ -129,7 +129,7 @@ def calculate_airflow_constraints(value):
 def encode_pdo_value(value: int, type: PdoType) -> bytes:
     match type:
         case PdoType.TYPE_CN_BOOL:
-            return False.to_bytes() if value == 0 else True.to_bytes()
+            return bool(value).to_bytes()
         case PdoType.TYPE_CN_UINT8 | PdoType.TYPE_CN_UINT16 | PdoType.TYPE_CN_UINT32:
             signed = False
         case PdoType.TYPE_CN_INT8 | PdoType.TYPE_CN_INT16 | PdoType.TYPE_CN_INT64:
