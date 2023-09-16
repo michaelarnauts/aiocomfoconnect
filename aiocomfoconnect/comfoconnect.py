@@ -213,7 +213,7 @@ class ComfoConnect(Bridge):
             raise ValueError(f"Invalid speed: {speed}")
         
     async def get_flow_for_speed(self, speed: Literal["away", "low", "medium", "high"]) -> int:
-        """Get the targeted airflow in m³/h for the given VentilationSpeed."""
+        """Get the targeted airflow in m³/h for the given VentilationSpeed (away / low / medium / high)."""
 
         match speed:
             case VentilationSpeed.AWAY:
@@ -225,9 +225,7 @@ class ComfoConnect(Bridge):
             case VentilationSpeed.HIGH:
                 property_id = 6
 
-        result = await self.cmd_rmi_request(bytes([0x01, UNIT_VENTILATIONCONFIG, SUBUNIT_01, 0x10, property_id]), node_id=1)
-
-        return int.from_bytes(result.message, byteorder="little", signed=True)
+        return await self.get_single_property(UNIT_VENTILATIONCONFIG, SUBUNIT_01, property_id, TYPE_CN_INT16)
 
     async def get_bypass(self):
         """Get the bypass mode (auto / on / off)."""
