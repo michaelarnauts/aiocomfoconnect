@@ -25,6 +25,7 @@ from aiocomfoconnect.const import (
     UNIT_ERROR,
     UNIT_SCHEDULE,
     UNIT_TEMPHUMCONTROL,
+    UNIT_VENTILATIONCONFIG,
     VentilationBalance,
     VentilationMode,
     VentilationSetting,
@@ -210,6 +211,23 @@ class ComfoConnect(Bridge):
             await self.cmd_rmi_request(bytes([0x84, UNIT_SCHEDULE, SUBUNIT_01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x03]))
         else:
             raise ValueError(f"Invalid speed: {speed}")
+        
+    async def get_flow_for_speed(self, speed: Literal["away", "low", "medium", "high"]) -> int:
+        """Get the targeted airflow in m³/h for the given VentilationSpeed."""
+
+        match speed:
+            case VentilationSpeed.AWAY:
+                property_id = 3
+            case VentilationSpeed.LOW:
+                property_id = 4
+            case VentilationSpeed.MEDIUM:
+                property_id = 5
+            case VentilationSpeed.HIGH:
+                property_id = 6
+
+        result = await self.cmd_rmi_request(bytes([0x01, UNIT_VENTILATIONCONFIG, SUBUNIT_01, 0x10, property_id]), node_id=1)
+
+        return int.from_bytes(result.message, byteorder="little", signed=True)
 
     async def get_bypass(self):
         """Get the bypass mode (auto / on / off)."""
