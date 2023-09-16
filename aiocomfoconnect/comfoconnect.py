@@ -14,14 +14,7 @@ from aiocomfoconnect.const import (
     SUBUNIT_06,
     SUBUNIT_07,
     SUBUNIT_08,
-    TYPE_CN_BOOL,
-    TYPE_CN_INT8,
-    TYPE_CN_INT16,
-    TYPE_CN_INT64,
-    TYPE_CN_STRING,
-    TYPE_CN_UINT8,
-    TYPE_CN_UINT16,
-    TYPE_CN_UINT32,
+    PdoType,
     UNIT_ERROR,
     UNIT_SCHEDULE,
     UNIT_TEMPHUMCONTROL,
@@ -34,7 +27,7 @@ from aiocomfoconnect.const import (
 )
 from aiocomfoconnect.properties import Property
 from aiocomfoconnect.sensors import Sensor
-from aiocomfoconnect.util import bytearray_to_bits, bytestring
+from aiocomfoconnect.util import bytearray_to_bits, bytestring, encode_pdo_value
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -102,13 +95,13 @@ class ComfoConnect(Bridge):
         """Get a property and convert to the right type."""
         result = await self.cmd_rmi_request(bytes([0x01, unit, subunit, 0x10, property_id]), node_id=node_id)
 
-        if property_type == TYPE_CN_STRING:
+        if property_type == PdoType.TYPE_CN_STRING:
             return result.message.decode("utf-8").rstrip("\x00")
-        if property_type in [TYPE_CN_INT8, TYPE_CN_INT16, TYPE_CN_INT64]:
+        if property_type in [PdoType.TYPE_CN_INT8, PdoType.TYPE_CN_INT16, PdoType.TYPE_CN_INT64]:
             return int.from_bytes(result.message, byteorder="little", signed=True)
-        if property_type in [TYPE_CN_UINT8, TYPE_CN_UINT16, TYPE_CN_UINT32]:
+        if property_type in [PdoType.TYPE_CN_UINT8, PdoType.TYPE_CN_UINT16, PdoType.TYPE_CN_UINT32]:
             return int.from_bytes(result.message, byteorder="little", signed=False)
-        if property_type in [TYPE_CN_BOOL]:
+        if property_type in [PdoType.TYPE_CN_BOOL]:
             return result.message[0] == 1
 
         return result.message
@@ -122,6 +115,16 @@ class ComfoConnect(Bridge):
     async def set_property(self, unit: int, subunit: int, property_id: int, value: int, node_id=1) -> any:
         """Set a property."""
         result = await self.cmd_rmi_request(bytes([0x03, unit, subunit, property_id, value]), node_id=node_id)
+
+        return result.message
+
+    async def set_property_typed(self, unit: int, subunit: int, property_id: int, value: int, type: PdoType, node_id=1) -> any:
+        """Set a property."""
+
+        value_bytes = encode_pdo_value(value, type)
+        message_bytes = bytes([0x03, unit, subunit, property_id]) + value_bytes
+
+        result = await self.cmd_rmi_request(message_bytes, node_id=node_id)
 
         return result.message
 
@@ -225,7 +228,23 @@ class ComfoConnect(Bridge):
             case VentilationSpeed.HIGH:
                 property_id = 6
 
-        return await self.get_single_property(UNIT_VENTILATIONCONFIG, SUBUNIT_01, property_id, TYPE_CN_INT16)
+        return await self.get_single_property(UNIT_VENTILATIONCONFIG, SUBUNIT_01, property_id, PdoType.TYPE_CN_INT16)
+        
+    async def set_flow_for_speed(self, speed: Literal["away", "low", "medium", "high"], desired_flow: int):
+        """Set the targeted airflow in m³/h for the given VentilationSpeed (away / low / medium / high)."""
+
+        match speed:
+            case VentilationSpeed.AWAY:
+                property_id = 3
+            case VentilationSpeed.LOW:
+                property_id = 4
+            case VentilationSpeed.MEDIUM:
+                property_id = 5
+            case VentilationSpeed.HIGH:
+                property_id = 6
+
+        await self.set_property_typed(UNIT_VENTILATIONCONFIG, SUBUNIT_01, property_id, desired_flow, PdoType.TYPE_CN_INT16)
+
 
     async def get_bypass(self):
         """Get the bypass mode (auto / on / off)."""

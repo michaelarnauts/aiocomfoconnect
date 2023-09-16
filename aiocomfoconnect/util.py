@@ -1,6 +1,9 @@
 """ Helper methods. """
 from __future__ import annotations
 
+from aiocomfoconnect.const import (
+    PdoType
+)
 
 def bytestring(arr):
     """Join an array of bytes into a bytestring. Unlike `bytes()`, this method supports a mixed array with integers and bytes."""
@@ -122,3 +125,26 @@ def calculate_airflow_constraints(value):
         constraints.append("CO2ZoneX8")
 
     return constraints
+
+def encode_pdo_value(value: int, type: PdoType) -> bytes:
+    match type:
+        case PdoType.TYPE_CN_BOOL:
+            return False.to_bytes() if value == 0 else True.to_bytes()
+        case PdoType.TYPE_CN_UINT8 | PdoType.TYPE_CN_UINT16 | PdoType.TYPE_CN_UINT32:
+            signed = False
+        case PdoType.TYPE_CN_INT8 | PdoType.TYPE_CN_INT16 | PdoType.TYPE_CN_INT64:
+            signed = True
+        case _:
+            raise ValueError("Type is not supported at this time", type)
+    
+    match type:
+        case PdoType.TYPE_CN_INT8 | PdoType.TYPE_CN_UINT8:
+            length = 1
+        case PdoType.TYPE_CN_INT16 | PdoType.TYPE_CN_UINT16:
+            length = 2
+        case PdoType.TYPE_CN_UINT32:
+            length = 4
+        case PdoType.TYPE_CN_INT64:
+            length = 8
+    
+    return value.to_bytes(length, "little", signed=signed)
