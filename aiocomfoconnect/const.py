@@ -2,6 +2,8 @@
 
 # PDO Types
 class PdoType:
+    """Defines a PDO type."""
+
     TYPE_CN_BOOL = 0x00
     TYPE_CN_UINT8 = 0x01
     TYPE_CN_UINT16 = 0x02
@@ -12,6 +14,7 @@ class PdoType:
     TYPE_CN_STRING = 0x09
     TYPE_CN_TIME = 0x10
     TYPE_CN_VERSION = 0x11
+
 
 # ComfoConnect Units
 UNIT_NODE = 0x01

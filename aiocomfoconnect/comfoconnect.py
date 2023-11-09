@@ -119,10 +119,9 @@ class ComfoConnect(Bridge):
 
         return result.message
 
-    async def set_property_typed(self, unit: int, subunit: int, property_id: int, value: int, type: PdoType, node_id=1) -> any:
-        """Set a property."""
-
-        value_bytes = encode_pdo_value(value, type)
+    async def set_property_typed(self, unit: int, subunit: int, property_id: int, value: int, pdo_type: PdoType, node_id=1) -> any:
+        """Set a typed property."""
+        value_bytes = encode_pdo_value(value, pdo_type)
         message_bytes = bytes([0x03, unit, subunit, property_id]) + value_bytes
 
         result = await self.cmd_rmi_request(message_bytes, node_id=node_id)
@@ -215,7 +214,7 @@ class ComfoConnect(Bridge):
             await self.cmd_rmi_request(bytes([0x84, UNIT_SCHEDULE, SUBUNIT_01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x03]))
         else:
             raise ValueError(f"Invalid speed: {speed}")
-        
+
     async def get_flow_for_speed(self, speed: Literal["away", "low", "medium", "high"]) -> int:
         """Get the targeted airflow in m³/h for the given VentilationSpeed (away / low / medium / high)."""
 
@@ -230,7 +229,7 @@ class ComfoConnect(Bridge):
                 property_id = 6
 
         return await self.get_single_property(UNIT_VENTILATIONCONFIG, SUBUNIT_01, property_id, PdoType.TYPE_CN_INT16)
-        
+
     async def set_flow_for_speed(self, speed: Literal["away", "low", "medium", "high"], desired_flow: int):
         """Set the targeted airflow in m³/h for the given VentilationSpeed (away / low / medium / high)."""
 
@@ -245,7 +244,6 @@ class ComfoConnect(Bridge):
                 property_id = 6
 
         await self.set_property_typed(UNIT_VENTILATIONCONFIG, SUBUNIT_01, property_id, desired_flow, PdoType.TYPE_CN_INT16)
-
 
     async def get_bypass(self):
         """Get the bypass mode (auto / on / off)."""

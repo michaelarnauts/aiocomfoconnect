@@ -315,7 +315,9 @@ async def run_get_property(host: str, uuid: str, node_id: int, unit: int, subuni
 
     await comfoconnect.disconnect()
 
+
 async def run_get_flow_for_speed(host: str, uuid: str, speed: Literal["away", "low", "medium", "high"]):
+    """Get the configured airflow for the specified speed."""
     # Discover bridge so we know the UUID
     bridges = await discover_bridges(host)
     if not bridges:
@@ -333,7 +335,9 @@ async def run_get_flow_for_speed(host: str, uuid: str, speed: Literal["away", "l
 
     await comfoconnect.disconnect()
 
+
 async def run_set_flow_for_speed(host: str, uuid: str, speed: Literal["away", "low", "medium", "high"], desired_flow: int):
+    """Set the configured airflow for the specified speed."""
     # Discover bridge so we know the UUID
     bridges = await discover_bridges(host)
     if not bridges:
@@ -350,7 +354,7 @@ async def run_set_flow_for_speed(host: str, uuid: str, speed: Literal["away", "l
     await comfoconnect.set_flow_for_speed(speed, desired_flow)
 
     await comfoconnect.disconnect()
-    
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
