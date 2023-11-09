@@ -7,7 +7,7 @@ readme = "README.md"
 homepage = "https://github.com/michaelarnauts/aiocomfoconnect"
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.10"
 aiohttp = "^3.8.0"
 protobuf = "^4.21.9"
 nanopb = "^0.4.6"
@@ -28,7 +28,7 @@ build-backend = "poetry.core.masonry.api"
 profile = "black"
 
 [tool.black]
-target-version = ["py39", "py310"]
+target-version = ["py310"]
 line-length = 180
 
 [tool.pylint.MAIN]
