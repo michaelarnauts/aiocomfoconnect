@@ -4,10 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Dict
 
+from .const import PdoType
 from .util import calculate_airflow_constraints
-from .const import (
-    PdoType
-)
 
 # Sensors
 SENSOR_ANALOG_INPUT_1 = 369
