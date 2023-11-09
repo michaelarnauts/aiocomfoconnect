@@ -4,15 +4,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Dict
 
-from .util import calculate_airflow_constraints
 from .const import (
     TYPE_CN_BOOL,
     TYPE_CN_INT16,
+    TYPE_CN_INT64,
     TYPE_CN_UINT8,
     TYPE_CN_UINT16,
     TYPE_CN_UINT32,
-    TYPE_CN_INT64,
 )
+from .util import calculate_airflow_constraints
 
 # Sensors
 SENSOR_ANALOG_INPUT_1 = 369
