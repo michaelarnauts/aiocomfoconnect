@@ -170,6 +170,7 @@ async def run_set_mode(host: str, uuid: str, mode: Literal["auto", "manual"]):
 
     await comfoconnect.disconnect()
 
+
 async def run_set_comfocool(host: str, uuid: str, mode: Literal["auto", "off"]):
     """Set comfocool mode."""
     # Discover bridge so we know the UUID
@@ -188,6 +189,7 @@ async def run_set_comfocool(host: str, uuid: str, mode: Literal["auto", "off"]):
     await comfoconnect.set_comfocool_mode(mode)
 
     await comfoconnect.disconnect()
+
 
 async def run_show_sensors(host: str, uuid: str):
     """Show all sensors."""

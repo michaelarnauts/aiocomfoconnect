@@ -317,13 +317,13 @@ class ComfoConnect(Bridge):
         mode = result.message[0]
         return mode == 0
 
-    async def set_comfocool_mode(self, mode: Literal["auto", "off"], timeout = -1):
+    async def set_comfocool_mode(self, mode: Literal["auto", "off"], timeout=-1):
         """Set the comfocool mode (auto / off)."""
         if mode == "auto":
-           await self.cmd_rmi_request(bytes([0x85, UNIT_SCHEDULE, SUBUNIT_05, 0x01]))
+            await self.cmd_rmi_request(bytes([0x85, UNIT_SCHEDULE, SUBUNIT_05, 0x01]))
         else:
             await self.cmd_rmi_request(bytestring([0x84, UNIT_SCHEDULE, SUBUNIT_05, 0x01, 0x00, 0x00, 0x00, 0x00, timeout.to_bytes(4, "little", signed=True), 0x00]))
-        
+
     async def get_temperature_profile(self):
         """Get the temperature profile (warm / normal / cool)."""
         result = await self.cmd_rmi_request(bytes([0x83, UNIT_SCHEDULE, SUBUNIT_03, 0x01]))
