@@ -25,6 +25,7 @@ $ python -m aiocomfoconnect set-speed low --host 192.168.1.213
 $ python -m aiocomfoconnect set-mode auto --host 192.168.1.213
 $ python -m aiocomfoconnect set-speed medium --host 192.168.1.213
 $ python -m aiocomfoconnect set-speed high --host 192.168.1.213
+$ python -m aiocomfoconnect set-boost on --host 192.168.1.213 --timeout 1200
 
 $ python -m aiocomfoconnect show-sensors --host 192.168.1.213
 $ python -m aiocomfoconnect show-sensor 276 --host 192.168.1.213
