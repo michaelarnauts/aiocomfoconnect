@@ -42,6 +42,9 @@ async def main(args):
     elif args.action == "set-comfocool":
         await run_set_comfocool(args.host, args.uuid, args.mode)
 
+    elif args.action == "set-boost":
+        await run_set_boost(args.host, args.uuid, args.mode, args.timeout)
+
     elif args.action == "show-sensors":
         await run_show_sensors(args.host, args.uuid)
 
@@ -193,6 +196,26 @@ async def run_set_comfocool(host: str, uuid: str, mode: Literal["auto", "off"]):
         sys.exit(1)
 
     await comfoconnect.set_comfocool_mode(mode)
+
+    await comfoconnect.disconnect()
+
+
+async def run_set_boost(host: str, uuid: str, mode: Literal["on", "off"], timeout: int):
+    """Set boost."""
+    # Discover bridge so we know the UUID
+    bridges = await discover_bridges(host)
+    if not bridges:
+        raise Exception("No bridge found")
+
+    # Connect to the bridge
+    comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid)
+    try:
+        await comfoconnect.connect(uuid)
+    except ComfoConnectNotAllowed:
+        print("Could not connect to bridge. Please register first.")
+        sys.exit(1)
+
+    await comfoconnect.set_boost(mode == "on", timeout)
 
     await comfoconnect.disconnect()
 
@@ -390,6 +413,12 @@ if __name__ == "__main__":
     p_set_mode.add_argument("mode", help="Comfocool mode", choices=["auto", "off"])
     p_set_mode.add_argument("--host", help="Host address of the bridge")
     p_set_mode.add_argument("--uuid", help="UUID of this app", default=DEFAULT_UUID)
+
+    p_set_boost = subparsers.add_parser("set-boost", help="trigger or cancel a boost")
+    p_set_boost.add_argument("mode", help="Boost mode", choices=["on", "off"])
+    p_set_boost.add_argument("--host", help="Host address of the bridge")
+    p_set_boost.add_argument("--uuid", help="UUID of this app", default=DEFAULT_UUID)
+    p_set_boost.add_argument("--timeout", "-t", help="Timeout in seconds", type=int, default=600)
 
     p_sensors = subparsers.add_parser("show-sensors", help="show the sensor values")
     p_sensors.add_argument("--host", help="Host address of the bridge")
