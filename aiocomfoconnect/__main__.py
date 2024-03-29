@@ -258,13 +258,10 @@ async def run_show_sensors(host: str, uuid: str):
                 print("Sending keepalive...")
                 # Use cmd_time_request as a keepalive since cmd_keepalive doesn't send back a reply we can wait for
                 await comfoconnect.cmd_time_request()
-
-            except (AioComfoConnectNotConnected, AioComfoConnectTimeout):
-                # Reconnect when connection has been dropped
-                try:
-                    await comfoconnect.connect(uuid)
-                except AioComfoConnectTimeout:
-                    _LOGGER.warning("Connection timed out. Retrying later...")
+            except AioComfoConnectNotConnected:
+                print("Got AioComfoConnectNotConnected")
+            except AioComfoConnectTimeout:
+                print("Got AioComfoConnectTimeout")
 
     except KeyboardInterrupt:
         pass
@@ -310,7 +307,17 @@ async def run_show_sensor(host: str, uuid: str, sensor: int, follow=False):
     if follow:
         try:
             while True:
-                await asyncio.sleep(1)
+                # Wait for updates and send a keepalive every 30 seconds
+                await asyncio.sleep(30)
+
+                try:
+                    print("Sending keepalive...")
+                    # Use cmd_time_request as a keepalive since cmd_keepalive doesn't send back a reply we can wait for
+                    await comfoconnect.cmd_time_request()
+                except AioComfoConnectNotConnected:
+                    print("Got AioComfoConnectNotConnected")
+                except AioComfoConnectTimeout:
+                    print("Got AioComfoConnectTimeout")
 
         except KeyboardInterrupt:
             pass

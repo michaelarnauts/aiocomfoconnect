@@ -1,7 +1,9 @@
 """ ComfoConnect Bridge API abstraction """
 from __future__ import annotations
 
+import asyncio
 import logging
+from asyncio import Future
 from typing import Callable, Dict, List, Literal
 
 from aiocomfoconnect import Bridge
@@ -15,16 +17,20 @@ from aiocomfoconnect.const import (
     SUBUNIT_06,
     SUBUNIT_07,
     SUBUNIT_08,
-    PdoType,
     UNIT_ERROR,
     UNIT_SCHEDULE,
     UNIT_TEMPHUMCONTROL,
     UNIT_VENTILATIONCONFIG,
+    PdoType,
     VentilationBalance,
     VentilationMode,
     VentilationSetting,
     VentilationSpeed,
     VentilationTemperatureProfile,
+)
+from aiocomfoconnect.exceptions import (
+    AioComfoConnectNotConnected,
+    AioComfoConnectTimeout,
 )
 from aiocomfoconnect.properties import Property
 from aiocomfoconnect.sensors import Sensor
@@ -50,31 +56,68 @@ class ComfoConnect(Bridge):
         self._sensors_values: Dict[int, any] = {}
         self._sensor_hold = None
 
+        self._tasks = set()
+
     def _unhold_sensors(self):
         """Unhold the sensors."""
         _LOGGER.debug("Unholding sensors")
         self._sensor_hold = None
 
-        # Emit the current cached values of the sensors, by now, they will have received a correct update.
+        # Emit the current cached values of the sensors, by now, they should have received a correct update.
         for sensor_id, _ in self._sensors.items():
             if self._sensors_values[sensor_id] is not None:
                 self._sensor_callback(sensor_id, self._sensors_values[sensor_id])
 
-    async def connect(self, uuid: str, start_session=True):
+    async def connect(self, uuid: str):
         """Connect to the bridge."""
-        await super().connect(uuid)
+        connected: Future = Future()
 
-        if start_session:
-            await self.cmd_start_session(True)
+        async def _reconnect_loop():
+            while True:
+                try:
+                    # Connect to the bridge
+                    read_task = await self._connect(uuid)
 
-            if self.sensor_delay:
-                _LOGGER.debug("Holding sensors for %s second(s)", self.sensor_delay)
-                self._sensor_hold = self._loop.call_later(self.sensor_delay, self._unhold_sensors)
+                    # Start session
+                    await self.cmd_start_session(True)
 
-            # Register the sensors again (in case we lost the connection)
-            self._sensors_values = {}
-            for sensor in self._sensors.values():
-                await self.cmd_rpdo_request(sensor.id, sensor.type)
+                    # Wait for a specified amount of seconds to buffer sensor values.
+                    # This is to work around a bug where the bridge sends invalid sensor values when connecting.
+                    if self.sensor_delay:
+                        _LOGGER.debug("Holding sensors for %s second(s)", self.sensor_delay)
+                        self._sensors_values = {}
+                        self._sensor_hold = self._loop.call_later(self.sensor_delay, self._unhold_sensors)
+
+                    # Register the sensors again (in case we lost the connection)
+                    for sensor in self._sensors.values():
+                        await self.cmd_rpdo_request(sensor.id, sensor.type)
+
+                    if not connected.done():
+                        connected.set_result(True)
+
+                    # Wait for the read task to finish or throw an exception
+                    await read_task
+
+                    if read_task.result() is False:
+                        # We are shutting down.
+                        return
+
+                except AioComfoConnectTimeout:
+                    # Reconnect after 5 seconds when we could not connect
+                    await asyncio.sleep(5)
+
+                except AioComfoConnectNotConnected:
+                    # Reconnect when connection has been dropped
+                    pass
+
+        reconnect_task = self._loop.create_task(_reconnect_loop())
+        self._tasks.add(reconnect_task)
+        reconnect_task.add_done_callback(self._tasks.discard)
+
+        await connected
+
+    async def disconnect(self):
+        await self._disconnect()
 
     async def register_sensor(self, sensor: Sensor):
         """Register a sensor on the bridge."""

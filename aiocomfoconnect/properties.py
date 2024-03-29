@@ -3,12 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .const import (
-    PdoType,
-    UNIT_NODE,
-    UNIT_NODECONFIGURATION,
-    UNIT_TEMPHUMCONTROL,
-)
+from .const import UNIT_NODE, UNIT_NODECONFIGURATION, UNIT_TEMPHUMCONTROL, PdoType
 
 
 @dataclass
