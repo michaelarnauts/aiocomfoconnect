@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import struct
-from asyncio import IncompleteReadError, StreamReader, StreamWriter
+from asyncio import StreamReader, StreamWriter
 from typing import Awaitable
 
 from google.protobuf.message import DecodeError
@@ -71,7 +71,6 @@ class Bridge:
         self._reference = None
 
         self._event_bus: EventBus = None
-        self._read_task: asyncio.Task = None
 
         self.__sensor_callback_fn: callable = None
         self.__alarm_callback_fn: callable = None
@@ -89,43 +88,43 @@ class Bridge:
         """Set a callback to be called when an alarm is received."""
         self.__alarm_callback_fn = callback
 
-    async def connect(self, uuid: str):
+    async def _connect(self, uuid: str):
         """Connect to the bridge."""
-        await self.disconnect()
-
         _LOGGER.debug("Connecting to bridge %s", self.host)
         try:
             self._reader, self._writer = await asyncio.wait_for(asyncio.open_connection(self.host, self.PORT), TIMEOUT)
         except asyncio.TimeoutError as exc:
-            raise AioComfoConnectTimeout() from exc
+            _LOGGER.warning("Timeout while connecting to bridge %s", self.host)
+            raise AioComfoConnectTimeout from exc
 
         self._reference = 1
         self._local_uuid = uuid
         self._event_bus = EventBus()
 
-        # We are connected, start the background task
-        self._read_task = self._loop.create_task(self._read_messages())
+        async def _read_messages():
+            while True:
+                try:
+                    # Keep processing messages until we are disconnected or shutting down
+                    await self._process_message()
 
+                except asyncio.exceptions.CancelledError:
+                    # We are shutting down. Return to stop the background task
+                    return False
+
+                except AioComfoConnectNotConnected:
+                    # We have been disconnected
+                    raise
+
+        read_task = self._loop.create_task(_read_messages())
         _LOGGER.debug("Connected to bridge %s", self.host)
 
-    async def disconnect(self):
+        return read_task
+
+    async def _disconnect(self):
         """Disconnect from the bridge."""
-        _LOGGER.debug("Disconnecting from bridge %s", self.host)
-
-        if self._read_task:
-            # Cancel the background task
-            self._read_task.cancel()
-
-            # Wait for background task to finish
-            try:
-                await self._read_task
-            except asyncio.CancelledError:
-                pass
-
         if self._writer:
             self._writer.close()
-
-        _LOGGER.debug("Disconnected from bridge %s", self.host)
+            await self._writer.wait_closed()
 
     def is_connected(self) -> bool:
         """Returns True if the bridge is connected."""
@@ -135,7 +134,7 @@ class Bridge:
         """Sends a command and wait for a response if the request is known to return a result."""
         # Check if we are actually connected
         if not self.is_connected():
-            raise AioComfoConnectNotConnected()
+            raise AioComfoConnectNotConnected
 
         # Construct the message
         cmd = zehnder_pb2.GatewayOperation()  # pylint: disable=no-member
@@ -160,6 +159,7 @@ class Bridge:
         # Send the message
         _LOGGER.debug("TX %s", message)
         self._writer.write(message.encode())
+        await self._writer.drain()
 
         # Increase message reference for next message
         self._reference += 1
@@ -168,6 +168,7 @@ class Bridge:
             return await asyncio.wait_for(fut, TIMEOUT)
         except asyncio.TimeoutError as exc:
             _LOGGER.warning("Timeout while waiting for response from bridge")
+            await self._disconnect()
             raise AioComfoConnectTimeout from exc
 
     async def _read(self) -> Message:
@@ -206,55 +207,51 @@ class Bridge:
 
         return message
 
-    async def _read_messages(self):
-        """Receive a message from the bridge."""
-        while self._read_task.cancelled() is False:
-            try:
-                message = await self._read()
+    async def _process_message(self):
+        """Process a message from the bridge."""
+        try:
+            message = await self._read()
 
-                # pylint: disable=no-member
-                if message.cmd.type == zehnder_pb2.GatewayOperation.CnRpdoNotificationType:
-                    if self.__sensor_callback_fn:
-                        self.__sensor_callback_fn(message.msg.pdid, int.from_bytes(message.msg.data, byteorder="little", signed=True))
-                    else:
-                        _LOGGER.info("Unhandled CnRpdoNotificationType since no callback is registered.")
-
-                elif message.cmd.type == zehnder_pb2.GatewayOperation.GatewayNotificationType:
-                    _LOGGER.debug("Unhandled GatewayNotificationType")
-
-                elif message.cmd.type == zehnder_pb2.GatewayOperation.CnNodeNotificationType:
-                    _LOGGER.debug("Unhandled CnNodeNotificationType")
-
-                elif message.cmd.type == zehnder_pb2.GatewayOperation.CnAlarmNotificationType:
-                    if self.__alarm_callback_fn:
-                        self.__alarm_callback_fn(message.msg.nodeId, message.msg)
-                    else:
-                        _LOGGER.info("Unhandled CnAlarmNotificationType since no callback is registered.")
-
-                elif message.cmd.type == zehnder_pb2.GatewayOperation.CloseSessionRequestType:
-                    _LOGGER.info("The Bridge has asked us to close the connection.")
-                    return  # Stop the background task
-
-                elif message.cmd.reference:
-                    # Emit to the event bus
-                    self._event_bus.emit(message.cmd.reference, message.msg)
-
+            # pylint: disable=no-member
+            if message.cmd.type == zehnder_pb2.GatewayOperation.CnRpdoNotificationType:
+                if self.__sensor_callback_fn:
+                    self.__sensor_callback_fn(message.msg.pdid, int.from_bytes(message.msg.data, byteorder="little", signed=True))
                 else:
-                    _LOGGER.warning("Unhandled message type %s: %s", message.cmd.type, message)
+                    _LOGGER.info("Unhandled CnRpdoNotificationType since no callback is registered.")
 
-            except asyncio.exceptions.CancelledError:
-                return  # Stop the background task
+            elif message.cmd.type == zehnder_pb2.GatewayOperation.GatewayNotificationType:
+                _LOGGER.debug("Unhandled GatewayNotificationType")
 
-            except IncompleteReadError:
-                _LOGGER.info("The connection was closed.")
-                return  # Stop the background task
+            elif message.cmd.type == zehnder_pb2.GatewayOperation.CnNodeNotificationType:
+                _LOGGER.debug("Unhandled CnNodeNotificationType")
 
-            except ComfoConnectError as exc:
-                if exc.message.cmd.reference:
-                    self._event_bus.emit(exc.message.cmd.reference, exc)
+            elif message.cmd.type == zehnder_pb2.GatewayOperation.CnAlarmNotificationType:
+                if self.__alarm_callback_fn:
+                    self.__alarm_callback_fn(message.msg.nodeId, message.msg)
+                else:
+                    _LOGGER.info("Unhandled CnAlarmNotificationType since no callback is registered.")
 
-            except DecodeError as exc:
-                _LOGGER.error("Failed to decode message: %s", exc)
+            elif message.cmd.type == zehnder_pb2.GatewayOperation.CloseSessionRequestType:
+                _LOGGER.info("The Bridge has asked us to close the connection.")
+
+            elif message.cmd.reference:
+                # Emit to the event bus
+                self._event_bus.emit(message.cmd.reference, message.msg)
+
+            else:
+                _LOGGER.warning("Unhandled message type %s: %s", message.cmd.type, message)
+
+        except asyncio.exceptions.IncompleteReadError:
+            _LOGGER.info("The connection was closed.")
+            await self._disconnect()
+            raise AioComfoConnectNotConnected
+
+        except ComfoConnectError as exc:
+            if exc.message.cmd.reference:
+                self._event_bus.emit(exc.message.cmd.reference, exc)
+
+        except DecodeError as exc:
+            _LOGGER.error("Failed to decode message: %s", exc)
 
     def cmd_start_session(self, take_over: bool = False) -> Awaitable[Message]:
         """Starts the session on the device by logging in and optionally disconnecting an already existing session."""
