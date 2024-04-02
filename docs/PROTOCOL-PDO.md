@@ -119,10 +119,10 @@ Numbers are stored in little endian format.
 | 400  | CN_INT16  |                                                  | 0.0                                                                                                              |
 | 401  | CN_UINT8  |                                                  | 0                                                                                                                |
 | 402  | CN_BOOL   | ?? PostHeaterPresent                             | 0                                                                                                                |
-| 416  | CN_INT16  | ?? Outdoor air temperature                       | -40.0                                                                                                            |
-| 417  | CN_INT16  | ?? GHE Ground temperature                        | 10.0                                                                                                             |
-| 418  | CN_UINT8  | ?? GHE State                                     | 0                                                                                                                |
-| 419  | CN_BOOL   | ?? GHE Present                                   | 0=absent, 1=present                                                                                              |
+| 416  | CN_INT16  | ComfoFond Outdoor Air Temperature                | -40.0                                                                                                            |
+| 417  | CN_INT16  | ComfoFond Ground Temperature                     | 10.0                                                                                                             |
+| 418  | CN_UINT8  | ComfoFond GHE State Percentage                   | 0                                                                                                                |
+| 419  | CN_BOOL   | ComfoFond GHE Present                            | 0=absent, 1=present                                                                                              |
 | 513  | CN_UINT16 |                                                  |                                                                                                                  |
 | 514  | CN_UINT16 |                                                  |                                                                                                                  |
 | 515  | CN_UINT16 |                                                  |                                                                                                                  |

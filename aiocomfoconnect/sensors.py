@@ -8,6 +8,7 @@ from .const import PdoType
 from .util import calculate_airflow_constraints
 
 # Sensors
+SENSOR_AIRFLOW_CONSTRAINTS = 230
 SENSOR_ANALOG_INPUT_1 = 369
 SENSOR_ANALOG_INPUT_2 = 370
 SENSOR_ANALOG_INPUT_3 = 371
@@ -22,6 +23,10 @@ SENSOR_BYPASS_ACTIVATION_STATE = 66
 SENSOR_BYPASS_OVERRIDE = 338
 SENSOR_BYPASS_STATE = 227
 SENSOR_CHANGING_FILTERS = 18
+SENSOR_COMFOFOND_GHE_PRESENT = 419
+SENSOR_COMFOFOND_GHE_STATE = 418
+SENSOR_COMFOFOND_TEMP_GROUND = 417
+SENSOR_COMFOFOND_TEMP_OUTDOOR = 416
 SENSOR_COMFORTCONTROL_MODE = 225
 SENSOR_DAYS_TO_REPLACE_FILTER = 192
 SENSOR_DEVICE_STATE = 16
@@ -69,7 +74,6 @@ SENSOR_TEMPERATURE_OUTDOOR = 276
 SENSOR_TEMPERATURE_SUPPLY = 221
 SENSOR_UNIT_AIRFLOW = 224
 SENSOR_UNIT_TEMPERATURE = 208
-SENSOR_AIRFLOW_CONSTRAINTS = 230
 
 UNIT_WATT = "W"
 UNIT_KWH = "kWh"
@@ -171,10 +175,10 @@ SENSORS: Dict[int, Sensor] = {
     400: Sensor("sensor_400", None, 400, PdoType.TYPE_CN_INT16, lambda x: x / 10),
     401: Sensor("sensor_401", None, 401, PdoType.TYPE_CN_UINT8),
     402: Sensor("sensor_402", None, 402, PdoType.TYPE_CN_BOOL, bool),
-    416: Sensor("sensor_416", None, 416, PdoType.TYPE_CN_INT16, lambda x: x / 10),
-    417: Sensor("sensor_417", None, 417, PdoType.TYPE_CN_INT16, lambda x: x / 10),
-    418: Sensor("sensor_418", None, 418, PdoType.TYPE_CN_UINT8),
-    419: Sensor("sensor_419", None, 419, PdoType.TYPE_CN_BOOL, bool),
+    SENSOR_COMFOFOND_TEMP_OUTDOOR: Sensor("ComfoFond Outdoor Air Temperature", None, 416, PdoType.TYPE_CN_INT16, lambda x: x / 10),
+    SENSOR_COMFOFOND_TEMP_GROUND: Sensor("ComfoFond Ground Temperature", None, 417, PdoType.TYPE_CN_INT16, lambda x: x / 10),
+    SENSOR_COMFOFOND_GHE_STATE: Sensor("ComfoFond GHE State Percentage", None, 418, PdoType.TYPE_CN_UINT8),
+    SENSOR_COMFOFOND_GHE_PRESENT: Sensor("ComfoFond GHE Present", None, 419, PdoType.TYPE_CN_BOOL, bool),
     784: Sensor("sensor_784", None, 784, PdoType.TYPE_CN_UINT8),
     785: Sensor("sensor_785", None, 785, PdoType.TYPE_CN_BOOL),
     802: Sensor("sensor_802", None, 802, PdoType.TYPE_CN_INT16, lambda x: x / 10),
