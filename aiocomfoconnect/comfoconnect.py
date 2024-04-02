@@ -104,10 +104,12 @@ class ComfoConnect(Bridge):
 
                 except AioComfoConnectTimeout:
                     # Reconnect after 5 seconds when we could not connect
+                    _LOGGER.info("Could not reconnect. Retrying after 5 seconds.")
                     await asyncio.sleep(5)
 
                 except AioComfoConnectNotConnected:
                     # Reconnect when connection has been dropped
+                    _LOGGER.info("We got disconnected. Reconnecting.")
                     pass
 
         reconnect_task = self._loop.create_task(_reconnect_loop())
