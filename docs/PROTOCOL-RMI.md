@@ -168,7 +168,7 @@ factory mode or tries to perform an update.)
 | VENTILATIONCONFIG | 0x01    | 0x1d     |        | INT16  | ?? `5304` = 1107                                                       |
 | VENTILATIONCONFIG | 0x01    | 0x1e     |        | INT16  | ?? `1304` = 1043                                                       |
 | NODECONFIGURATION | 0x01    | 0x01     |        | UINT8  | ?? `01` = 1                                                            |
-| NODECONFIGURATION | 0x01    | 0x03     |        | STRING | Maintainer password (2468)                                             |
+| NODECONFIGURATION | 0x01    | 0x03     |        | STRING | Maintainer password (NL=4210, BE=2468, DE=4210)                        |
 | NODECONFIGURATION | 0x01    | 0x04     |        | UINT8  | Orientation (0=left, 1=right)                                          |
 | NODECONFIGURATION | 0x01    | 0x05     |        | UINT8  | ?? `01` = 1                                                            |
 | NODECONFIGURATION | 0x01    | 0x06     |        | UINT8  | ?? `00` = 0                                                            |

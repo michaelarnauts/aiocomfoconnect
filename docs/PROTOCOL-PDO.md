@@ -24,19 +24,22 @@ Numbers are stored in little endian format.
 | 16   | CN_UINT8  | Device state                                     | 0=init, 1=normal, 2=filterwizard, 3=commissioning, 4=supplierfactory, 5=zehnderfactory, 6=standby, 7=away, 8=DFC |
 | 17   | CN_UINT8  | ?? ROOM_T10                                      |                                                                                                                  |
 | 18   | CN_UINT8  | Changing filters                                 | 1=active, 2=changing filter                                                                                      |
-| 33   | CN_UINT8  | ?? Preset                                        | 1                                                                                                                |
+| 33   | CN_UINT8  | ?? Preset                                        | 0, 1                                                                                                             |
 | 35   | CN_UINT8  | ?? Temperature Profile                           | 1                                                                                                                |
 | 36   | CN_UINT8  | ?? STANDBY                                       |                                                                                                                  |
 | 37   | CN_UINT8  |                                                  | 0                                                                                                                |
 | 40   | CN_UINT8  | ?? MANUALMODE                                    |                                                                                                                  |
+| 42   | CN_UINT8  |                                                  | 0                                                                                                                |
 | 49   | CN_UINT8  | Operating mode                                   | -1=auto, 1=limited manual, 5=unlimited manual                                                                    |
 | 50   | CN_UINT8  | ?? Bypass                                        |                                                                                                                  |
 | 51   | CN_UINT8  | ?? Temperature Profile                           |                                                                                                                  |
 | 52   | CN_UINT8  | ?? STANDBY                                       |                                                                                                                  |
-| 53   | CN_UINT8  | ?? COMFOCOOLOFF                                  | -1                                                                                                               |
+| 53   | CN_UINT8  | ?? COMFOCOOLOFF                                  | -1, 0, 1                                                                                                         |
 | 54   | CN_UINT8  | Supply Fan Mode                                  | -1=balanced, 1=supply only                                                                                       |
 | 55   | CN_UINT8  | Exhaust Fan Mode                                 | -1=balanced, 1=exhaust only                                                                                      |
 | 56   | CN_UINT8  | Manual Mode                                      | -1=auto, 1=unlimited manual                                                                                      |
+| 57   | CN_UINT8  |                                                  | -1, 0                                                                                                            |
+| 58   | CN_UINT8  |                                                  | -1, 0                                                                                                            |
 | 65   | CN_UINT8  | Fans: Fan speed setting                          | 0=away, 1=low, 2=medium, 3=high                                                                                  |
 | 66   | CN_UINT8  | Bypass activation mode                           | 0=auto, 1=full, 2=none                                                                                           |
 | 67   | CN_UINT8  | Temperature Profile                              | 0=normal, 1=cold, 2=warm                                                                                         |
@@ -45,12 +48,16 @@ Numbers are stored in little endian format.
 | 70   | CN_UINT8  | Supply Fan Mode                                  | 0=balanced, 1=supply only                                                                                        |
 | 71   | CN_UINT8  | Exhaust Fan Mode                                 | 0=balanced, 1=exhaust only                                                                                       |
 | 72   | CN_UINT8  | ?? MANUALMODE                                    |                                                                                                                  |
+| 73   | CN_UINT8  |                                                  | 0                                                                                                                |
+| 74   | CN_UINT8  |                                                  | 0                                                                                                                |
 | 81   | CN_UINT32 | Fan Speed Next Change                            | -1=no change, else countdown in seconds                                                                          |
 | 82   | CN_UINT32 | Bypass Next Change                               | -1=no change, else countdown in seconds                                                                          |
-| 85   | CN_UINT32 | ?? COMFOCOOLOFF                                  | -1                                                                                                               |
+| 85   | CN_UINT32 | ComfoCool Next Change                            | -1=no change, else countdown in seconds                                                                          |
 | 86   | CN_UINT32 | Supply Fan Next Change                           | -1=no change, else countdown in seconds                                                                          |
 | 87   | CN_UINT32 | Exhaust Fan Next Change                          | -1=no change, else countdown in seconds                                                                          |
 | 88   | CN_UINT32 | ?? MANUALMODE                                    |                                                                                                                  |
+| 89   | CN_UINT32 |                                                  | -1, 0                                                                                                            |
+| 90   | CN_UINT32 |                                                  | -1, 0                                                                                                            |
 | 96   | CN_BOOL   |                                                  |                                                                                                                  |
 | 115  | CN_BOOL   | ?? EXHAUST_F12                                   |                                                                                                                  |
 | 116  | CN_BOOL   | ?? SUPPLY_F22                                    |                                                                                                                  |
@@ -102,14 +109,17 @@ Numbers are stored in little endian format.
 | 293  | CN_UINT8  | Humidity: Preheated Outdoor Air                  | value in % (67%)                                                                                                 |
 | 294  | CN_UINT8  | Humidity: Supply Air                             | value in % (35%)                                                                                                 |
 | 321  | CN_UINT16 |                                                  | 3                                                                                                                |
-| 325  | CN_UINT16 | ?? COMFOCOOLOFF                                  | 1                                                                                                                |
+| 325  | CN_UINT16 | ?? COMFOCOOLOFF                                  | 0, 1, 3                                                                                                          |
 | 328  | CN_UINT16 | ?? MANUALMODE                                    |                                                                                                                  |
+| 330  | CN_UINT16 |                                                  | 0, 1                                                                                                             |
 | 337  | CN_UINT32 | ?? PRESET                                        | 0, 2, 32, 34                                                                                                     |
 | 338  | CN_UINT32 | Bypass Override                                  | 0=auto, 2=overriden                                                                                              |
-| 341  | CN_UINT32 | ?? COMFOCOOLOFF                                  | 0                                                                                                                |
+| 341  | CN_UINT32 | ?? COMFOCOOLOFF                                  | 00000000, 02000000                                                                                               |
 | 342  | CN_UINT32 | Supply Fan Mode                                  | 0 = balanced, 2 = supply only                                                                                    |
 | 343  | CN_UINT32 | Exhaust Fan Mode                                 | 0 = balanced, 2 = exhaust only                                                                                   |
 | 344  | CN_UINT32 | ?? MANUAL MODE                                   |                                                                                                                  |
+| 345  | CN_UINT32 |                                                  | 0                                                                                                                |
+| 346  | CN_UINT32 |                                                  | 0                                                                                                                |
 | 369  | CN_UINT8  | Analog Input 0-10V 1                             | 0                                                                                                                |
 | 370  | CN_UINT8  | Analog Input 0-10V 2                             | 0                                                                                                                |
 | 371  | CN_UINT8  | Analog Input 0-10V 3                             | 0                                                                                                                |
@@ -138,7 +148,7 @@ Numbers are stored in little endian format.
 | 784  | CN_UINT8  |                                                  | 0=off, 1=on (0)                                                                                                  |
 | 785  | CN_BOOL   | ?? ComfoCoolCompressor State                     | 0                                                                                                                |
 | 801  | CN_INT16  | ?? T10ROOMTEMPERATURE                            | 0.0                                                                                                              |
-| 802  | CN_INT16  | ?? T13CONDENSORTEMPERATURE                       | 0.0                                                                                                              |
+| 802  | CN_INT16  | ComfoCool Condensor Temperature                  | 0.0                                                                                                              |
 | 803  | CN_INT16  | ?? T23SUPPLYAIRTEMPERATURE                       | 0.0                                                                                                              |
 | 1024 | CN_UINT16 |                                                  |                                                                                                                  |
 | 1025 | CN_UINT16 |                                                  |                                                                                                                  |
