@@ -95,7 +95,7 @@ class Bridge:
             self._reader, self._writer = await asyncio.wait_for(asyncio.open_connection(self.host, self.PORT), TIMEOUT)
         except asyncio.TimeoutError as exc:
             _LOGGER.warning("Timeout while connecting to bridge %s", self.host)
-            raise AioComfoConnectTimeout() from exc
+            raise AioComfoConnectTimeout from exc
 
         self._reference = 1
         self._local_uuid = uuid
@@ -122,12 +122,9 @@ class Bridge:
 
     async def _disconnect(self):
         """Disconnect from the bridge."""
-        _LOGGER.debug("Disconnecting from bridge %s", self.host)
-
         if self._writer:
             self._writer.close()
-
-        _LOGGER.debug("Disconnected from bridge %s", self.host)
+            await self._writer.wait_closed()
 
     def is_connected(self) -> bool:
         """Returns True if the bridge is connected."""
@@ -137,7 +134,7 @@ class Bridge:
         """Sends a command and wait for a response if the request is known to return a result."""
         # Check if we are actually connected
         if not self.is_connected():
-            raise AioComfoConnectNotConnected()
+            raise AioComfoConnectNotConnected
 
         # Construct the message
         cmd = zehnder_pb2.GatewayOperation()  # pylint: disable=no-member
@@ -246,7 +243,8 @@ class Bridge:
 
         except asyncio.exceptions.IncompleteReadError:
             _LOGGER.info("The connection was closed.")
-            raise AioComfoConnectNotConnected()
+            await self._disconnect()
+            raise AioComfoConnectNotConnected
 
         except ComfoConnectError as exc:
             if exc.message.cmd.reference:
