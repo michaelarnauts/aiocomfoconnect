@@ -30,7 +30,7 @@ Numbers are stored in little endian format.
 | 37   | CN_UINT8  |                                                  | 0                                                                                                                |
 | 40   | CN_UINT8  | ?? MANUALMODE                                    |                                                                                                                  |
 | 42   | CN_UINT8  |                                                  | 0                                                                                                                |
-| 49   | CN_UINT8  | Operating mode                                   | -1=auto, 1=limited manual, 5=unlimited manual                                                                    |
+| 49   | CN_UINT8  | Operating mode                                   | -1=auto, 1=limited manual, 5=unlimited manual, 6=boost                                                           |
 | 50   | CN_UINT8  | ?? Bypass                                        |                                                                                                                  |
 | 51   | CN_UINT8  | ?? Temperature Profile                           |                                                                                                                  |
 | 52   | CN_UINT8  | ?? STANDBY                                       |                                                                                                                  |
