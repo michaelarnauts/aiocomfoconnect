@@ -145,7 +145,7 @@ Numbers are stored in little endian format.
 | 522  | CN_INT16  |                                                  |                                                                                                                  |
 | 523  | CN_INT16  |                                                  |                                                                                                                  |
 | 524  | CN_UINT8  |                                                  |                                                                                                                  |
-| 784  | CN_UINT8  |                                                  | 0=off, 1=on (0)                                                                                                  |
+| 784  | CN_UINT8  | ComfoCool State                                  | 0=off, 1=on (0)                                                                                                  |
 | 785  | CN_BOOL   | ?? ComfoCoolCompressor State                     | 0                                                                                                                |
 | 801  | CN_INT16  | ?? T10ROOMTEMPERATURE                            | 0.0                                                                                                              |
 | 802  | CN_INT16  | ComfoCool Condensor Temperature                  | 0.0                                                                                                              |
