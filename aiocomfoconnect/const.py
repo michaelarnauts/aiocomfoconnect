@@ -207,3 +207,9 @@ class VentilationSpeed:
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
+
+class ComfoCoolMode:
+    """Enum for ventilation settings."""
+
+    AUTO = "auto"
+    OFF = "off"
