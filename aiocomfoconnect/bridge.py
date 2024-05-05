@@ -1,4 +1,5 @@
 """ ComfoConnect Bridge API """
+
 from __future__ import annotations
 
 import asyncio
@@ -305,7 +306,6 @@ class Bridge:
         _LOGGER.debug("DeregisterAppRequest")
         if uuid == self._local_uuid:
             raise SelfDeregistrationError("You should not deregister yourself.")
-
 
         # pylint: disable=no-member
         return self._send(

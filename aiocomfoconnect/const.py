@@ -1,5 +1,6 @@
 """ Constants """
 
+
 # PDO Types
 class PdoType:
     """Defines a PDO type."""
@@ -207,6 +208,7 @@ class VentilationSpeed:
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
+
 
 class ComfoCoolMode:
     """Enum for ventilation settings."""

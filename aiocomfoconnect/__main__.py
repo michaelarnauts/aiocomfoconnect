@@ -1,4 +1,5 @@
 """ aiocomfoconnect CLI application """
+
 from __future__ import annotations
 
 import argparse
@@ -14,19 +15,14 @@ from aiocomfoconnect.discovery import discover_bridges
 from aiocomfoconnect.exceptions import (
     AioComfoConnectNotConnected,
     AioComfoConnectTimeout,
+    BridgeNotFoundException,
     ComfoConnectNotAllowed,
+    UnknownActionException,
 )
 from aiocomfoconnect.properties import Property
 from aiocomfoconnect.sensors import SENSORS
 
 _LOGGER = logging.getLogger(__name__)
-
-
-class BridgeNotFoundException(Exception):
-    """Exception raised when no bridge is found."""
-
-class UnknownActionException(Exception):
-    """Exception raised when an unknown action is provided."""
 
 
 async def main(args):
