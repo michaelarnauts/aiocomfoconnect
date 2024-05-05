@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, List, Text, Union
+from typing import Any, List, Union
 
 from .bridge import Bridge
 from .protobuf import zehnder_pb2
@@ -36,7 +36,7 @@ class BridgeDiscoveryProtocol(asyncio.DatagramProtocol):
             _LOGGER.debug("Sending discovery request to broadcast:%d", Bridge.PORT)
             self.transport.sendto(b"\x0a\x00", ("<broadcast>", Bridge.PORT))
 
-    def datagram_received(self, data: Union[bytes, Text], addr: tuple[str | Any, int]):
+    def datagram_received(self, data: Union[bytes, str], addr: tuple[str | Any, int]):
         """Called when some datagram is received."""
         if data == b"\x0a\x00":
             _LOGGER.debug("Ignoring discovery request from %s:%d", addr[0], addr[1])
