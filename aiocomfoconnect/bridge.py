@@ -99,7 +99,7 @@ class Bridge:
             self._reader, self._writer = await asyncio.wait_for(asyncio.open_connection(self.host, self.PORT), TIMEOUT)
         except asyncio.TimeoutError as exc:
             _LOGGER.warning("Timeout while connecting to bridge %s", self.host)
-            raise AioComfoConnectTimeout from exc
+            raise AioComfoConnectTimeout("Timeout while connecting to bridge") from exc
 
         self._reference = 1
         self._local_uuid = uuid
@@ -115,9 +115,9 @@ class Bridge:
                     # We are shutting down. Return to stop the background task
                     return False
 
-                except AioComfoConnectNotConnected:
+                except AioComfoConnectNotConnected as exc:
                     # We have been disconnected
-                    raise
+                    raise AioComfoConnectNotConnected("We have been disconnected") from exc
 
         read_task = self._loop.create_task(_read_messages())
         _LOGGER.debug("Connected to bridge %s", self.host)
@@ -173,7 +173,7 @@ class Bridge:
         except asyncio.TimeoutError as exc:
             _LOGGER.warning("Timeout while waiting for response from bridge")
             await self._disconnect()
-            raise AioComfoConnectTimeout from exc
+            raise AioComfoConnectTimeout("Timeout while waiting for response from bridge") from exc
 
     async def _read(self) -> Message:
         # Read packet size
@@ -245,10 +245,10 @@ class Bridge:
             else:
                 _LOGGER.warning("Unhandled message type %s: %s", message.cmd.type, message)
 
-        except asyncio.exceptions.IncompleteReadError:
+        except asyncio.exceptions.IncompleteReadError as exc:
             _LOGGER.info("The connection was closed.")
             await self._disconnect()
-            raise AioComfoConnectNotConnected
+            raise AioComfoConnectNotConnected("The connection was closed.") from exc
 
         except ComfoConnectError as exc:
             if exc.message.cmd.reference:

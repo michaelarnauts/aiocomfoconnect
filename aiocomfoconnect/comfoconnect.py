@@ -21,13 +21,13 @@ from aiocomfoconnect.const import (
     UNIT_SCHEDULE,
     UNIT_TEMPHUMCONTROL,
     UNIT_VENTILATIONCONFIG,
+    ComfoCoolMode,
     PdoType,
     VentilationBalance,
     VentilationMode,
     VentilationSetting,
     VentilationSpeed,
     VentilationTemperatureProfile,
-    ComfoCoolMode,
 )
 from aiocomfoconnect.exceptions import (
     AioComfoConnectNotConnected,
