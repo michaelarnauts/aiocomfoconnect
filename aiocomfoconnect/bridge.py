@@ -30,6 +30,10 @@ _LOGGER = logging.getLogger(__name__)
 TIMEOUT = 5
 
 
+class SelfDeregistrationError(Exception):
+    """Exception raised when trying to deregister self."""
+
+
 class EventBus:
     """An event bus for async replies."""
 
@@ -300,7 +304,8 @@ class Bridge:
         """Remove the specified app from the registration list."""
         _LOGGER.debug("DeregisterAppRequest")
         if uuid == self._local_uuid:
-            raise Exception("You should not deregister yourself.")
+            raise SelfDeregistrationError("You should not deregister yourself.")
+
 
         # pylint: disable=no-member
         return self._send(

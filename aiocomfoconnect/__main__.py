@@ -22,6 +22,13 @@ from aiocomfoconnect.sensors import SENSORS
 _LOGGER = logging.getLogger(__name__)
 
 
+class BridgeNotFoundException(Exception):
+    """Exception raised when no bridge is found."""
+
+class UnknownActionException(Exception):
+    """Exception raised when an unknown action is provided."""
+
+
 async def main(args):
     """Main function."""
     if args.action == "discover":
@@ -61,7 +68,7 @@ async def main(args):
         await run_set_flow_for_speed(args.host, args.uuid, args.speed, args.flow)
 
     else:
-        raise Exception("Unknown action: " + args.action)
+        raise UnknownActionException("Unknown action: " + args.action)
 
 
 async def run_discover(host: str = None):
@@ -78,7 +85,7 @@ async def run_register(host: str, uuid: str, name: str, pin: int):
     # Discover bridge so we know the UUID
     bridges = await discover_bridges(host)
     if not bridges:
-        raise Exception("No bridge found")
+        raise BridgeNotFoundException("No bridge found")
 
     # Connect to the bridge
     comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid)
@@ -117,7 +124,7 @@ async def run_deregister(host: str, uuid: str, uuid2: str):
     # Discover bridge so we know the UUID
     bridges = await discover_bridges(host)
     if not bridges:
-        raise Exception("No bridge found")
+        raise BridgeNotFoundException("No bridge found")
 
     # Connect to the bridge
     comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid)
@@ -145,7 +152,7 @@ async def run_set_speed(host: str, uuid: str, speed: Literal["away", "low", "med
     # Discover bridge so we know the UUID
     bridges = await discover_bridges(host)
     if not bridges:
-        raise Exception("No bridge found")
+        raise BridgeNotFoundException("No bridge found")
 
     # Connect to the bridge
     comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid)
@@ -165,7 +172,7 @@ async def run_set_mode(host: str, uuid: str, mode: Literal["auto", "manual"]):
     # Discover bridge so we know the UUID
     bridges = await discover_bridges(host)
     if not bridges:
-        raise Exception("No bridge found")
+        raise BridgeNotFoundException("No bridge found")
 
     # Connect to the bridge
     comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid)
@@ -185,7 +192,7 @@ async def run_set_comfocool(host: str, uuid: str, mode: Literal["auto", "off"]):
     # Discover bridge so we know the UUID
     bridges = await discover_bridges(host)
     if not bridges:
-        raise Exception("No bridge found")
+        raise BridgeNotFoundException("No bridge found")
 
     # Connect to the bridge
     comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid)
@@ -205,7 +212,7 @@ async def run_set_boost(host: str, uuid: str, mode: Literal["on", "off"], timeou
     # Discover bridge so we know the UUID
     bridges = await discover_bridges(host)
     if not bridges:
-        raise Exception("No bridge found")
+        raise BridgeNotFoundException("No bridge found")
 
     # Connect to the bridge
     comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid)
@@ -225,7 +232,7 @@ async def run_show_sensors(host: str, uuid: str):
     # Discover bridge so we know the UUID
     bridges = await discover_bridges(host)
     if not bridges:
-        raise Exception("No bridge found")
+        raise BridgeNotFoundException("No bridge found")
 
     def alarm_callback(node_id, errors):
         """Print alarm updates."""
@@ -277,7 +284,7 @@ async def run_show_sensor(host: str, uuid: str, sensor: int, follow=False):
     # Discover bridge so we know the UUID
     bridges = await discover_bridges(host)
     if not bridges:
-        raise Exception("No bridge found")
+        raise BridgeNotFoundException("No bridge found")
 
     def sensor_callback(sensor_, value):
         """Print sensor update."""
@@ -331,7 +338,7 @@ async def run_get_property(host: str, uuid: str, node_id: int, unit: int, subuni
     # Discover bridge so we know the UUID
     bridges = await discover_bridges(host)
     if not bridges:
-        raise Exception("No bridge found")
+        raise BridgeNotFoundException("No bridge found")
 
     # Connect to the bridge
     comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid)
@@ -351,7 +358,7 @@ async def run_get_flow_for_speed(host: str, uuid: str, speed: Literal["away", "l
     # Discover bridge so we know the UUID
     bridges = await discover_bridges(host)
     if not bridges:
-        raise Exception("No bridge found")
+        raise BridgeNotFoundException("No bridge found")
 
     # Connect to the bridge
     comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid)
@@ -371,7 +378,7 @@ async def run_set_flow_for_speed(host: str, uuid: str, speed: Literal["away", "l
     # Discover bridge so we know the UUID
     bridges = await discover_bridges(host)
     if not bridges:
-        raise Exception("No bridge found")
+        raise BridgeNotFoundException("No bridge found")
 
     # Connect to the bridge
     comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid)
