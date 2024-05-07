@@ -1,4 +1,5 @@
 """ Error definitions """
+
 from __future__ import annotations
 
 
@@ -47,3 +48,11 @@ class AioComfoConnectNotConnected(Exception):
 
 class AioComfoConnectTimeout(Exception):
     """An error occurred because the bridge didn't reply in time."""
+
+
+class BridgeNotFoundException(Exception):
+    """Exception raised when no bridge is found."""
+
+
+class UnknownActionException(Exception):
+    """Exception raised when an unknown action is provided."""

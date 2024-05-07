@@ -1,4 +1,5 @@
 """ ComfoConnect Bridge API abstraction """
+
 from __future__ import annotations
 
 import asyncio
@@ -21,13 +22,13 @@ from aiocomfoconnect.const import (
     UNIT_SCHEDULE,
     UNIT_TEMPHUMCONTROL,
     UNIT_VENTILATIONCONFIG,
+    ComfoCoolMode,
     PdoType,
     VentilationBalance,
     VentilationMode,
     VentilationSetting,
     VentilationSpeed,
     VentilationTemperatureProfile,
-    ComfoCoolMode,
 )
 from aiocomfoconnect.exceptions import (
     AioComfoConnectNotConnected,
@@ -111,7 +112,6 @@ class ComfoConnect(Bridge):
                 except AioComfoConnectNotConnected:
                     # Reconnect when connection has been dropped
                     _LOGGER.info("We got disconnected. Reconnecting.")
-                    pass
 
         reconnect_task = self._loop.create_task(_reconnect_loop())
         self._tasks.add(reconnect_task)
@@ -120,6 +120,7 @@ class ComfoConnect(Bridge):
         await connected
 
     async def disconnect(self):
+        """Disconnect from the bridge."""
         await self._disconnect()
 
     async def register_sensor(self, sensor: Sensor):
