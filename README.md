@@ -27,6 +27,9 @@ $ python -m aiocomfoconnect set-speed medium --host 192.168.1.213
 $ python -m aiocomfoconnect set-speed high --host 192.168.1.213
 $ python -m aiocomfoconnect set-boost on --host 192.168.1.213 --timeout 1200
 
+$ python -m aiocomfoconnect set-comfocool auto --host 192.168.1.213
+$ python -m aiocomfoconnect set-comfocool off --host 192.168.1.213
+
 $ python -m aiocomfoconnect show-sensors --host 192.168.1.213
 $ python -m aiocomfoconnect show-sensor 276 --host 192.168.1.213
 $ python -m aiocomfoconnect show-sensor 276 --host 192.168.1.213 -f
@@ -42,6 +45,8 @@ $ python -m aiocomfoconnect get-property --host 192.168.1.213 1 1 8 9  # Unit 0x
 - `async deregister_sensor(sensor)`: Deregister a sensor.
 - `async get_mode()`: Get the ventilation mode.
 - `async set_mode(mode)`: Set the ventilation mode. (auto / manual)
+- `async get_comfocool_mode()`: Get Comfocool mode
+- `async set_comfocool_mode()`: Set Comfocool mode. (auto / off)
 - `async get_speed()`: Get the ventilation speed.
 - `async set_speed(speed)`: Set the ventilation speed. (away / low / medium / high)
 - `async get_bypass()`: Get the bypass mode.
