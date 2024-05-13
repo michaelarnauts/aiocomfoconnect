@@ -74,8 +74,6 @@ SENSOR_TEMPERATURE_OUTDOOR = 276
 SENSOR_TEMPERATURE_SUPPLY = 221
 SENSOR_UNIT_AIRFLOW = 224
 SENSOR_UNIT_TEMPERATURE = 208
-SENSOR_COMFOCOOL_STATE = 784
-SENSOR_COMFOCOOL_CONDENSOR_TEMP = 802
 
 UNIT_WATT = "W"
 UNIT_KWH = "kWh"
@@ -181,7 +179,7 @@ SENSORS: Dict[int, Sensor] = {
     SENSOR_COMFOFOND_TEMP_GROUND: Sensor("ComfoFond Ground Temperature", None, 417, PdoType.TYPE_CN_INT16, lambda x: x / 10),
     SENSOR_COMFOFOND_GHE_STATE: Sensor("ComfoFond GHE State Percentage", None, 418, PdoType.TYPE_CN_UINT8),
     SENSOR_COMFOFOND_GHE_PRESENT: Sensor("ComfoFond GHE Present", None, 419, PdoType.TYPE_CN_BOOL, bool),
-    SENSOR_COMFOCOOL_STATE: Sensor("ComfoCool State", None, 784, PdoType.TYPE_CN_UINT8),
+    784: Sensor("sensor_784", None, 784, PdoType.TYPE_CN_UINT8),
     785: Sensor("sensor_785", None, 785, PdoType.TYPE_CN_BOOL),
-    SENSOR_COMFOCOOL_CONDENSOR_TEMP: Sensor("ComfoCool Condensor Temperature", None, 802, PdoType.TYPE_CN_INT16, lambda x: x / 10),
+    802: Sensor("sensor_802", None, 802, PdoType.TYPE_CN_INT16, lambda x: x / 10),
 }
