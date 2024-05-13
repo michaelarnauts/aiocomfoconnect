@@ -27,7 +27,6 @@ from aiocomfoconnect.const import (
     VentilationSetting,
     VentilationSpeed,
     VentilationTemperatureProfile,
-    ComfoCoolMode,
 )
 from aiocomfoconnect.exceptions import (
     AioComfoConnectNotConnected,
@@ -398,9 +397,9 @@ class ComfoConnect(Bridge):
 
     async def set_comfocool_mode(self, mode: Literal["auto", "off"], timeout=-1):
         """Set the comfocool mode (auto / off)."""
-        if mode == ComfoCoolMode.AUTO:
+        if mode == "auto":
             await self.cmd_rmi_request(bytes([0x85, UNIT_SCHEDULE, SUBUNIT_05, 0x01]))
-        elif mode == ComfoCoolMode.OFF:
+        else:
             await self.cmd_rmi_request(bytestring([0x84, UNIT_SCHEDULE, SUBUNIT_05, 0x01, 0x00, 0x00, 0x00, 0x00, timeout.to_bytes(4, "little", signed=True), 0x00]))
 
     async def get_temperature_profile(self):
