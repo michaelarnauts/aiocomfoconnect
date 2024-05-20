@@ -82,16 +82,19 @@ This allow us to skip some platform issues and work on similar things and python
 
 ### Building
 
-When you're ready, start your application by running:
-`make build`.
+Build the image command
+```
+make build
+```
 
 ### Running
 Now after we build our images is called `aiocomfoconnect`
 
-To run any command we can just
-`docker run aiocomfoconnect --help`
-
-Any args from `aiocomfoconnect` can be passed int othis image just like for `python3 -m aiocomfoconnect` command in local build.
+To run aiocomfoconnect we can use bellow command in this case with `--help` arg.
+```
+docker run aiocomfoconnect --help
+```
+Any args from `aiocomfoconnect` can be passed into this image run just like for `python3 -m aiocomfoconnect` command in local build.
 
 ## Examples
 
