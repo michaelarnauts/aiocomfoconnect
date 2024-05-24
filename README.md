@@ -79,6 +79,28 @@ $ python -m aiocomfoconnect get-property --host 192.168.1.213 1 1 8 9  # Unit 0x
 - `async cmd_rpdo_request(pdid, type, zone, timeout)`: Send a RPDO request.
 - `async cmd_keepalive()`: Send a keepalive message.
 
+## Docker
+
+### Description
+Docker with aiocomfoconnect allow to experiment and develop on local machine using same image and same environment on any platform where we can run container.
+This allow us to skip some platform issues and work on similar things and python version by easly swapping them in Dockerfile.
+
+### Building
+
+Build the image command
+```
+make build
+```
+
+### Running
+Now after we build our images is called `aiocomfoconnect`
+
+To run aiocomfoconnect we can use bellow command in this case with `--help` arg.
+```
+docker run aiocomfoconnect --help
+```
+Any args from `aiocomfoconnect` can be passed into this image run just like for `python3 -m aiocomfoconnect` command in local build.
+
 ## Examples
 
 ### Discovery of ComfoConnect LAN C Bridges

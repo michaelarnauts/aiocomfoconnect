@@ -13,4 +13,7 @@ codefix:
 test:
 	@poetry run pytest
 
+build:
+	docker build -t aiocomfoconnect .
+
 .PHONY: check codefix test
