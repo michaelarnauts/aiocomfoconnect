@@ -80,6 +80,7 @@ SENSOR_COMFOCOOL_CONDENSOR_TEMP = 802
 
 UNIT_WATT = "W"
 UNIT_KWH = "kWh"
+UNIT_VOLT = "V"
 UNIT_CELCIUS = "°C"
 UNIT_PERCENT = "%"
 UNIT_RPM = "rpm"
@@ -169,10 +170,10 @@ SENSORS: Dict[int, Sensor] = {
     341: Sensor("sensor_341", None, 341, PdoType.TYPE_CN_UINT32),
     SENSOR_FAN_MODE_SUPPLY_3: Sensor("Supply Fan Mode", None, 342, PdoType.TYPE_CN_UINT32),
     SENSOR_FAN_MODE_EXHAUST_3: Sensor("Exhaust Fan Mode", None, 343, PdoType.TYPE_CN_UINT32),
-    SENSOR_ANALOG_INPUT_1: Sensor("Analog Input 1", None, 369, PdoType.TYPE_CN_UINT8),
-    SENSOR_ANALOG_INPUT_2: Sensor("Analog Input 2", None, 370, PdoType.TYPE_CN_UINT8),
-    SENSOR_ANALOG_INPUT_3: Sensor("Analog Input 3", None, 371, PdoType.TYPE_CN_UINT8),
-    SENSOR_ANALOG_INPUT_4: Sensor("Analog Input 4", None, 372, PdoType.TYPE_CN_UINT8),
+    SENSOR_ANALOG_INPUT_1: Sensor("Analog Input 1", UNIT_VOLT, 369, PdoType.TYPE_CN_UINT8, lambda x: x / 10),
+    SENSOR_ANALOG_INPUT_2: Sensor("Analog Input 2", UNIT_VOLT, 370, PdoType.TYPE_CN_UINT8, lambda x: x / 10),
+    SENSOR_ANALOG_INPUT_3: Sensor("Analog Input 3", UNIT_VOLT, 371, PdoType.TYPE_CN_UINT8, lambda x: x / 10),
+    SENSOR_ANALOG_INPUT_4: Sensor("Analog Input 4", UNIT_VOLT, 372, PdoType.TYPE_CN_UINT8, lambda x: x / 10),
     384: Sensor("sensor_384", None, 384, PdoType.TYPE_CN_INT16, lambda x: x / 10),
     386: Sensor("sensor_386", None, 386, PdoType.TYPE_CN_BOOL, bool),
     400: Sensor("sensor_400", None, 400, PdoType.TYPE_CN_INT16, lambda x: x / 10),
