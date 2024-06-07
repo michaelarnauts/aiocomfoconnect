@@ -15,10 +15,10 @@ nanopb = "^0.4.6"
 [tool.poetry.group.dev.dependencies]
 grpcio-tools = "^1.50.0"
 dpkt = "^1.9.8"
-black = "^22.10.0"
+black = "^24.4.0"
 isort = "^5.10.1"
-pylint = "^2.15.9"
-pytest = "^7.2.0"
+pylint = "^3.2"
+pytest = "^8.2.0"
 
 [build-system]
 requires = ["poetry-core"]
