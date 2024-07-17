@@ -67,8 +67,8 @@ class ComfoConnect(Bridge):
 
         # Emit the current cached values of the sensors, by now, they should have received a correct update.
         for sensor_id, _ in self._sensors.items():
-            if self._sensors_values[sensor_id] is not None:
-                self._sensor_callback(sensor_id, self._sensors_values[sensor_id])
+            if self._sensors_values.get(sensor_id) is not None:
+                self._sensor_callback(sensor_id, self._sensors_values.get(sensor_id))
 
     async def connect(self, uuid: str):
         """Connect to the bridge."""
