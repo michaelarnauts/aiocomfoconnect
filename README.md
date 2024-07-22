@@ -79,28 +79,6 @@ $ python -m aiocomfoconnect get-property --host 192.168.1.213 1 1 8 9  # Unit 0x
 - `async cmd_rpdo_request(pdid, type, zone, timeout)`: Send a RPDO request.
 - `async cmd_keepalive()`: Send a keepalive message.
 
-## Docker
-
-### Description
-Docker with aiocomfoconnect allow to experiment and develop on local machine using same image and same environment on any platform where we can run container.
-This allow us to skip some platform issues and work on similar things and python version by easly swapping them in Dockerfile.
-
-### Building
-
-Build the image command
-```
-make build
-```
-
-### Running
-Now after we build our images is called `aiocomfoconnect`
-
-To run aiocomfoconnect we can use bellow command in this case with `--help` arg.
-```
-docker run aiocomfoconnect --help
-```
-Any args from `aiocomfoconnect` can be passed into this image run just like for `python3 -m aiocomfoconnect` command in local build.
-
 ## Examples
 
 ### Discovery of ComfoConnect LAN C Bridges
@@ -187,3 +165,13 @@ pip3 install grpcio-tools
 python3 -m grpc_tools.protoc -Iprotobuf protobuf/nanopb.proto --python_out=aiocomfoconnect/protobuf
 python3 -m grpc_tools.protoc -Iprotobuf protobuf/zehnder.proto --python_out=aiocomfoconnect/protobuf
 ```
+
+### Docker
+
+You can build a Docker image to make it easier to develop and experiment on your local machine. You can use the `docker build -t aiocomfoconnect .` or the shortcut `make build` command to create a docker image.
+
+Next, you can run this image by running `docker run aiocomfoconnect`. Any args from `aiocomfoconnect` can be passed into this command, just like the `python3 -m aiocomfoconnect` command.
+
+## Interesting 3th party repositories
+
+* https://github.com/oysteing/comfoconnect-mqtt-bridge
