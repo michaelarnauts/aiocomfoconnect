@@ -2,7 +2,7 @@ syntax = "proto2";
 option java_package = "com.zehnder.proto";
 option optimize_for = SPEED;
 
-import "nanopb.proto";
+import "aiocomfoconnect/protobuf/nanopb.proto";
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Discovery messages
