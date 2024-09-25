@@ -161,9 +161,8 @@ $ python3 script/decode_pcap.py /tmp/capture.pcap
 ### Generate zehnder_pb2.py file
 
 ```shell
-pip3 install grpcio-tools
-python3 -m grpc_tools.protoc -Iprotobuf protobuf/nanopb.proto --python_out=aiocomfoconnect/protobuf
-python3 -m grpc_tools.protoc -Iprotobuf protobuf/zehnder.proto --python_out=aiocomfoconnect/protobuf
+python3 -m pip install grpcio-tools==1.62.3
+python3 -m grpc_tools.protoc -Iprotobuf --python_out=aiocomfoconnect/protobuf protobuf/*.proto
 ```
 
 ### Docker
