@@ -33,6 +33,7 @@ from aiocomfoconnect.const import (
 from aiocomfoconnect.exceptions import (
     AioComfoConnectNotConnected,
     AioComfoConnectTimeout,
+    ComfoConnectNotAllowed,
 )
 from aiocomfoconnect.properties import Property
 from aiocomfoconnect.sensors import Sensor
@@ -112,6 +113,11 @@ class ComfoConnect(Bridge):
                 except AioComfoConnectNotConnected:
                     # Reconnect when connection has been dropped
                     _LOGGER.info("We got disconnected. Reconnecting.")
+
+                except ComfoConnectNotAllowed as exception:
+                    # Passthrough exception if not allowed (because not registered uuid for example )
+                    connected.set_exception(exception)
+                    return
 
         reconnect_task = self._loop.create_task(_reconnect_loop())
         self._tasks.add(reconnect_task)
