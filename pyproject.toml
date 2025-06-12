@@ -9,10 +9,10 @@ homepage = "https://github.com/michaelarnauts/aiocomfoconnect"
 [tool.poetry.dependencies]
 python = "^3.10"
 aiohttp = "^3.8.0"
-protobuf = "^5.28"
+protobuf = "^6.31"
 
 [tool.poetry.group.dev.dependencies]
-grpcio-tools = "^1.67.1"
+grpcio-tools = "^1.73.0"
 dpkt = "^1.9.8"
 black = "^24.4.0"
 isort = "^5.10.1"
