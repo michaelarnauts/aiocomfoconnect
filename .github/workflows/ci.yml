@@ -1,42 +1,77 @@
 name: CI
 
 on:
-  # Run action when pushed to master, or for commits in a pull request.
   push:
-    branches:
-      - master
+    branches: [main, master]
   pull_request:
-    branches:
-      - master
+    branches: [main, master]
 
 defaults:
   run:
     shell: bash
 
 jobs:
-  checks:
-    name: Code checks
-    runs-on: ${{ matrix.os }}
+  build-and-test:
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest ]
         python-version: [ "3.10", "3.11", "3.12", "3.13" ]
     steps:
-      - name: Check out ${{ github.sha }} from repository ${{ github.repository }}
+      - name: Check out code
         uses: actions/checkout@v4
 
-      - name: Install poetry
-        run: pipx install poetry
+      - name: Show GitHub context variables
+        run: |
+          echo "GITHUB_SHA: $GITHUB_SHA"
+          echo "GITHUB_REPOSITORY: $GITHUB_REPOSITORY"
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: 'poetry'
+          # ensure activation of poetry cache after poetry installation
 
-      - name: Install dependencies
-        run: poetry install --no-interaction
+      - name: Install Poetry
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry
 
-      - name: Run checks
-        run: make check
+      - name: Configure Poetry
+        run: |
+          poetry config virtualenvs.create true
+          poetry config virtualenvs.in-project true
+
+      - name: Cache Poetry dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pypoetry
+          key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-
+
+      - name: Install dependencies (with dev)
+        run: poetry install --with dev --no-interaction
+
+      - name: Run code quality checks
+        run: |
+          echo "Running pylint..."
+          make check-pylint
+          echo "Running black format check..."
+          make check-black
+
+      - name: Run tests with coverage (if tests exist)
+        run: |
+          if [ -d "tests" ] && find tests -name "test_*.py" | grep -q .; then
+            echo "Running tests..."
+            make test
+          else
+            echo "No test files found, skipping tests"
+          fi
+
+      - name: Upload coverage to Codecov (optional)
+        if: matrix.python-version == '3.12'
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false

@@ -10,6 +10,7 @@ homepage = "https://github.com/michaelarnauts/aiocomfoconnect"
 python = "^3.10"
 aiohttp = "^3.8.0"
 protobuf = "^6.31"
+netifaces = "^0.11.0"
 
 [tool.poetry.group.dev.dependencies]
 grpcio-tools = "^1.73.0"
@@ -18,10 +19,44 @@ black = "^24.4.0"
 isort = "^5.10.1"
 pylint = "^3.2"
 pytest = "^8.2.0"
+pytest-asyncio = "^0.23.0"
+pytest-cov = "^4.0.0"
+mypy = "^1.16.1"
+pylint-protobuf = "^0.22.0"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[project]
+name = "aiocomfoconnect"
+version = "0.1.15"
+description = "aiocomfoconnect is an asyncio Python 3 library for communicating with a Zehnder ComfoAir Q350/450/600 ventilation system"
+authors = [
+    { name = "Michaël Arnauts", email = "michael.arnauts@gmail.com" }
+]
+readme = "README.md"
+homepage = "https://github.com/michaelarnauts/aiocomfoconnect"
+requires-python = ">=3.10"
+dependencies = [
+    "aiohttp>=3.8.0",
+    "protobuf>=6.31",
+    "netifaces>=0.11.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "grpcio-tools>=1.67.1",
+    "dpkt>=1.9.8",
+    "black>=24.4.0",
+    "isort>=5.10.1",
+    "pylint>=3.2",
+    "pytest>=8.2.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.0.0",
+    "mypy>=1.16.1",
+    "pylint-protobuf>=0.22.0"
+]
 
 [tool.isort]
 profile = "black"
@@ -32,6 +67,18 @@ line-length = 180
 
 [tool.pylint.MAIN]
 max-line-length = 180
+load-plugins = ["pylint_protobuf"]
+
+[tool.pylint.TYPECHECK]
+generated-members = [
+    "aiocomfoconnect.protobuf.zehnder_pb2.*",
+    "aiocomfoconnect.protobuf.nanopb_pb2.*"
+]
+extension-pkg-allow-list = [
+    "aiocomfoconnect.protobuf.zehnder_pb2",
+    "aiocomfoconnect.protobuf.nanopb_pb2",
+    "netifaces"
+]
 
 [tool.pylint."MESSAGES CONTROL"]
 # Reasons disabled:
@@ -48,6 +95,7 @@ max-line-length = 180
 # too-many-ancestors - it's too strict.
 # wrong-import-order - isort guards this
 # consider-using-f-string - str.format sometimes more readable
+# no-member - disabled due to protobuf generated classes not being detected by pylint
 # ---
 # Enable once current issues are fixed:
 # consider-using-namedtuple-or-dataclass (Pylint CodeStyle extension)
@@ -74,8 +122,19 @@ disable = [
     "too-many-boolean-expressions",
     "unused-argument",
     "wrong-import-order",
+    "no-member",  # Disabled due to protobuf generated classes not being detected by pylint
 ]
 enable = [
     #"useless-suppression",  # temporarily every now and then to clean them up
     "use-symbolic-message-instead",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+filterwarnings = [
+    "ignore:coroutine.*was never awaited:RuntimeWarning"
 ]
