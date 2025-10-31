@@ -13,6 +13,8 @@ from aiocomfoconnect.exceptions import (
 )
 from tests.conftest import create_sensor
 
+LOCAL_UUID = "00000000000000000000000000000001"
+
 
 class TestComfoConnect:
     """Test the ComfoConnect class."""
@@ -39,6 +41,7 @@ class TestComfoConnect:
         assert comfoconnect._sensors_values == {}
         assert comfoconnect._reconnect_task is None
         assert comfoconnect._is_stopping is False
+        assert comfoconnect._session_ready is None
 
     @pytest.mark.asyncio
     async def test_connect_success(self, comfoconnect, mock_connection):
@@ -64,6 +67,38 @@ class TestComfoConnect:
         await comfoconnect.disconnect()
 
     @pytest.mark.asyncio
+    async def test_connect_waits_for_session(self, comfoconnect, mock_connection):
+        """Ensure connect does not return until session start completes."""
+        mock_reader, mock_writer = mock_connection
+
+        start_called = asyncio.Event()
+        allow_start = asyncio.Event()
+
+        async def slow_start_session(*args, **kwargs):
+            start_called.set()
+            await allow_start.wait()
+
+        async def mock_read_messages():
+            try:
+                await asyncio.sleep(100)
+            except asyncio.CancelledError:
+                raise
+
+        with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
+            with patch.object(comfoconnect, "cmd_start_session", side_effect=slow_start_session):
+                with patch.object(comfoconnect, "_read_messages", side_effect=mock_read_messages):
+                    connect_task = asyncio.create_task(comfoconnect.connect(LOCAL_UUID))
+
+                    await start_called.wait()
+                    await asyncio.sleep(0)
+                    assert not connect_task.done()
+
+                    allow_start.set()
+                    await connect_task
+
+        await comfoconnect.disconnect()
+
+    @pytest.mark.asyncio
     async def test_connect_timeout(self, comfoconnect):
         """Test connection timeout on initial connect."""
         async def timeout_coro(*args, **kwargs):
@@ -71,7 +106,7 @@ class TestComfoConnect:
 
         with patch("asyncio.open_connection", side_effect=timeout_coro):
             with pytest.raises(AioComfoConnectTimeout, match="Failed to connect within 1 seconds"):
-                await comfoconnect.connect("local_uuid")
+                await comfoconnect.connect(LOCAL_UUID)
 
         assert comfoconnect._is_stopping
 
@@ -91,9 +126,8 @@ class TestComfoConnect:
                 with patch.object(comfoconnect, "_read_messages", return_value=None):
                     # The connect should try but fail with NotAllowed
                     # Since it's a fatal error, it won't keep retrying
-                    with pytest.raises(AioComfoConnectTimeout):
-                        # This will timeout because the connection never succeeds
-                        await comfoconnect.connect("local_uuid")
+                    with pytest.raises(ComfoConnectNotAllowed):
+                        await comfoconnect.connect(LOCAL_UUID)
 
     @pytest.mark.asyncio
     async def test_reconnect_on_disconnect(self, comfoconnect):
@@ -122,7 +156,7 @@ class TestComfoConnect:
         with patch("asyncio.open_connection", side_effect=mock_open_connection):
             with patch.object(comfoconnect, "cmd_start_session", AsyncMock()):
                 with patch.object(comfoconnect, "_read_messages", side_effect=mock_read_messages):
-                    await comfoconnect.connect("local_uuid")
+                    await comfoconnect.connect(LOCAL_UUID)
 
                     # Wait for reconnection
                     await asyncio.sleep(1.5)
@@ -144,11 +178,12 @@ class TestComfoConnect:
 
         with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
             with patch.object(comfoconnect, "cmd_start_session", AsyncMock()):
-                async def mock_read():
-                    await asyncio.sleep(100)
+                with patch.object(comfoconnect, "cmd_rpdo_request", AsyncMock()):
+                    async def mock_read():
+                        await asyncio.sleep(100)
 
-                with patch.object(comfoconnect, "_read_messages", side_effect=mock_read):
-                    await comfoconnect.connect("local_uuid")
+                    with patch.object(comfoconnect, "_read_messages", side_effect=mock_read):
+                        await comfoconnect.connect(LOCAL_UUID)
 
         assert comfoconnect.is_connected()
 
@@ -156,7 +191,7 @@ class TestComfoConnect:
 
         assert comfoconnect._is_stopping
         assert not comfoconnect.is_connected()
-        assert comfoconnect._reconnect_task.done()  # Should be done (either cancelled or finished)
+        assert comfoconnect._reconnect_task is None
 
     @pytest.mark.asyncio
     async def test_disconnect_when_not_connected(self, comfoconnect):
@@ -180,7 +215,7 @@ class TestComfoConnect:
                         await asyncio.sleep(100)
 
                     with patch.object(comfoconnect, "_read_messages", side_effect=mock_read):
-                        await comfoconnect.connect("local_uuid")
+                        await comfoconnect.connect(LOCAL_UUID)
 
                     sensor = create_sensor(name="test_sensor", sensor_id=276, sensor_type=1)
                     await comfoconnect.register_sensor(sensor)
@@ -209,7 +244,7 @@ class TestComfoConnect:
                         await asyncio.sleep(100)
 
                     with patch.object(comfoconnect, "_read_messages", side_effect=mock_read):
-                        await comfoconnect.connect("local_uuid")
+                        await comfoconnect.connect(LOCAL_UUID)
 
                     sensor = create_sensor(name="test_sensor", sensor_id=276, sensor_type=1)
                     await comfoconnect.register_sensor(sensor)
@@ -274,11 +309,12 @@ class TestComfoConnect:
 
         with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
             with patch.object(comfoconnect, "cmd_start_session", AsyncMock()):
-                async def mock_read():
-                    await asyncio.sleep(100)
+                with patch.object(comfoconnect, "_send", AsyncMock()):
+                    async def mock_read():
+                        await asyncio.sleep(100)
 
-                with patch.object(comfoconnect, "_read_messages", side_effect=mock_read):
-                    await comfoconnect.connect("local_uuid")
+                    with patch.object(comfoconnect, "_read_messages", side_effect=mock_read):
+                        await comfoconnect.connect(LOCAL_UUID)
 
         # Sensor hold should be active
         assert comfoconnect._sensor_hold is not None
@@ -354,7 +390,7 @@ class TestComfoConnect:
             with patch.object(comfoconnect, "cmd_start_session", AsyncMock()):
                 with patch.object(comfoconnect, "cmd_rpdo_request", side_effect=mock_rpdo):
                     with patch.object(comfoconnect, "_read_messages", side_effect=mock_read_messages):
-                        await comfoconnect.connect("local_uuid")
+                        await comfoconnect.connect(LOCAL_UUID)
 
                         # Wait for reconnection
                         await asyncio.sleep(1.5)
@@ -381,10 +417,10 @@ class TestComfoConnect:
                     await asyncio.sleep(100)
 
                 with patch.object(comfoconnect, "_read_messages", side_effect=mock_read):
-                    await comfoconnect.connect("local_uuid")
+                    await comfoconnect.connect(LOCAL_UUID)
 
         # Try to connect again - should do nothing
-        await comfoconnect.connect("local_uuid")
+        await comfoconnect.connect(LOCAL_UUID)
 
         # Clean up
         await comfoconnect.disconnect()
@@ -400,7 +436,7 @@ class TestComfoConnect:
 
         with patch("asyncio.open_connection", side_effect=mock_open_connection):
             try:
-                await comfoconnect.connect("local_uuid")
+                await comfoconnect.connect(LOCAL_UUID)
             except AioComfoConnectTimeout:
                 pass
 

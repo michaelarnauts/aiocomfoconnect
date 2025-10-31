@@ -61,6 +61,7 @@ class ComfoConnect(Bridge):
 
         self._reconnect_task: Optional[asyncio.Task] = None
         self._is_stopping = False
+        self._session_ready: Optional[asyncio.Future] = None
 
     def _unhold_sensors(self):
         """Unhold the sensors."""
@@ -83,21 +84,35 @@ class ComfoConnect(Bridge):
             self._loop = asyncio.get_running_loop()
 
         self._is_stopping = False
+        if self._session_ready and not self._session_ready.done():
+            self._session_ready.cancel()
+        self._session_ready = self._loop.create_future()
         self._reconnect_task = self._loop.create_task(self._reconnect_loop(uuid))
 
-        # Wait for the first successful connection
         try:
-            await asyncio.wait_for(self._wait_for_connection(), timeout=self.connect_timeout)
+            await asyncio.wait_for(self._session_ready, timeout=self.connect_timeout)
         except asyncio.TimeoutError as exc:
             self._is_stopping = True
-            if self._reconnect_task:
+            if self._reconnect_task and not self._reconnect_task.done():
                 self._reconnect_task.cancel()
+                try:
+                    await self._reconnect_task
+                except asyncio.CancelledError:
+                    pass
+            if self._session_ready and not self._session_ready.done():
+                self._session_ready.set_exception(AioComfoConnectTimeout(f"Failed to connect within {self.connect_timeout} seconds"))
+            self._reconnect_task = None
             raise AioComfoConnectTimeout(f"Failed to connect within {self.connect_timeout} seconds") from exc
-
-    async def _wait_for_connection(self):
-        """Wait until we're connected."""
-        while not self.is_connected() and not self._is_stopping:
-            await asyncio.sleep(0.1)
+        except Exception as exc:
+            self._is_stopping = True
+            if self._reconnect_task and not self._reconnect_task.done():
+                self._reconnect_task.cancel()
+                try:
+                    await self._reconnect_task
+                except asyncio.CancelledError:
+                    pass
+            self._reconnect_task = None
+            raise
 
     async def _reconnect_loop(self, uuid: str):
         """Reconnection loop that maintains connection to the bridge."""
@@ -121,6 +136,9 @@ class ComfoConnect(Bridge):
                 for sensor in self._sensors.values():
                     await self.cmd_rpdo_request(sensor.id, sensor.type)
 
+                if self._session_ready and not self._session_ready.done():
+                    self._session_ready.set_result(True)
+
                 # Wait for the read task to finish (it will raise an exception on disconnect)
                 await self._read_task
 
@@ -130,6 +148,8 @@ class ComfoConnect(Bridge):
 
             except ComfoConnectNotAllowed as exc:
                 _LOGGER.error("Not allowed to connect (not registered?): %s", exc)
+                if self._session_ready and not self._session_ready.done():
+                    self._session_ready.set_exception(exc)
                 break
 
             except AioComfoConnectTimeout:
@@ -150,6 +170,8 @@ class ComfoConnect(Bridge):
                     await super().disconnect()
 
         _LOGGER.info("Reconnect loop stopped")
+        if self._session_ready and not self._session_ready.done():
+            self._session_ready.set_exception(AioComfoConnectNotConnected("Reconnect loop stopped"))
 
     async def disconnect(self):
         """Disconnect from the bridge and stop reconnection."""
@@ -171,6 +193,8 @@ class ComfoConnect(Bridge):
 
         # Disconnect from bridge
         await super().disconnect()
+        self._reconnect_task = None
+        self._session_ready = None
 
     async def register_sensor(self, sensor: Sensor):
         """Register a sensor on the bridge."""

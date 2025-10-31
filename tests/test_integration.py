@@ -11,6 +11,8 @@ from aiocomfoconnect.comfoconnect import ComfoConnect
 from aiocomfoconnect.exceptions import AioComfoConnectNotConnected
 from tests.conftest import create_sensor
 
+LOCAL_UUID = "00000000000000000000000000000001"
+
 
 class MockBridge:
     """Mock bridge for testing complete scenarios."""
@@ -51,7 +53,7 @@ class TestIntegrationScenarios:
         with patch("asyncio.open_connection", side_effect=mock.open_connection):
             with patch.object(bridge, "_read_messages", new=AsyncMock(side_effect=mock.read_messages_impl)):
                 # Connect
-                await bridge.connect("local_uuid")
+                await bridge.connect(LOCAL_UUID)
                 assert bridge.is_connected()
                 assert mock.connection_count == 1
 
@@ -78,7 +80,7 @@ class TestIntegrationScenarios:
             with patch.object(cc, "cmd_start_session", AsyncMock()):
                 with patch.object(cc, "_read_messages", new=AsyncMock(side_effect=mock.read_messages_impl)):
                     # Connect
-                    await cc.connect("local_uuid")
+                    await cc.connect(LOCAL_UUID)
                     assert cc.is_connected()
 
                     # Wait for disconnect and reconnect
@@ -115,7 +117,7 @@ async def test_sensor_registration():
             with patch.object(cc, "cmd_rpdo_request", side_effect=mock_rpdo):
                 with patch.object(cc, "_read_messages", new=AsyncMock(side_effect=mock.read_messages_impl)):
                     # Connect
-                    await cc.connect("local_uuid")
+                    await cc.connect(LOCAL_UUID)
 
                     # Register sensors
                     await cc.register_sensor(sensor1)
@@ -160,7 +162,7 @@ async def test_sensor_callbacks_work():
             with patch.object(cc, "cmd_rpdo_request", AsyncMock()):
                 with patch.object(cc, "_read_messages", new=AsyncMock(side_effect=mock.read_messages_impl)):
                     # Connect
-                    await cc.connect("local_uuid")
+                    await cc.connect(LOCAL_UUID)
 
                     # Register sensor
                     sensor = create_sensor(name="temp", sensor_id=276, sensor_type=1)
@@ -197,7 +199,7 @@ async def test_alarm_callbacks_work():
         with patch.object(cc, "cmd_start_session", AsyncMock()):
             with patch.object(cc, "_read_messages", new=AsyncMock(side_effect=mock.read_messages_impl)):
                 # Connect
-                await cc.connect("local_uuid")
+                await cc.connect(LOCAL_UUID)
 
                 # Simulate alarm
                 mock_alarm = Mock()
@@ -232,7 +234,7 @@ async def test_graceful_shutdown():
         with patch.object(cc, "cmd_start_session", AsyncMock()):
             with patch.object(cc, "_read_messages", new=AsyncMock(side_effect=mock.read_messages_impl)):
                 # Connect
-                await cc.connect("local_uuid")
+                await cc.connect(LOCAL_UUID)
                 assert cc.is_connected()
 
                 initial_count = mock.connection_count
@@ -264,7 +266,7 @@ async def test_concurrent_operations():
         with patch.object(cc, "cmd_start_session", AsyncMock()):
             with patch.object(cc, "_read_messages", new=AsyncMock(side_effect=mock.read_messages_impl)):
                 # Connect
-                await cc.connect("local_uuid")
+                await cc.connect(LOCAL_UUID)
 
                 # Register multiple sensors concurrently
                 with patch.object(cc, "cmd_rpdo_request", AsyncMock()):
@@ -309,7 +311,7 @@ async def test_stress_reconnection():
         with patch.object(cc, "cmd_start_session", AsyncMock()):
             with patch.object(cc, "_read_messages", side_effect=quick_disconnect):
                 # Connect
-                await cc.connect("local_uuid")
+                await cc.connect(LOCAL_UUID)
 
                 # Wait for multiple reconnections
                 await asyncio.sleep(2.5)

@@ -63,6 +63,16 @@ class EventBus:
             else:
                 future.set_result(event)
 
+    def fail_all(self, exc: Exception):
+        """Fail all pending listeners with the provided exception."""
+        pending = list(self._listeners.values())
+        self._listeners.clear()
+        for futures in pending:
+            for future in futures:
+                if future.done():
+                    continue
+                future.set_exception(exc)
+
 
 class Bridge:
     """ComfoConnect LAN C API."""
@@ -84,7 +94,8 @@ class Bridge:
         self.__alarm_callback_fn: Optional[Callable[[int, ProtobufMessage], None]] = None
 
         self._loop: Optional[asyncio.AbstractEventLoop] = loop
-        self._read_task: Optional[asyncio.Task] = None
+        self._read_task = None
+        self._send_lock = None
 
     def __repr__(self):
         return f"<Bridge {self.host}, UID={self.uuid}>"
@@ -119,6 +130,7 @@ class Bridge:
         self._reference = 1
         self._local_uuid = uuid
         self._event_bus = EventBus()
+        self._send_lock = asyncio.Lock()
 
         # Start background task to read messages
         self._read_task = self._loop.create_task(self._read_messages())
@@ -132,12 +144,20 @@ class Bridge:
         except asyncio.CancelledError:
             _LOGGER.debug("Message reading cancelled")
             raise
-        except AioComfoConnectNotConnected:
+        except AioComfoConnectNotConnected as exc:
             _LOGGER.info("Disconnected from bridge")
+            self._notify_pending_futures(exc)
             raise
         except Exception as exc:
             _LOGGER.error("Unexpected error reading messages: %s", exc, exc_info=True)
+            self._notify_pending_futures(AioComfoConnectNotConnected("Unexpected error during read"))
             raise
+
+    def _notify_pending_futures(self, exc: Exception):
+        """Fail all pending listeners so callers do not hang."""
+        if self._event_bus is None:
+            return
+        self._event_bus.fail_all(exc)
 
     async def disconnect(self):
         """Disconnect from the bridge."""
@@ -154,6 +174,8 @@ class Bridge:
             except asyncio.CancelledError:
                 pass
 
+        self._notify_pending_futures(AioComfoConnectNotConnected("Disconnected"))
+
         # Close the connection
         if self._writer:
             self._writer.close()
@@ -165,6 +187,7 @@ class Bridge:
         self._read_task = None
         self._event_bus = None
         self._reference = None
+        self._send_lock = None
 
     def is_connected(self) -> bool:
         """Returns True if the bridge is connected."""
@@ -172,50 +195,61 @@ class Bridge:
 
     async def _send(self, request, request_type, params: dict = None, reply: bool = True, timeout: float = None) -> Message:
         """Sends a command and wait for a response if the request is known to return a result."""
-        # Check if we are actually connected
         if not self.is_connected():
             raise AioComfoConnectNotConnected("Not connected to bridge")
 
-        # Use default timeout if not specified
         if timeout is None:
             timeout = TIMEOUT
 
-        # Construct the message
-        cmd = zehnder_pb2.GatewayOperation()  # pylint: disable=no-member
-        cmd.type = request_type
-        cmd.reference = self._reference
-
-        msg = request()
-        if params is not None:
-            for param in params:
-                if params[param] is not None:
-                    setattr(msg, param, params[param])
-
-        message = Message(cmd, msg, self._local_uuid, self.uuid)
-
-        # Create the future that will contain the response
         if self._loop is None:
             self._loop = asyncio.get_running_loop()
 
-        fut = self._loop.create_future()
-        if reply:
-            if self._event_bus is None:
-                raise RuntimeError("Event bus is not initialized")
-            self._event_bus.add_listener(self._reference, fut)
-        else:
-            fut.set_result(None)
+        if self._send_lock is None:
+            # TODO(stability): revisit this once message pipelining is supported safely.
+            self._send_lock = asyncio.Lock()
 
-        # Send the message
-        _LOGGER.debug("TX %s", message)
-        try:
-            self._writer.write(message.encode())
-            await self._writer.drain()
-        except (ConnectionError, OSError) as exc:
-            _LOGGER.warning("Failed to send message: %s", exc)
-            raise AioComfoConnectNotConnected("Connection lost while sending") from exc
+        fut: Optional[asyncio.Future] = None
 
-        # Increase message reference for next message
-        self._reference += 1
+        async with self._send_lock:
+            if not self.is_connected() or self._writer is None or self._reference is None:
+                raise AioComfoConnectNotConnected("Not connected to bridge")
+
+            cmd = zehnder_pb2.GatewayOperation()  # pylint: disable=no-member
+            cmd.type = request_type
+            cmd.reference = self._reference
+
+            msg = request()
+            if params is not None:
+                for param, value in params.items():
+                    if value is not None:
+                        setattr(msg, param, value)
+
+            message = Message(cmd, msg, self._local_uuid, self.uuid)
+
+            fut = self._loop.create_future()
+            if reply:
+                if self._event_bus is None:
+                    raise RuntimeError("Event bus is not initialized")
+                self._event_bus.add_listener(self._reference, fut)
+            else:
+                fut.set_result(None)
+
+            _LOGGER.debug("TX %s", message)
+            try:
+                self._writer.write(message.encode())
+                await self._writer.drain()
+            except (ConnectionError, OSError) as exc:
+                send_exc = AioComfoConnectNotConnected("Connection lost while sending")
+                _LOGGER.warning("Failed to send message: %s", exc)
+                if reply and self._event_bus is not None:
+                    self._event_bus.emit(cmd.reference, send_exc)
+                elif fut is not None and not fut.done():
+                    fut.set_exception(send_exc)
+                raise send_exc from exc
+
+            self._reference += 1
+
+        assert fut is not None
 
         try:
             return await asyncio.wait_for(fut, timeout)
@@ -296,11 +330,15 @@ class Bridge:
 
         except asyncio.IncompleteReadError as exc:
             _LOGGER.info("The connection was closed.")
-            raise AioComfoConnectNotConnected("The connection was closed.") from exc
+            disconnect_exc = AioComfoConnectNotConnected("The connection was closed.")
+            self._notify_pending_futures(disconnect_exc)
+            raise disconnect_exc from exc
 
         except (ConnectionError, OSError) as exc:
             _LOGGER.info("Connection error: %s", exc)
-            raise AioComfoConnectNotConnected("Connection error") from exc
+            disconnect_exc = AioComfoConnectNotConnected("Connection error")
+            self._notify_pending_futures(disconnect_exc)
+            raise disconnect_exc from exc
 
         except ComfoConnectError as exc:
             if exc.message.cmd.reference and self._event_bus:

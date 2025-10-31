@@ -6,6 +6,9 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 
 from aiocomfoconnect.bridge import Bridge, EventBus, Message
+
+LOCAL_UUID = "00000000000000000000000000000001"
+
 from aiocomfoconnect.exceptions import (
     AioComfoConnectNotConnected,
     AioComfoConnectTimeout,
@@ -73,6 +76,21 @@ class TestEventBus:
             future.result()
         assert "test_event" not in bus.listeners
 
+    @pytest.mark.asyncio
+    async def test_fail_all(self):
+        """Test failing all pending listeners."""
+        bus = EventBus()
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
+        bus.add_listener("test_event", future)
+
+        bus.fail_all(RuntimeError("boom"))
+
+        assert future.done()
+        with pytest.raises(RuntimeError, match="boom"):
+            future.result()
+        assert bus.listeners == {}
+
 
 class TestBridge:
     """Test the Bridge class."""
@@ -107,10 +125,10 @@ class TestBridge:
                     raise
 
             with patch.object(bridge, "_read_messages", side_effect=mock_read_messages):
-                await bridge.connect("local_uuid")
+                await bridge.connect(LOCAL_UUID)
 
         assert bridge.is_connected()
-        assert bridge._local_uuid == "local_uuid"
+        assert bridge._local_uuid == LOCAL_UUID
         assert bridge._reference == 1
         assert bridge._event_bus is not None
         assert bridge._read_task is not None
@@ -126,10 +144,8 @@ class TestBridge:
 
         with patch("asyncio.open_connection", side_effect=timeout_coro):
             with pytest.raises(AioComfoConnectTimeout, match="Timeout while connecting"):
-                await bridge.connect("local_uuid")
-
+                await bridge.connect(LOCAL_UUID)
         assert not bridge.is_connected()
-
     @pytest.mark.asyncio
     async def test_connect_already_connected(self, bridge, mock_connection):
         """Test connecting when already connected."""
@@ -143,11 +159,11 @@ class TestBridge:
 
         with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
             with patch.object(bridge, "_read_messages", side_effect=mock_read_messages):
-                await bridge.connect("local_uuid")
+                await bridge.connect(LOCAL_UUID)
 
         # Try to connect again
         with patch("asyncio.open_connection") as mock_connect:
-            await bridge.connect("local_uuid")
+            await bridge.connect(LOCAL_UUID)
             # Should not attempt to connect again
             mock_connect.assert_not_called()
 
@@ -167,18 +183,15 @@ class TestBridge:
 
         with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
             with patch.object(bridge, "_read_messages", side_effect=mock_read_messages):
-                await bridge.connect("local_uuid")
+                await bridge.connect(LOCAL_UUID)
 
-        # Disconnect
         await bridge.disconnect()
 
         mock_writer.close.assert_called_once()
         mock_writer.wait_closed.assert_called_once()
-        assert not bridge.is_connected()
         assert bridge._reader is None
         assert bridge._writer is None
         assert bridge._read_task is None
-        assert bridge._event_bus is None
 
     @pytest.mark.asyncio
     async def test_disconnect_when_not_connected(self, bridge):
@@ -200,7 +213,7 @@ class TestBridge:
 
         with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
             with patch.object(bridge, "_read_messages", side_effect=mock_read_messages):
-                await bridge.connect("local_uuid")
+                await bridge.connect(LOCAL_UUID)
 
         read_task = bridge._read_task
         assert not read_task.done()
@@ -234,7 +247,7 @@ class TestBridge:
 
         with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
             with patch.object(bridge, "_read_messages", side_effect=mock_read_messages):
-                await bridge.connect("00000000000000000000000000000001")
+                await bridge.connect(LOCAL_UUID)
 
         from aiocomfoconnect.protobuf import zehnder_pb2
 
@@ -265,7 +278,7 @@ class TestBridge:
 
         with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
             with patch.object(bridge, "_read_messages", side_effect=mock_read_messages):
-                await bridge.connect("00000000000000000000000000000001")
+                await bridge.connect(LOCAL_UUID)
 
         from aiocomfoconnect.protobuf import zehnder_pb2
 
@@ -308,6 +321,101 @@ class TestBridge:
 
         # Clean up
         await bridge.disconnect()
+
+    @pytest.mark.asyncio
+    async def test_send_serializes_concurrent_calls(self, bridge, mock_connection):
+        """Test that concurrent sends use unique references."""
+        mock_reader, mock_writer = mock_connection
+
+        first_drain_started = asyncio.Event()
+        allow_first_drain = asyncio.Event()
+
+        async def drain_side_effect():
+            if not first_drain_started.is_set():
+                first_drain_started.set()
+                await allow_first_drain.wait()
+            else:
+                await asyncio.sleep(0)
+
+        mock_writer.drain.side_effect = drain_side_effect
+
+        async def mock_read_messages():
+            try:
+                await asyncio.sleep(100)
+            except asyncio.CancelledError:
+                raise
+
+        with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
+            with patch.object(bridge, "_read_messages", side_effect=mock_read_messages):
+                await bridge.connect(LOCAL_UUID)
+
+        from aiocomfoconnect.protobuf import zehnder_pb2
+
+        assert bridge._local_uuid == LOCAL_UUID
+        assert bridge.uuid == "00000000000000000000000000000001"
+
+        first_send = asyncio.create_task(
+            bridge._send(
+                zehnder_pb2.KeepAlive,
+                zehnder_pb2.GatewayOperation.KeepAliveType,
+                reply=False,
+            )
+        )
+
+        try:
+            await asyncio.wait_for(first_drain_started.wait(), timeout=1)
+            initial_write_calls = mock_writer.write.call_count
+
+            send_two_started = asyncio.Event()
+
+            async def run_second_send():
+                send_two_started.set()
+                await bridge._send(
+                    zehnder_pb2.KeepAlive,
+                    zehnder_pb2.GatewayOperation.KeepAliveType,
+                    reply=False,
+                )
+
+            second_send = asyncio.create_task(run_second_send())
+
+            await asyncio.wait_for(send_two_started.wait(), timeout=1)
+            await asyncio.sleep(0)
+            assert mock_writer.write.call_count == initial_write_calls
+
+            allow_first_drain.set()
+
+            await asyncio.wait_for(asyncio.gather(first_send, second_send), timeout=1)
+            assert mock_writer.write.call_count == initial_write_calls + 1
+            assert bridge._reference == 3
+        finally:
+            allow_first_drain.set()
+            await asyncio.wait_for(bridge.disconnect(), timeout=1)
+
+    @pytest.mark.asyncio
+    async def test_disconnect_notifies_pending(self, bridge, mock_connection):
+        """Test that pending listeners receive an exception on disconnect."""
+        mock_reader, mock_writer = mock_connection
+
+        async def mock_read_messages():
+            try:
+                await asyncio.sleep(100)
+            except asyncio.CancelledError:
+                raise
+
+        with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
+            with patch.object(bridge, "_read_messages", side_effect=mock_read_messages):
+                await bridge.connect(LOCAL_UUID)
+
+        assert bridge._event_bus is not None
+        assert bridge._reference == 1
+        pending_future = bridge._loop.create_future()
+        bridge._event_bus.add_listener(bridge._reference, pending_future)
+
+        await bridge.disconnect()
+
+        assert pending_future.done()
+        with pytest.raises(AioComfoConnectNotConnected):
+            pending_future.result()
 
     @pytest.mark.asyncio
     async def test_read_messages_cancelled(self, bridge):

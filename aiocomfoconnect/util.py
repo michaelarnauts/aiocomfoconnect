@@ -131,7 +131,7 @@ def encode_pdo_value(value: int, pdo_type: PdoType) -> bytes:
     """Encode a PDO value to the raw equivalent."""
     match pdo_type:
         case PdoType.TYPE_CN_BOOL:
-            return bool(value).to_bytes()
+            return b"\x01" if bool(value) else b"\x00"
         case PdoType.TYPE_CN_UINT8 | PdoType.TYPE_CN_UINT16 | PdoType.TYPE_CN_UINT32:
             signed = False
         case PdoType.TYPE_CN_INT8 | PdoType.TYPE_CN_INT16 | PdoType.TYPE_CN_INT64:
