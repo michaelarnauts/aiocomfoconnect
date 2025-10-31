@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from asyncio import Future
-from typing import Callable, Dict, List, Literal
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
 
 from aiocomfoconnect import Bridge
 from aiocomfoconnect.const import (
@@ -45,21 +44,23 @@ _LOGGER = logging.getLogger(__name__)
 class ComfoConnect(Bridge):
     """Abstraction layer over the ComfoConnect LAN C API."""
 
-    def __init__(self, host: str, uuid: str, loop=None, sensor_callback=None, alarm_callback=None, sensor_delay=2):
+    def __init__(self, host: str, uuid: str, loop=None, sensor_callback=None, alarm_callback=None, sensor_delay=2, connect_timeout=30):
         """Initialize the ComfoConnect class."""
         super().__init__(host, uuid, loop)
 
         self.set_sensor_callback(self._sensor_callback)  # Set the callback to our _sensor_callback method, so we can proces the callbacks.
         self.set_alarm_callback(self._alarm_callback)  # Set the callback to our _alarm_callback method, so we can proces the callbacks.
         self.sensor_delay = sensor_delay
+        self.connect_timeout = connect_timeout
 
-        self._sensor_callback_fn: Callable = sensor_callback
-        self._alarm_callback_fn: Callable = alarm_callback
+        self._sensor_callback_fn: Optional[Callable[[Sensor, Any], None]] = sensor_callback
+        self._alarm_callback_fn: Optional[Callable[[int, Dict[int, str]], None]] = alarm_callback
         self._sensors: Dict[int, Sensor] = {}
-        self._sensors_values: Dict[int, any] = {}
-        self._sensor_hold = None
+        self._sensors_values: Dict[int, Any] = {}
+        self._sensor_hold: Optional[asyncio.Handle] = None
 
-        self._tasks = set()
+        self._reconnect_task: Optional[asyncio.Task] = None
+        self._is_stopping = False
 
     def _unhold_sensors(self):
         """Unhold the sensors."""
@@ -72,62 +73,104 @@ class ComfoConnect(Bridge):
                 self._sensor_callback(sensor_id, self._sensors_values.get(sensor_id))
 
     async def connect(self, uuid: str):
-        """Connect to the bridge."""
-        connected: Future = Future()
+        """Connect to the bridge with automatic reconnection."""
+        if self._reconnect_task and not self._reconnect_task.done():
+            _LOGGER.warning("Already connected or connecting")
+            return
 
-        async def _reconnect_loop():
-            while True:
-                try:
-                    # Connect to the bridge
-                    read_task = await self._connect(uuid)
+        # Get the running loop if not provided
+        if self._loop is None:
+            self._loop = asyncio.get_running_loop()
 
-                    # Start session
-                    await self.cmd_start_session(True)
+        self._is_stopping = False
+        self._reconnect_task = self._loop.create_task(self._reconnect_loop(uuid))
 
-                    # Wait for a specified amount of seconds to buffer sensor values.
-                    # This is to work around a bug where the bridge sends invalid sensor values when connecting.
-                    if self.sensor_delay:
-                        _LOGGER.debug("Holding sensors for %s second(s)", self.sensor_delay)
-                        self._sensors_values = {}
-                        self._sensor_hold = self._loop.call_later(self.sensor_delay, self._unhold_sensors)
+        # Wait for the first successful connection
+        try:
+            await asyncio.wait_for(self._wait_for_connection(), timeout=self.connect_timeout)
+        except asyncio.TimeoutError as exc:
+            self._is_stopping = True
+            if self._reconnect_task:
+                self._reconnect_task.cancel()
+            raise AioComfoConnectTimeout(f"Failed to connect within {self.connect_timeout} seconds") from exc
 
-                    # Register the sensors again (in case we lost the connection)
-                    for sensor in self._sensors.values():
-                        await self.cmd_rpdo_request(sensor.id, sensor.type)
+    async def _wait_for_connection(self):
+        """Wait until we're connected."""
+        while not self.is_connected() and not self._is_stopping:
+            await asyncio.sleep(0.1)
 
-                    if not connected.done():
-                        connected.set_result(True)
+    async def _reconnect_loop(self, uuid: str):
+        """Reconnection loop that maintains connection to the bridge."""
+        while not self._is_stopping:
+            try:
+                # Connect to the bridge
+                await super().connect(uuid)
+                _LOGGER.info("Connected to bridge %s", self.host)
 
-                    # Wait for the read task to finish or throw an exception
-                    await read_task
+                # Start session
+                await self.cmd_start_session(True)
 
-                    if read_task.result() is False:
-                        # We are shutting down.
-                        return
+                # Wait for a specified amount of seconds to buffer sensor values.
+                # This is to work around a bug where the bridge sends invalid sensor values when connecting.
+                if self.sensor_delay:
+                    _LOGGER.debug("Holding sensors for %s second(s)", self.sensor_delay)
+                    self._sensors_values = {}
+                    self._sensor_hold = self._loop.call_later(self.sensor_delay, self._unhold_sensors)
 
-                except AioComfoConnectTimeout:
-                    # Reconnect after 5 seconds when we could not connect
-                    _LOGGER.info("Could not reconnect. Retrying after 5 seconds.")
-                    await asyncio.sleep(5)
+                # Register the sensors again (in case we lost the connection)
+                for sensor in self._sensors.values():
+                    await self.cmd_rpdo_request(sensor.id, sensor.type)
 
-                except AioComfoConnectNotConnected:
-                    # Reconnect when connection has been dropped
-                    _LOGGER.info("We got disconnected. Reconnecting.")
+                # Wait for the read task to finish (it will raise an exception on disconnect)
+                await self._read_task
 
-                except ComfoConnectNotAllowed as exception:
-                    # Passthrough exception if not allowed (because not registered uuid for example )
-                    connected.set_exception(exception)
-                    return
+            except asyncio.CancelledError:
+                _LOGGER.debug("Reconnect loop cancelled")
+                break
 
-        reconnect_task = self._loop.create_task(_reconnect_loop())
-        self._tasks.add(reconnect_task)
-        reconnect_task.add_done_callback(self._tasks.discard)
+            except ComfoConnectNotAllowed as exc:
+                _LOGGER.error("Not allowed to connect (not registered?): %s", exc)
+                break
 
-        await connected
+            except AioComfoConnectTimeout:
+                _LOGGER.warning("Connection timeout, retrying in 5 seconds...")
+                await asyncio.sleep(5)
+
+            except AioComfoConnectNotConnected:
+                _LOGGER.info("Disconnected from bridge, reconnecting...")
+                await asyncio.sleep(1)
+
+            except Exception as exc:
+                _LOGGER.error("Unexpected error in reconnect loop: %s", exc, exc_info=True)
+                await asyncio.sleep(5)
+
+            finally:
+                # Ensure we're properly disconnected before reconnecting
+                if self.is_connected():
+                    await super().disconnect()
+
+        _LOGGER.info("Reconnect loop stopped")
 
     async def disconnect(self):
-        """Disconnect from the bridge."""
-        await self._disconnect()
+        """Disconnect from the bridge and stop reconnection."""
+        _LOGGER.debug("Stopping reconnection and disconnecting")
+        self._is_stopping = True
+
+        # Cancel sensor hold timer
+        if self._sensor_hold:
+            self._sensor_hold.cancel()
+            self._sensor_hold = None
+
+        # Stop reconnection loop
+        if self._reconnect_task and not self._reconnect_task.done():
+            self._reconnect_task.cancel()
+            try:
+                await self._reconnect_task
+            except asyncio.CancelledError:
+                pass
+
+        # Disconnect from bridge
+        await super().disconnect()
 
     async def register_sensor(self, sensor: Sensor):
         """Register a sensor on the bridge."""
@@ -141,11 +184,11 @@ class ComfoConnect(Bridge):
         del self._sensors[sensor.id]
         del self._sensors_values[sensor.id]
 
-    async def get_property(self, prop: Property, node_id=1) -> any:
+    async def get_property(self, prop: Property, node_id=1) -> Any:
         """Get a property and convert to the right type."""
         return await self.get_single_property(prop.unit, prop.subunit, prop.property_id, prop.property_type, node_id=node_id)
 
-    async def get_single_property(self, unit: int, subunit: int, property_id: int, property_type: int = None, node_id=1) -> any:
+    async def get_single_property(self, unit: int, subunit: int, property_id: int, property_type: int = None, node_id=1) -> Any:
         """Get a property and convert to the right type."""
         result = await self.cmd_rmi_request(bytes([0x01, unit, subunit, 0x10, property_id]), node_id=node_id)
 
@@ -155,24 +198,24 @@ class ComfoConnect(Bridge):
             return int.from_bytes(result.message, byteorder="little", signed=True)
         if property_type in [PdoType.TYPE_CN_UINT8, PdoType.TYPE_CN_UINT16, PdoType.TYPE_CN_UINT32]:
             return int.from_bytes(result.message, byteorder="little", signed=False)
-        if property_type in [PdoType.TYPE_CN_BOOL]:
-            return result.message[0] == 1
+        if property_type == PdoType.TYPE_CN_BOOL:
+            return bool(result.message[0])
 
         return result.message
 
-    async def get_multiple_properties(self, unit: int, subunit: int, property_ids: List[int], node_id=1) -> any:
+    async def get_multiple_properties(self, unit: int, subunit: int, property_ids: List[int], node_id=1) -> Any:
         """Get multiple properties."""
         result = await self.cmd_rmi_request(bytestring([0x02, unit, subunit, 0x01, 0x10 | len(property_ids), bytes(property_ids)]), node_id=node_id)
 
         return result.message
 
-    async def set_property(self, unit: int, subunit: int, property_id: int, value: int, node_id=1) -> any:
+    async def set_property(self, unit: int, subunit: int, property_id: int, value: int, node_id=1) -> Any:
         """Set a property."""
         result = await self.cmd_rmi_request(bytes([0x03, unit, subunit, property_id, value]), node_id=node_id)
 
         return result.message
 
-    async def set_property_typed(self, unit: int, subunit: int, property_id: int, value: int, pdo_type: PdoType, node_id=1) -> any:
+    async def set_property_typed(self, unit: int, subunit: int, property_id: int, value: int, pdo_type: PdoType, node_id=1) -> Any:
         """Set a typed property."""
         value_bytes = encode_pdo_value(value, pdo_type)
         message_bytes = bytes([0x03, unit, subunit, property_id]) + value_bytes

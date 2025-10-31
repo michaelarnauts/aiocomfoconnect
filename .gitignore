@@ -1,5 +1,5 @@
-*.py
 .idea/
+.vscode/
 __pycache__
 dist/
 script/*.pcap
