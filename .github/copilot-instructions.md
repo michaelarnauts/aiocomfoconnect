@@ -1,1 +1,0 @@
-* This project uses poetry to manage dependencies. When running commands, use `poetry run <command>` to ensure the correct environment is used.
