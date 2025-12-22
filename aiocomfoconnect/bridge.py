@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import itertools
 import logging
 import struct
 from asyncio import StreamReader, StreamWriter
-from typing import Awaitable, Callable, Dict, Optional, Set
+from typing import Awaitable, Callable, Dict, Iterator, Optional, Set
 
 from google.protobuf.message import DecodeError
 from google.protobuf.message import Message as ProtobufMessage
@@ -86,7 +87,7 @@ class Bridge:
 
         self._reader: Optional[StreamReader] = None
         self._writer: Optional[StreamWriter] = None
-        self._reference: Optional[int] = None
+        self._reference: Optional[Iterator[int]] = None
 
         self._event_bus: Optional[EventBus] = None
 
@@ -95,7 +96,6 @@ class Bridge:
 
         self._loop: Optional[asyncio.AbstractEventLoop] = loop
         self._read_task = None
-        self._send_lock = None
 
     def __repr__(self):
         return f"<Bridge {self.host}, UID={self.uuid}>"
@@ -120,17 +120,14 @@ class Bridge:
 
         _LOGGER.debug("Connecting to bridge %s", self.host)
         try:
-            self._reader, self._writer = await asyncio.wait_for(
-                asyncio.open_connection(self.host, self.PORT), TIMEOUT
-            )
+            self._reader, self._writer = await asyncio.wait_for(asyncio.open_connection(self.host, self.PORT), TIMEOUT)
         except asyncio.TimeoutError as exc:
             _LOGGER.warning("Timeout while connecting to bridge %s", self.host)
             raise AioComfoConnectTimeout("Timeout while connecting to bridge") from exc
 
-        self._reference = 1
+        self._reference = itertools.count(1)
         self._local_uuid = uuid
         self._event_bus = EventBus()
-        self._send_lock = asyncio.Lock()
 
         # Start background task to read messages
         self._read_task = self._loop.create_task(self._read_messages())
@@ -187,14 +184,17 @@ class Bridge:
         self._read_task = None
         self._event_bus = None
         self._reference = None
-        self._send_lock = None
 
     def is_connected(self) -> bool:
         """Returns True if the bridge is connected."""
         return self._writer is not None and not self._writer.is_closing()
 
     async def _send(self, request, request_type, params: dict = None, reply: bool = True, timeout: float = None) -> Message:
-        """Sends a command and wait for a response if the request is known to return a result."""
+        """Sends a command and wait for a response if the request is known to return a result.
+
+        Supports concurrent requests through atomic reference allocation and lock-free sending.
+        Multiple requests can be in-flight simultaneously, improving throughput.
+        """
         if not self.is_connected():
             raise AioComfoConnectNotConnected("Not connected to bridge")
 
@@ -204,53 +204,51 @@ class Bridge:
         if self._loop is None:
             self._loop = asyncio.get_running_loop()
 
-        if self._send_lock is None:
-            # TODO(stability): revisit this once message pipelining is supported safely.
-            self._send_lock = asyncio.Lock()
+        if not self.is_connected() or self._writer is None or self._reference is None:
+            raise AioComfoConnectNotConnected("Not connected to bridge")
 
-        fut: Optional[asyncio.Future] = None
+        # Allocate reference atomically (thread-safe)
+        reference = next(self._reference)
 
-        async with self._send_lock:
-            if not self.is_connected() or self._writer is None or self._reference is None:
-                raise AioComfoConnectNotConnected("Not connected to bridge")
+        # Build command and message
+        cmd = zehnder_pb2.GatewayOperation()  # pylint: disable=no-member
+        cmd.type = request_type
+        cmd.reference = reference
 
-            cmd = zehnder_pb2.GatewayOperation()  # pylint: disable=no-member
-            cmd.type = request_type
-            cmd.reference = self._reference
+        msg = request()
+        if params is not None:
+            for param, value in params.items():
+                if value is not None:
+                    setattr(msg, param, value)
 
-            msg = request()
-            if params is not None:
-                for param, value in params.items():
-                    if value is not None:
-                        setattr(msg, param, value)
+        message = Message(cmd, msg, self._local_uuid, self.uuid)
 
-            message = Message(cmd, msg, self._local_uuid, self.uuid)
+        # Create and register future BEFORE sending to avoid race condition
+        # where response arrives before listener is registered
+        fut = self._loop.create_future()
+        if reply:
+            if self._event_bus is None:
+                raise RuntimeError("Event bus is not initialized")
+            self._event_bus.add_listener(reference, fut)
+        else:
+            fut.set_result(None)
 
-            fut = self._loop.create_future()
-            if reply:
-                if self._event_bus is None:
-                    raise RuntimeError("Event bus is not initialized")
-                self._event_bus.add_listener(self._reference, fut)
-            else:
-                fut.set_result(None)
+        # Send message (no lock needed - TCP writes are serialized by the OS)
+        _LOGGER.debug("TX %s", message)
+        try:
+            self._writer.write(message.encode())
+            await self._writer.drain()
+        except (ConnectionError, OSError) as exc:
+            send_exc = AioComfoConnectNotConnected("Connection lost while sending")
+            _LOGGER.warning("Failed to send message: %s", exc)
+            # Clean up the registered listener on send failure
+            if reply and self._event_bus is not None:
+                self._event_bus.emit(reference, send_exc)
+            elif not fut.done():
+                fut.set_exception(send_exc)
+            raise send_exc from exc
 
-            _LOGGER.debug("TX %s", message)
-            try:
-                self._writer.write(message.encode())
-                await self._writer.drain()
-            except (ConnectionError, OSError) as exc:
-                send_exc = AioComfoConnectNotConnected("Connection lost while sending")
-                _LOGGER.warning("Failed to send message: %s", exc)
-                if reply and self._event_bus is not None:
-                    self._event_bus.emit(cmd.reference, send_exc)
-                elif fut is not None and not fut.done():
-                    fut.set_exception(send_exc)
-                raise send_exc from exc
-
-            self._reference += 1
-
-        assert fut is not None
-
+        # Wait for response
         try:
             return await asyncio.wait_for(fut, timeout)
         except asyncio.TimeoutError as exc:
