@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
+from typing import Any, Callable, Dict, List, Literal, Optional
 
 from aiocomfoconnect import Bridge
 from aiocomfoconnect.const import (
@@ -103,7 +103,7 @@ class ComfoConnect(Bridge):
                 self._session_ready.set_exception(AioComfoConnectTimeout(f"Failed to connect within {self.connect_timeout} seconds"))
             self._reconnect_task = None
             raise AioComfoConnectTimeout(f"Failed to connect within {self.connect_timeout} seconds") from exc
-        except Exception as exc:
+        except Exception:  # pylint: disable=broad-exception-caught
             self._is_stopping = True
             if self._reconnect_task and not self._reconnect_task.done():
                 self._reconnect_task.cancel()
@@ -160,7 +160,7 @@ class ComfoConnect(Bridge):
                 _LOGGER.info("Disconnected from bridge, reconnecting...")
                 await asyncio.sleep(1)
 
-            except Exception as exc:
+            except Exception as exc:  # pylint: disable=broad-exception-caught
                 _LOGGER.error("Unexpected error in reconnect loop: %s", exc, exc_info=True)
                 await asyncio.sleep(5)
 
