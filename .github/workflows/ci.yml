@@ -14,16 +14,40 @@ defaults:
     shell: bash
 
 jobs:
-  checks:
-    name: Code checks
-    runs-on: ${{ matrix.os }}
+  lint:
+    name: Linting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Install poetry
+        run: pipx install poetry
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: 'poetry'
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run pylint
+        run: poetry run pylint aiocomfoconnect/*.py
+
+      - name: Check formatting with black
+        run: poetry run black --check aiocomfoconnect/*.py
+
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest ]
         python-version: [ "3.10", "3.11", "3.12", "3.13", "3.14" ]
     steps:
-      - name: Check out ${{ github.sha }} from repository ${{ github.repository }}
+      - name: Check out code
         uses: actions/checkout@v4
 
       - name: Install poetry
@@ -38,5 +62,5 @@ jobs:
       - name: Install dependencies
         run: poetry install --no-interaction
 
-      - name: Run checks
-        run: make check
+      - name: Run pytest
+        run: poetry run pytest --verbose
