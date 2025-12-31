@@ -10,6 +10,7 @@ homepage = "https://github.com/michaelarnauts/aiocomfoconnect"
 python = "^3.10"
 aiohttp = "^3.8.0"
 protobuf = "^6.31"
+netifaces = "^0.11.0"
 
 [tool.poetry.group.dev.dependencies]
 grpcio-tools = "^1.73.0"
