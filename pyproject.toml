@@ -9,7 +9,7 @@ homepage = "https://github.com/michaelarnauts/aiocomfoconnect"
 [tool.poetry.dependencies]
 python = "^3.10"
 aiohttp = "^3.8.0"
-protobuf = "^6.31"
+protobuf = ">=6.31,<8"
 
 [tool.poetry.group.dev.dependencies]
 grpcio-tools = "^1.73.0"
