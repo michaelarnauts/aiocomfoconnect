@@ -362,3 +362,74 @@ See the `comfoconnect.py` file for more commands and how they are constructed.
 | `03 1d 01 07 00`                   | Set sensor ventilation: humidity protection: off       |
 | `03 1d 01 07 01`                   | Set sensor ventilation: humidity protection: auto      |
 | `03 1d 01 07 02`                   | Set sensor ventilation: humidity protection: on        |
+
+
+## Time Management (Alternative Method)
+
+In addition to the PDO-based time synchronization (see PROTOCOL-PDO.md), time can be managed through direct CAN bus commands without using the RMI protocol.
+
+### Direct CAN Bus Time Commands
+
+These commands operate outside the RMI request/response framework and communicate directly with the device's internal clock.
+
+#### Read Time (RTR Method)
+
+Unlike RMI requests, time can be requested using a Remote Transmission Request:
+
+```
+CAN ID: 0x10080028 (Extended)
+Type:   RTR (Remote Transmission Request)
+DLC:    0
+
+Response:
+CAN ID: 0x10040001 (Extended)
+DLC:    4
+Data:   [B0] [B1] [B2] [B3]  (little-endian uint32)
+```
+
+The response contains seconds since 2000-01-01 00:00:00 (device epoch).
+
+#### Write Time
+
+Time is set by sending a data frame directly to the device:
+
+```
+CAN ID: 0x10040001 (Extended)
+DLC:    4
+Data:   [B0] [B1] [B2] [B3]  (little-endian uint32)
+```
+
+Where the data represents seconds since 2000-01-01 00:00:00.
+
+### Time Format
+
+| Field | Type | Description |
+|-------|------|-------------|
+| Seconds | uint32 | Seconds since 2000-01-01 00:00:00 |
+
+**Conversion:**
+```
+Device Seconds = Unix Timestamp - 946684800
+Unix Timestamp = Device Seconds + 946684800
+```
+
+### Example Usage
+
+**Setting time to 2025-10-27 15:30:00:**
+
+```
+Step 1: Calculate Unix timestamp
+2025-10-27 15:30:00 = 1730044200 (Unix)
+
+Step 2: Convert to device seconds
+1730044200 - 946684800 = 783359400
+
+Step 3: Convert to hex
+783359400 = 0x2EAEFAB8
+
+Step 4: Send as little-endian
+CAN ID: 0x10040001
+Data: [B8 FA AE 2E]
+```
+
+---
