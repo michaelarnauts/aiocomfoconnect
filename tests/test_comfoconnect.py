@@ -56,7 +56,9 @@ class TestComfoConnect:
 
         with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
             with patch.object(comfoconnect, "cmd_start_session", AsyncMock()):
-                with patch.object(comfoconnect, "_read_messages", side_effect=mock_read_messages):
+                with patch.object(
+                    comfoconnect, "_read_messages", side_effect=mock_read_messages
+                ):
                     await comfoconnect.connect("00000000000000000000000000000001")
 
         assert comfoconnect.is_connected()
@@ -85,8 +87,12 @@ class TestComfoConnect:
                 raise
 
         with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
-            with patch.object(comfoconnect, "cmd_start_session", side_effect=slow_start_session):
-                with patch.object(comfoconnect, "_read_messages", side_effect=mock_read_messages):
+            with patch.object(
+                comfoconnect, "cmd_start_session", side_effect=slow_start_session
+            ):
+                with patch.object(
+                    comfoconnect, "_read_messages", side_effect=mock_read_messages
+                ):
                     connect_task = asyncio.create_task(comfoconnect.connect(LOCAL_UUID))
 
                     await start_called.wait()
@@ -101,11 +107,14 @@ class TestComfoConnect:
     @pytest.mark.asyncio
     async def test_connect_timeout(self, comfoconnect):
         """Test connection timeout on initial connect."""
+
         async def timeout_coro(*args, **kwargs):
             raise asyncio.TimeoutError()
 
         with patch("asyncio.open_connection", side_effect=timeout_coro):
-            with pytest.raises(AioComfoConnectTimeout, match="Failed to connect within 1 seconds"):
+            with pytest.raises(
+                AioComfoConnectTimeout, match="Failed to connect within 1 seconds"
+            ):
                 await comfoconnect.connect(LOCAL_UUID)
 
         assert comfoconnect._is_stopping
@@ -122,7 +131,9 @@ class TestComfoConnect:
             raise ComfoConnectNotAllowed(Mock(cmd=Mock(reference=1)))
 
         with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
-            with patch.object(comfoconnect, "cmd_start_session", side_effect=raise_not_allowed):
+            with patch.object(
+                comfoconnect, "cmd_start_session", side_effect=raise_not_allowed
+            ):
                 with patch.object(comfoconnect, "_read_messages", return_value=None):
                     # The connect should try but fail with NotAllowed
                     # Since it's a fatal error, it won't keep retrying
@@ -155,7 +166,9 @@ class TestComfoConnect:
 
         with patch("asyncio.open_connection", side_effect=mock_open_connection):
             with patch.object(comfoconnect, "cmd_start_session", AsyncMock()):
-                with patch.object(comfoconnect, "_read_messages", side_effect=mock_read_messages):
+                with patch.object(
+                    comfoconnect, "_read_messages", side_effect=mock_read_messages
+                ):
                     await comfoconnect.connect(LOCAL_UUID)
 
                     # Wait for reconnection
@@ -179,10 +192,13 @@ class TestComfoConnect:
         with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
             with patch.object(comfoconnect, "cmd_start_session", AsyncMock()):
                 with patch.object(comfoconnect, "cmd_rpdo_request", AsyncMock()):
+
                     async def mock_read():
                         await asyncio.sleep(100)
 
-                    with patch.object(comfoconnect, "_read_messages", side_effect=mock_read):
+                    with patch.object(
+                        comfoconnect, "_read_messages", side_effect=mock_read
+                    ):
                         await comfoconnect.connect(LOCAL_UUID)
 
         assert comfoconnect.is_connected()
@@ -210,14 +226,21 @@ class TestComfoConnect:
 
         with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
             with patch.object(comfoconnect, "cmd_start_session", AsyncMock()):
-                with patch.object(comfoconnect, "cmd_rpdo_request", AsyncMock()) as mock_rpdo:
+                with patch.object(
+                    comfoconnect, "cmd_rpdo_request", AsyncMock()
+                ) as mock_rpdo:
+
                     async def mock_read():
                         await asyncio.sleep(100)
 
-                    with patch.object(comfoconnect, "_read_messages", side_effect=mock_read):
+                    with patch.object(
+                        comfoconnect, "_read_messages", side_effect=mock_read
+                    ):
                         await comfoconnect.connect(LOCAL_UUID)
 
-                    sensor = create_sensor(name="test_sensor", sensor_id=276, sensor_type=1)
+                    sensor = create_sensor(
+                        name="test_sensor", sensor_id=276, sensor_type=1
+                    )
                     await comfoconnect.register_sensor(sensor)
 
                     assert 276 in comfoconnect._sensors
@@ -239,14 +262,21 @@ class TestComfoConnect:
 
         with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
             with patch.object(comfoconnect, "cmd_start_session", AsyncMock()):
-                with patch.object(comfoconnect, "cmd_rpdo_request", AsyncMock()) as mock_rpdo:
+                with patch.object(
+                    comfoconnect, "cmd_rpdo_request", AsyncMock()
+                ) as mock_rpdo:
+
                     async def mock_read():
                         await asyncio.sleep(100)
 
-                    with patch.object(comfoconnect, "_read_messages", side_effect=mock_read):
+                    with patch.object(
+                        comfoconnect, "_read_messages", side_effect=mock_read
+                    ):
                         await comfoconnect.connect(LOCAL_UUID)
 
-                    sensor = create_sensor(name="test_sensor", sensor_id=276, sensor_type=1)
+                    sensor = create_sensor(
+                        name="test_sensor", sensor_id=276, sensor_type=1
+                    )
                     await comfoconnect.register_sensor(sensor)
                     await comfoconnect.deregister_sensor(sensor)
 
@@ -281,7 +311,9 @@ class TestComfoConnect:
         comfoconnect._sensor_callback_fn = mock_callback
 
         # Sensor with value transformation function
-        sensor = create_sensor(name="test_sensor", sensor_id=276, sensor_type=1, value_fn=lambda x: x / 10)
+        sensor = create_sensor(
+            name="test_sensor", sensor_id=276, sensor_type=1, value_fn=lambda x: x / 10
+        )
         comfoconnect._sensors[276] = sensor
 
         comfoconnect._sensor_callback(276, 1000)
@@ -310,10 +342,13 @@ class TestComfoConnect:
         with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
             with patch.object(comfoconnect, "cmd_start_session", AsyncMock()):
                 with patch.object(comfoconnect, "_send", AsyncMock()):
+
                     async def mock_read():
                         await asyncio.sleep(100)
 
-                    with patch.object(comfoconnect, "_read_messages", side_effect=mock_read):
+                    with patch.object(
+                        comfoconnect, "_read_messages", side_effect=mock_read
+                    ):
                         await comfoconnect.connect(LOCAL_UUID)
 
         # Sensor hold should be active
@@ -388,8 +423,12 @@ class TestComfoConnect:
 
         with patch("asyncio.open_connection", side_effect=mock_open_connection):
             with patch.object(comfoconnect, "cmd_start_session", AsyncMock()):
-                with patch.object(comfoconnect, "cmd_rpdo_request", side_effect=mock_rpdo):
-                    with patch.object(comfoconnect, "_read_messages", side_effect=mock_read_messages):
+                with patch.object(
+                    comfoconnect, "cmd_rpdo_request", side_effect=mock_rpdo
+                ):
+                    with patch.object(
+                        comfoconnect, "_read_messages", side_effect=mock_read_messages
+                    ):
                         await comfoconnect.connect(LOCAL_UUID)
 
                         # Wait for reconnection
@@ -413,10 +452,13 @@ class TestComfoConnect:
 
         with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
             with patch.object(comfoconnect, "cmd_start_session", AsyncMock()):
+
                 async def mock_read():
                     await asyncio.sleep(100)
 
-                with patch.object(comfoconnect, "_read_messages", side_effect=mock_read):
+                with patch.object(
+                    comfoconnect, "_read_messages", side_effect=mock_read
+                ):
                     await comfoconnect.connect(LOCAL_UUID)
 
         # Try to connect again - should do nothing
@@ -449,7 +491,9 @@ class TestComfoConnect:
         mock_response = Mock()
         mock_response.message = bytes([0x00])  # Auto mode
 
-        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=mock_response)):
+        with patch.object(
+            comfoconnect, "cmd_rmi_request", AsyncMock(return_value=mock_response)
+        ):
             from aiocomfoconnect.const import VentilationMode
 
             mode = await comfoconnect.get_mode()
@@ -473,8 +517,12 @@ class TestComfoConnect:
         mock_response = Mock()
         mock_response.message = b"\x64\x00"  # 100 in little-endian
 
-        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=mock_response)):
-            prop = Property(unit=1, subunit=1, property_id=8, property_type=PdoType.TYPE_CN_INT16)
+        with patch.object(
+            comfoconnect, "cmd_rmi_request", AsyncMock(return_value=mock_response)
+        ):
+            prop = Property(
+                unit=1, subunit=1, property_id=8, property_type=PdoType.TYPE_CN_INT16
+            )
             value = await comfoconnect.get_property(prop)
             assert value == 100
 
@@ -484,3 +532,53 @@ class TestComfoConnect:
         with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock()) as mock_rmi:
             await comfoconnect.clear_errors()
             mock_rmi.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_pro_connection_stays_open_after_not_allowed(self, comfoconnect):
+        """ComfoConnect Pro registration flow.
+
+        When connect() raises ComfoConnectNotAllowed (either because the LAN C returned
+        NOT_ALLOWED or because the Pro silently ignored StartSession on a live connection),
+        the underlying TCP connection must remain open so the caller can immediately call
+        cmd_register_app on the same connection without a separate reconnect.
+        """
+        mock_reader = AsyncMock()
+        mock_writer = MagicMock()
+        mock_writer.is_closing.return_value = False
+        mock_writer.drain = AsyncMock()
+        mock_writer.wait_closed = AsyncMock()
+
+        async def raise_not_allowed(*args, **kwargs):
+            raise ComfoConnectNotAllowed(
+                "StartSession timed out on a live connection (ComfoConnect Pro: UUID not registered)"
+            )
+
+        async def mock_read_messages():
+            try:
+                await asyncio.sleep(100)
+            except asyncio.CancelledError:
+                raise
+
+        with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
+            with patch.object(
+                comfoconnect, "cmd_start_session", side_effect=raise_not_allowed
+            ):
+                with patch.object(
+                    comfoconnect, "_read_messages", side_effect=mock_read_messages
+                ):
+                    with pytest.raises(ComfoConnectNotAllowed):
+                        await comfoconnect.connect(LOCAL_UUID)
+
+        # The TCP connection must still be open — the caller needs it for cmd_register_app.
+        assert comfoconnect.is_connected(), (
+            "TCP connection must stay open after ComfoConnectNotAllowed so registration can proceed"
+        )
+
+        # cmd_register_app must be callable on the existing open connection.
+        with patch.object(
+            comfoconnect, "cmd_register_app", AsyncMock(return_value=Mock())
+        ) as mock_register:
+            await comfoconnect.cmd_register_app(LOCAL_UUID, "test-device", 1234)
+            mock_register.assert_called_once_with(LOCAL_UUID, "test-device", 1234)
+
+        await comfoconnect.disconnect()

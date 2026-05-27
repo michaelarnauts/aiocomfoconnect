@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-from aiocomfoconnect.bridge import Bridge, EventBus, Message
+from aiocomfoconnect.bridge import Bridge, EventBus
 
 LOCAL_UUID = "00000000000000000000000000000001"
 
@@ -13,7 +13,6 @@ from aiocomfoconnect.exceptions import (
     AioComfoConnectNotConnected,
     AioComfoConnectTimeout,
     ComfoConnectNotAllowed,
-    ComfoConnectOtherSession,
 )
 
 
@@ -139,13 +138,17 @@ class TestBridge:
     @pytest.mark.asyncio
     async def test_connect_timeout(self, bridge):
         """Test connection timeout."""
+
         async def timeout_coro(*args, **kwargs):
             raise asyncio.TimeoutError()
 
         with patch("asyncio.open_connection", side_effect=timeout_coro):
-            with pytest.raises(AioComfoConnectTimeout, match="Timeout while connecting"):
+            with pytest.raises(
+                AioComfoConnectTimeout, match="Timeout while connecting"
+            ):
                 await bridge.connect(LOCAL_UUID)
         assert not bridge.is_connected()
+
     @pytest.mark.asyncio
     async def test_connect_already_connected(self, bridge, mock_connection):
         """Test connecting when already connected."""
@@ -283,7 +286,9 @@ class TestBridge:
         from aiocomfoconnect.protobuf import zehnder_pb2
 
         # Send a message that expects a reply but won't get one (with 0.5s timeout for faster tests)
-        with pytest.raises(AioComfoConnectTimeout, match="Timeout while waiting for response"):
+        with pytest.raises(
+            AioComfoConnectTimeout, match="Timeout while waiting for response"
+        ):
             await bridge._send(
                 zehnder_pb2.VersionRequest,
                 zehnder_pb2.GatewayOperation.VersionRequestType,
@@ -312,7 +317,9 @@ class TestBridge:
 
         from aiocomfoconnect.protobuf import zehnder_pb2
 
-        with pytest.raises(AioComfoConnectNotConnected, match="Connection lost while sending"):
+        with pytest.raises(
+            AioComfoConnectNotConnected, match="Connection lost while sending"
+        ):
             await bridge._send(
                 zehnder_pb2.KeepAlive,
                 zehnder_pb2.GatewayOperation.KeepAliveType,
@@ -434,7 +441,11 @@ class TestBridge:
     @pytest.mark.asyncio
     async def test_read_messages_disconnected(self, bridge):
         """Test that _read_messages handles disconnection correctly."""
-        with patch.object(bridge, "_process_message", side_effect=AioComfoConnectNotConnected("Test disconnect")):
+        with patch.object(
+            bridge,
+            "_process_message",
+            side_effect=AioComfoConnectNotConnected("Test disconnect"),
+        ):
             with pytest.raises(AioComfoConnectNotConnected):
                 await bridge._read_messages()
 
@@ -498,3 +509,38 @@ class TestBridge:
         repr_str = repr(bridge)
         assert "192.168.1.100" in repr_str
         assert "00000000000000000000000000000001" in repr_str
+
+    @pytest.mark.asyncio
+    async def test_cmd_start_session_pro_silent_rejection_raises_not_allowed(
+        self, bridge
+    ):
+        """ComfoConnect Pro behaviour: StartSession is silently ignored (no reply, timeout)
+        when the UUID is not registered.  A timeout on a live connection must be converted
+        to ComfoConnectNotAllowed so callers handle both device types identically."""
+        # Simulate a live TCP connection (writer present and not closing)
+        mock_writer = MagicMock()
+        mock_writer.is_closing.return_value = False
+        bridge._writer = mock_writer
+
+        with patch.object(
+            bridge, "_send", side_effect=AioComfoConnectTimeout("no reply")
+        ):
+            with pytest.raises(ComfoConnectNotAllowed, match="ComfoConnect Pro"):
+                await bridge.cmd_start_session()
+
+    @pytest.mark.asyncio
+    async def test_cmd_start_session_timeout_with_dead_connection_reraises(
+        self, bridge
+    ):
+        """A StartSession timeout on a dead/closing connection is a genuine network
+        issue and must propagate as AioComfoConnectTimeout (not ComfoConnectNotAllowed)."""
+        # Simulate a connection that has already started closing
+        mock_writer = MagicMock()
+        mock_writer.is_closing.return_value = True
+        bridge._writer = mock_writer
+
+        with patch.object(
+            bridge, "_send", side_effect=AioComfoConnectTimeout("no reply")
+        ):
+            with pytest.raises(AioComfoConnectTimeout):
+                await bridge.cmd_start_session()

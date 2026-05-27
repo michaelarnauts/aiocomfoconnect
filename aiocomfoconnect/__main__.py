@@ -1,4 +1,4 @@
-""" aiocomfoconnect CLI application """
+"""aiocomfoconnect CLI application"""
 
 from __future__ import annotations
 
@@ -55,7 +55,15 @@ async def main(args):
         await run_show_sensor(args.host, args.uuid, args.sensor, args.follow)
 
     elif args.action == "get-property":
-        await run_get_property(args.host, args.uuid, args.node_id, args.unit, args.subunit, args.property_id, args.property_type)
+        await run_get_property(
+            args.host,
+            args.uuid,
+            args.node_id,
+            args.unit,
+            args.subunit,
+            args.property_id,
+            args.property_type,
+        )
 
     elif args.action == "get-flow-for-speed":
         await run_get_flow_for_speed(args.host, args.uuid, args.speed)
@@ -143,7 +151,9 @@ async def run_deregister(host: str, uuid: str, uuid2: str):
     await comfoconnect.disconnect()
 
 
-async def run_set_speed(host: str, uuid: str, speed: Literal["away", "low", "medium", "high"]):
+async def run_set_speed(
+    host: str, uuid: str, speed: Literal["away", "low", "medium", "high"]
+):
     """Set ventilation speed."""
     # Discover bridge so we know the UUID
     bridges = await discover_bridges(host)
@@ -241,7 +251,12 @@ async def run_show_sensors(host: str, uuid: str):
         print(f"{sensor.name:>40}: {value} {sensor.unit or ''}")
 
     # Connect to the bridge
-    comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid, sensor_callback=sensor_callback, alarm_callback=alarm_callback)
+    comfoconnect = ComfoConnect(
+        bridges[0].host,
+        bridges[0].uuid,
+        sensor_callback=sensor_callback,
+        alarm_callback=alarm_callback,
+    )
     try:
         await comfoconnect.connect(uuid)
     except ComfoConnectNotAllowed:
@@ -289,14 +304,16 @@ async def run_show_sensor(host: str, uuid: str, sensor: int, follow=False):
             result.set_result(value)
 
     # Connect to the bridge
-    comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid, sensor_callback=sensor_callback)
+    comfoconnect = ComfoConnect(
+        bridges[0].host, bridges[0].uuid, sensor_callback=sensor_callback
+    )
     try:
         await comfoconnect.connect(uuid)
     except ComfoConnectNotAllowed:
         print("Could not connect to bridge. Please register first.")
         sys.exit(1)
 
-    if not sensor in SENSORS:
+    if sensor not in SENSORS:
         print(f"Unknown sensor with ID {sensor}")
         sys.exit(1)
 
@@ -329,7 +346,15 @@ async def run_show_sensor(host: str, uuid: str, sensor: int, follow=False):
     await comfoconnect.disconnect()
 
 
-async def run_get_property(host: str, uuid: str, node_id: int, unit: int, subunit: int, property_id: int, property_type: int):
+async def run_get_property(
+    host: str,
+    uuid: str,
+    node_id: int,
+    unit: int,
+    subunit: int,
+    property_id: int,
+    property_type: int,
+):
     """Get a property."""
     # Discover bridge so we know the UUID
     bridges = await discover_bridges(host)
@@ -344,12 +369,18 @@ async def run_get_property(host: str, uuid: str, node_id: int, unit: int, subuni
         print("Could not connect to bridge. Please register first.")
         sys.exit(1)
 
-    print(await comfoconnect.get_property(Property(unit, subunit, property_id, property_type), node_id))
+    print(
+        await comfoconnect.get_property(
+            Property(unit, subunit, property_id, property_type), node_id
+        )
+    )
 
     await comfoconnect.disconnect()
 
 
-async def run_get_flow_for_speed(host: str, uuid: str, speed: Literal["away", "low", "medium", "high"]):
+async def run_get_flow_for_speed(
+    host: str, uuid: str, speed: Literal["away", "low", "medium", "high"]
+):
     """Get the configured airflow for the specified speed."""
     # Discover bridge so we know the UUID
     bridges = await discover_bridges(host)
@@ -369,7 +400,12 @@ async def run_get_flow_for_speed(host: str, uuid: str, speed: Literal["away", "l
     await comfoconnect.disconnect()
 
 
-async def run_set_flow_for_speed(host: str, uuid: str, speed: Literal["away", "low", "medium", "high"], desired_flow: int):
+async def run_set_flow_for_speed(
+    host: str,
+    uuid: str,
+    speed: Literal["away", "low", "medium", "high"],
+    desired_flow: int,
+):
     """Set the configured airflow for the specified speed."""
     # Discover bridge so we know the UUID
     bridges = await discover_bridges(host)
@@ -391,26 +427,40 @@ async def run_set_flow_for_speed(host: str, uuid: str, speed: Literal["away", "l
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--debug", "-d", help="Enable debug logging", default=False, action="store_true")
+    parser.add_argument(
+        "--debug", "-d", help="Enable debug logging", default=False, action="store_true"
+    )
     subparsers = parser.add_subparsers(required=True, dest="action")
 
-    p_discover = subparsers.add_parser("discover", help="discover ComfoConnect LAN C devices on your network")
+    p_discover = subparsers.add_parser(
+        "discover", help="discover ComfoConnect LAN C devices on your network"
+    )
     p_discover.add_argument("--host", help="Host address of the bridge")
 
-    p_register = subparsers.add_parser("register", help="register on a ComfoConnect LAN C device")
-    p_register.add_argument("--pin", help="PIN code to register on the bridge", default=DEFAULT_PIN)
+    p_register = subparsers.add_parser(
+        "register", help="register on a ComfoConnect LAN C device"
+    )
+    p_register.add_argument(
+        "--pin", help="PIN code to register on the bridge", default=DEFAULT_PIN
+    )
     p_register.add_argument("--host", help="Host address of the bridge")
     p_register.add_argument("--uuid", help="UUID of this app", default=DEFAULT_UUID)
     p_register.add_argument("--name", help="Name of this app", default=DEFAULT_NAME)
 
-    p_register = subparsers.add_parser("deregister", help="deregister on a ComfoConnect LAN C device")
+    p_register = subparsers.add_parser(
+        "deregister", help="deregister on a ComfoConnect LAN C device"
+    )
     p_register.add_argument("uuid2", help="UUID of the app to deregister", default=None)
-    p_register.add_argument("--pin", help="PIN code to register on the bridge", default=DEFAULT_PIN)
+    p_register.add_argument(
+        "--pin", help="PIN code to register on the bridge", default=DEFAULT_PIN
+    )
     p_register.add_argument("--host", help="Host address of the bridge")
     p_register.add_argument("--uuid", help="UUID of this app", default=DEFAULT_UUID)
 
     p_set_speed = subparsers.add_parser("set-speed", help="set the fan speed")
-    p_set_speed.add_argument("speed", help="Fan speed", choices=["low", "medium", "high", "away"])
+    p_set_speed.add_argument(
+        "speed", help="Fan speed", choices=["low", "medium", "high", "away"]
+    )
     p_set_speed.add_argument("--host", help="Host address of the bridge")
     p_set_speed.add_argument("--uuid", help="UUID of this app", default=DEFAULT_UUID)
 
@@ -428,7 +478,9 @@ if __name__ == "__main__":
     p_set_boost.add_argument("mode", help="Boost mode", choices=["on", "off"])
     p_set_boost.add_argument("--host", help="Host address of the bridge")
     p_set_boost.add_argument("--uuid", help="UUID of this app", default=DEFAULT_UUID)
-    p_set_boost.add_argument("--timeout", "-t", help="Timeout in seconds", type=int, default=600)
+    p_set_boost.add_argument(
+        "--timeout", "-t", help="Timeout in seconds", type=int, default=600
+    )
 
     p_sensors = subparsers.add_parser("show-sensors", help="show the sensor values")
     p_sensors.add_argument("--host", help="Host address of the bridge")
@@ -438,28 +490,46 @@ if __name__ == "__main__":
     p_sensor.add_argument("sensor", help="The ID of the sensor", type=int)
     p_sensor.add_argument("--host", help="Host address of the bridge")
     p_sensor.add_argument("--uuid", help="UUID of this app", default=DEFAULT_UUID)
-    p_sensor.add_argument("--follow", "-f", help="Follow", default=False, action="store_true")
+    p_sensor.add_argument(
+        "--follow", "-f", help="Follow", default=False, action="store_true"
+    )
 
     p_sensor = subparsers.add_parser("get-property", help="show a property value")
     p_sensor.add_argument("unit", help="The Unit of the property", type=int)
     p_sensor.add_argument("subunit", help="The Subunit of the property", type=int)
     p_sensor.add_argument("property_id", help="The id of the property", type=int)
-    p_sensor.add_argument("property_type", help="The type of the property", type=int, default=0x09)
+    p_sensor.add_argument(
+        "property_type", help="The type of the property", type=int, default=0x09
+    )
 
-    p_sensor.add_argument("--node_id", help="The Node ID of the query", type=int, default=0x01)
+    p_sensor.add_argument(
+        "--node_id", help="The Node ID of the query", type=int, default=0x01
+    )
     p_sensor.add_argument("--host", help="Host address of the bridge")
     p_sensor.add_argument("--uuid", help="UUID of this app", default=DEFAULT_UUID)
 
-    p_get_flow_speed = subparsers.add_parser("get-flow-for-speed", help="Get m³/h for given speed")
-    p_get_flow_speed.add_argument("speed", help="Fan speed", choices=["low", "medium", "high", "away"])
+    p_get_flow_speed = subparsers.add_parser(
+        "get-flow-for-speed", help="Get m³/h for given speed"
+    )
+    p_get_flow_speed.add_argument(
+        "speed", help="Fan speed", choices=["low", "medium", "high", "away"]
+    )
     p_get_flow_speed.add_argument("--host", help="Host address of the bridge")
-    p_get_flow_speed.add_argument("--uuid", help="UUID of this app", default=DEFAULT_UUID)
+    p_get_flow_speed.add_argument(
+        "--uuid", help="UUID of this app", default=DEFAULT_UUID
+    )
 
-    p_set_flow_speed = subparsers.add_parser("set-flow-for-speed", help="Set m³/h for given speed")
-    p_set_flow_speed.add_argument("speed", help="Fan speed", choices=["low", "medium", "high", "away"])
+    p_set_flow_speed = subparsers.add_parser(
+        "set-flow-for-speed", help="Set m³/h for given speed"
+    )
+    p_set_flow_speed.add_argument(
+        "speed", help="Fan speed", choices=["low", "medium", "high", "away"]
+    )
     p_set_flow_speed.add_argument("flow", help="Desired airflow in m³/h", type=int)
     p_set_flow_speed.add_argument("--host", help="Host address of the bridge")
-    p_set_flow_speed.add_argument("--uuid", help="UUID of this app", default=DEFAULT_UUID)
+    p_set_flow_speed.add_argument(
+        "--uuid", help="UUID of this app", default=DEFAULT_UUID
+    )
 
     arguments = parser.parse_args()
 

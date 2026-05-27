@@ -1,4 +1,4 @@
-""" ComfoConnect Bridge API """
+"""ComfoConnect Bridge API"""
 
 from __future__ import annotations
 
@@ -80,7 +80,9 @@ class Bridge:
 
     PORT = 56747
 
-    def __init__(self, host: str, uuid: str, loop: Optional[asyncio.AbstractEventLoop] = None):
+    def __init__(
+        self, host: str, uuid: str, loop: Optional[asyncio.AbstractEventLoop] = None
+    ):
         self.host: str = host
         self.uuid: str = uuid
         self._local_uuid: Optional[str] = None
@@ -92,7 +94,9 @@ class Bridge:
         self._event_bus: Optional[EventBus] = None
 
         self.__sensor_callback_fn: Optional[Callable[[int, int], None]] = None
-        self.__alarm_callback_fn: Optional[Callable[[int, ProtobufMessage], None]] = None
+        self.__alarm_callback_fn: Optional[Callable[[int, ProtobufMessage], None]] = (
+            None
+        )
 
         self._loop: Optional[asyncio.AbstractEventLoop] = loop
         self._read_task = None
@@ -104,7 +108,9 @@ class Bridge:
         """Set a callback to be called when a message is received."""
         self.__sensor_callback_fn = callback
 
-    def set_alarm_callback(self, callback: Optional[Callable[[int, ProtobufMessage], None]]):
+    def set_alarm_callback(
+        self, callback: Optional[Callable[[int, ProtobufMessage], None]]
+    ):
         """Set a callback to be called when an alarm is received."""
         self.__alarm_callback_fn = callback
 
@@ -120,7 +126,9 @@ class Bridge:
 
         _LOGGER.debug("Connecting to bridge %s", self.host)
         try:
-            self._reader, self._writer = await asyncio.wait_for(asyncio.open_connection(self.host, self.PORT), TIMEOUT)
+            self._reader, self._writer = await asyncio.wait_for(
+                asyncio.open_connection(self.host, self.PORT), TIMEOUT
+            )
         except asyncio.TimeoutError as exc:
             _LOGGER.warning("Timeout while connecting to bridge %s", self.host)
             raise AioComfoConnectTimeout("Timeout while connecting to bridge") from exc
@@ -147,7 +155,9 @@ class Bridge:
             raise
         except Exception as exc:
             _LOGGER.error("Unexpected error reading messages: %s", exc, exc_info=True)
-            self._notify_pending_futures(AioComfoConnectNotConnected("Unexpected error during read"))
+            self._notify_pending_futures(
+                AioComfoConnectNotConnected("Unexpected error during read")
+            )
             raise
 
     def _notify_pending_futures(self, exc: Exception):
@@ -189,7 +199,14 @@ class Bridge:
         """Returns True if the bridge is connected."""
         return self._writer is not None and not self._writer.is_closing()
 
-    async def _send(self, request, request_type, params: dict = None, reply: bool = True, timeout: float = None) -> Message:
+    async def _send(
+        self,
+        request,
+        request_type,
+        params: dict = None,
+        reply: bool = True,
+        timeout: float = None,
+    ) -> Message:
         """Sends a command and wait for a response if the request is known to return a result.
 
         Supports concurrent requests through atomic reference allocation and lock-free sending.
@@ -253,7 +270,9 @@ class Bridge:
             return await asyncio.wait_for(fut, timeout)
         except asyncio.TimeoutError as exc:
             _LOGGER.warning("Timeout while waiting for response from bridge")
-            raise AioComfoConnectTimeout("Timeout while waiting for response from bridge") from exc
+            raise AioComfoConnectTimeout(
+                "Timeout while waiting for response from bridge"
+            ) from exc
 
     async def _read(self) -> Message:
         # Read packet size
@@ -299,23 +318,40 @@ class Bridge:
             # pylint: disable=no-member
             if message.cmd.type == zehnder_pb2.GatewayOperation.CnRpdoNotificationType:
                 if self.__sensor_callback_fn:
-                    self.__sensor_callback_fn(message.msg.pdid, int.from_bytes(message.msg.data, byteorder="little", signed=True))
+                    self.__sensor_callback_fn(
+                        message.msg.pdid,
+                        int.from_bytes(
+                            message.msg.data, byteorder="little", signed=True
+                        ),
+                    )
                 else:
-                    _LOGGER.info("Unhandled CnRpdoNotificationType since no callback is registered.")
+                    _LOGGER.info(
+                        "Unhandled CnRpdoNotificationType since no callback is registered."
+                    )
 
-            elif message.cmd.type == zehnder_pb2.GatewayOperation.GatewayNotificationType:
+            elif (
+                message.cmd.type == zehnder_pb2.GatewayOperation.GatewayNotificationType
+            ):
                 _LOGGER.debug("Unhandled GatewayNotificationType")
 
-            elif message.cmd.type == zehnder_pb2.GatewayOperation.CnNodeNotificationType:
+            elif (
+                message.cmd.type == zehnder_pb2.GatewayOperation.CnNodeNotificationType
+            ):
                 _LOGGER.debug("Unhandled CnNodeNotificationType")
 
-            elif message.cmd.type == zehnder_pb2.GatewayOperation.CnAlarmNotificationType:
+            elif (
+                message.cmd.type == zehnder_pb2.GatewayOperation.CnAlarmNotificationType
+            ):
                 if self.__alarm_callback_fn:
                     self.__alarm_callback_fn(message.msg.nodeId, message.msg)
                 else:
-                    _LOGGER.info("Unhandled CnAlarmNotificationType since no callback is registered.")
+                    _LOGGER.info(
+                        "Unhandled CnAlarmNotificationType since no callback is registered."
+                    )
 
-            elif message.cmd.type == zehnder_pb2.GatewayOperation.CloseSessionRequestType:
+            elif (
+                message.cmd.type == zehnder_pb2.GatewayOperation.CloseSessionRequestType
+            ):
                 _LOGGER.info("The Bridge has asked us to close the connection.")
                 raise AioComfoConnectNotConnected("Bridge requested connection close")
 
@@ -324,7 +360,9 @@ class Bridge:
                 self._event_bus.emit(message.cmd.reference, message.msg)
 
             else:
-                _LOGGER.warning("Unhandled message type %s: %s", message.cmd.type, message)
+                _LOGGER.warning(
+                    "Unhandled message type %s: %s", message.cmd.type, message
+                )
 
         except asyncio.IncompleteReadError as exc:
             _LOGGER.info("The connection was closed.")
@@ -345,15 +383,31 @@ class Bridge:
         except DecodeError as exc:
             _LOGGER.error("Failed to decode message: %s", exc)
 
-    def cmd_start_session(self, take_over: bool = False) -> Awaitable[Message]:
-        """Starts the session on the device by logging in and optionally disconnecting an already existing session."""
+    async def cmd_start_session(self, take_over: bool = False) -> Message:
+        """Starts the session on the device by logging in and optionally disconnecting an already existing session.
+
+        ComfoConnect Pro behaviour: when the calling UUID is not registered the device silently
+        ignores the StartSession request (no reply, connection stays open) instead of returning
+        NOT_ALLOWED like the LAN C does.  A timeout on a live connection is therefore treated as
+        NOT_ALLOWED so callers handle both device types identically.
+        """
         _LOGGER.debug("StartSessionRequest")
-        # pylint: disable=no-member
-        return self._send(
-            zehnder_pb2.StartSessionRequest,
-            zehnder_pb2.GatewayOperation.StartSessionRequestType,
-            {"takeover": take_over},
-        )
+        try:
+            # pylint: disable=no-member
+            return await self._send(
+                zehnder_pb2.StartSessionRequest,
+                zehnder_pb2.GatewayOperation.StartSessionRequestType,
+                {"takeover": take_over},
+            )
+        except AioComfoConnectTimeout:
+            if self.is_connected():
+                # The device is reachable (TCP alive) but chose not to reply.
+                # This is the ComfoConnect Pro's way of saying "not registered".
+                raise ComfoConnectNotAllowed(
+                    "StartSession timed out on a live connection "
+                    "(ComfoConnect Pro: UUID not registered)"
+                )
+            raise
 
     def cmd_close_session(self) -> Awaitable[Message]:
         """Stops the current session."""
@@ -374,7 +428,9 @@ class Bridge:
             zehnder_pb2.GatewayOperation.ListRegisteredAppsRequestType,
         )
 
-    def cmd_register_app(self, uuid: str, device_name: str, pin: int) -> Awaitable[Message]:
+    def cmd_register_app(
+        self, uuid: str, device_name: str, pin: int
+    ) -> Awaitable[Message]:
         """Register a new app by specifying our own uuid, device_name and pin code."""
         _LOGGER.debug("RegisterAppRequest")
         # pylint: disable=no-member
@@ -429,7 +485,9 @@ class Bridge:
             {"nodeId": node_id or 1, "message": message},
         )
 
-    def cmd_rpdo_request(self, pdid: int, pdo_type: int = 1, zone: int = 1, timeout=None) -> Awaitable[Message]:
+    def cmd_rpdo_request(
+        self, pdid: int, pdo_type: int = 1, zone: int = 1, timeout=None
+    ) -> Awaitable[Message]:
         """Register a RPDO request."""
         _LOGGER.debug("CnRpdoRequest")
         # pylint: disable=no-member
@@ -537,7 +595,14 @@ class Message:
         cmd_len_buf = struct.pack(">H", len(cmd_buf))
         msg_len_buf = struct.pack(">L", 16 + 16 + 2 + len(cmd_buf) + len(msg_buf))
 
-        return msg_len_buf + bytes.fromhex(self.src) + bytes.fromhex(self.dst) + cmd_len_buf + cmd_buf + msg_buf
+        return (
+            msg_len_buf
+            + bytes.fromhex(self.src)
+            + bytes.fromhex(self.dst)
+            + cmd_len_buf
+            + cmd_buf
+            + msg_buf
+        )
 
     @classmethod
     def decode(cls, packet) -> Message:
