@@ -76,13 +76,20 @@ class EventBus:
 
 
 class Bridge:
-    """ComfoConnect LAN C API."""
+    """ComfoConnect LAN C / PRO API."""
 
     PORT = 56747
 
-    def __init__(self, host: str, uuid: str, loop: Optional[asyncio.AbstractEventLoop] = None):
+    def __init__(
+        self,
+        host: str,
+        uuid: str,
+        loop: Optional[asyncio.AbstractEventLoop] = None,
+        bridge_type: int = 0,
+    ):
         self.host: str = host
         self.uuid: str = uuid
+        self.bridge_type: int = bridge_type
         self._local_uuid: Optional[str] = None
 
         self._reader: Optional[StreamReader] = None
@@ -110,6 +117,16 @@ class Bridge:
 
     async def connect(self, uuid: str):
         """Connect to the bridge and start reading messages."""
+        await self._open_connection(uuid)
+
+    async def register(self, uuid: str, name: str, pin: int):
+        """Register this app on the bridge and start a session."""
+        await self._open_connection(uuid)
+        await self.cmd_register_app(uuid, name, pin)
+        await self.cmd_start_session(True)
+
+    async def _open_connection(self, uuid: str):
+        """Open TCP connection to the bridge and start reading messages."""
         if self.is_connected():
             _LOGGER.warning("Already connected to bridge %s", self.host)
             return

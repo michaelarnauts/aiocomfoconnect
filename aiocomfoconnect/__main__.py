@@ -1,4 +1,4 @@
-""" aiocomfoconnect CLI application """
+"""aiocomfoconnect CLI application"""
 
 from __future__ import annotations
 
@@ -87,23 +87,12 @@ async def run_register(host: str, uuid: str, name: str, pin: int):
     comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid)
 
     try:
-        # Login with the bridge
-        await comfoconnect.connect(uuid)
-        print(f"UUID {uuid} is already registered.")
-
+        await comfoconnect.register(uuid, name, pin)
     except ComfoConnectNotAllowed:
-        # We probably are not registered yet...
-        try:
-            await comfoconnect.cmd_register_app(uuid, name, pin)
-        except ComfoConnectNotAllowed:
-            await comfoconnect.disconnect()
-            print("Registration failed. Please check the PIN.")
-            sys.exit(1)
+        print("Registration failed. Please check the PIN.")
+        sys.exit(1)
 
-        print(f"UUID {uuid} is now registered.")
-
-        # Connect to the bridge
-        await comfoconnect.cmd_start_session(True)
+    print(f"UUID {uuid} is now registered.")
 
     # ListRegisteredApps
     print()
