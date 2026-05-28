@@ -30,6 +30,7 @@ from .protobuf import zehnder_pb2
 _LOGGER = logging.getLogger(__name__)
 
 TIMEOUT = 5
+GATEWAY_TYPE_PRO = 2
 
 
 class SelfDeregistrationError(Exception):
@@ -119,11 +120,27 @@ class Bridge:
         """Connect to the bridge and start reading messages."""
         await self._open_connection(uuid)
 
-    async def register(self, uuid: str, name: str, pin: int):
-        """Register this app on the bridge and start a session."""
+    async def register(self, uuid: str, name: str, pin: int) -> bool:
+        """Register this app on the bridge and start a session.
+
+        For LAN C bridges, attempts to start a session first; if the session
+        succeeds the app is already registered and no re-registration occurs.
+        For Pro bridges, registers directly to avoid a connection timeout that
+        the Pro issues when the app is not yet registered.
+
+        Returns True if the app was newly registered, False if it was already registered.
+        """
         await self._open_connection(uuid)
+        if self.bridge_type != GATEWAY_TYPE_PRO:
+            # LAN C: check whether we are already registered by starting a session.
+            try:
+                await self.cmd_start_session(True)
+                return False  # Already registered; session is now active.
+            except ComfoConnectNotAllowed:
+                pass  # Not registered yet; fall through to register below.
         await self.cmd_register_app(uuid, name, pin)
         await self.cmd_start_session(True)
+        return True
 
     async def _open_connection(self, uuid: str):
         """Open TCP connection to the bridge and start reading messages."""

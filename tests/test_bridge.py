@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-from aiocomfoconnect.bridge import Bridge, EventBus, Message
+from aiocomfoconnect.bridge import GATEWAY_TYPE_PRO, Bridge, EventBus
 
 LOCAL_UUID = "00000000000000000000000000000001"
 
@@ -13,7 +13,6 @@ from aiocomfoconnect.exceptions import (
     AioComfoConnectNotConnected,
     AioComfoConnectTimeout,
     ComfoConnectNotAllowed,
-    ComfoConnectOtherSession,
 )
 
 
@@ -498,3 +497,100 @@ class TestBridge:
         repr_str = repr(bridge)
         assert "192.168.1.100" in repr_str
         assert "00000000000000000000000000000001" in repr_str
+
+
+class TestBridgeRegister:
+    """Tests for Bridge.register()."""
+
+    @pytest.fixture
+    def lanc_bridge(self):
+        """A Bridge with bridge_type=0 (LAN C, the default)."""
+        return Bridge("192.168.1.100", LOCAL_UUID, bridge_type=0)
+
+    @pytest.fixture
+    def pro_bridge(self):
+        """A Bridge with bridge_type=GATEWAY_TYPE_PRO."""
+        return Bridge("192.168.1.100", LOCAL_UUID, bridge_type=GATEWAY_TYPE_PRO)
+
+    @pytest.mark.asyncio
+    async def test_lanc_already_registered(self, lanc_bridge):
+        """LAN C: session starts successfully → already registered, no cmd_register_app call."""
+        with patch.object(lanc_bridge, "_open_connection", new_callable=AsyncMock) as mock_open, \
+             patch.object(lanc_bridge, "cmd_start_session", new_callable=AsyncMock) as mock_session, \
+             patch.object(lanc_bridge, "cmd_register_app", new_callable=AsyncMock) as mock_register:
+
+            result = await lanc_bridge.register(LOCAL_UUID, "test-app", 1234)
+
+        assert result is False
+        mock_open.assert_called_once_with(LOCAL_UUID)
+        mock_session.assert_called_once_with(True)
+        mock_register.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_lanc_not_registered(self, lanc_bridge):
+        """LAN C: session returns NotAllowed → registers then starts session, returns True."""
+        with patch.object(lanc_bridge, "_open_connection", new_callable=AsyncMock) as mock_open, \
+             patch.object(lanc_bridge, "cmd_start_session", new_callable=AsyncMock) as mock_session, \
+             patch.object(lanc_bridge, "cmd_register_app", new_callable=AsyncMock) as mock_register:
+
+            mock_session.side_effect = [ComfoConnectNotAllowed("not registered"), None]
+
+            result = await lanc_bridge.register(LOCAL_UUID, "test-app", 1234)
+
+        assert result is True
+        mock_open.assert_called_once_with(LOCAL_UUID)
+        mock_register.assert_called_once_with(LOCAL_UUID, "test-app", 1234)
+        assert mock_session.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_lanc_wrong_pin(self, lanc_bridge):
+        """LAN C: not registered, wrong PIN → cmd_register_app fails, exception propagates."""
+        with patch.object(lanc_bridge, "_open_connection", new_callable=AsyncMock), \
+             patch.object(lanc_bridge, "cmd_start_session", new_callable=AsyncMock) as mock_session, \
+             patch.object(lanc_bridge, "cmd_register_app", new_callable=AsyncMock) as mock_register:
+
+            mock_session.side_effect = ComfoConnectNotAllowed("not registered")
+            mock_register.side_effect = ComfoConnectNotAllowed("wrong pin")
+
+            with pytest.raises(ComfoConnectNotAllowed):
+                await lanc_bridge.register(LOCAL_UUID, "test-app", 9999)
+
+        mock_session.assert_called_once_with(True)  # checked once, not retried after failed register
+        mock_register.assert_called_once_with(LOCAL_UUID, "test-app", 9999)
+
+    @pytest.mark.asyncio
+    async def test_pro_registers_directly_without_session_check(self, pro_bridge):
+        """Pro: skips the session-first check, calls cmd_register_app then cmd_start_session."""
+        call_order = []
+
+        async def track_register(*args):
+            call_order.append("register")
+
+        async def track_session(*args):
+            call_order.append("session")
+
+        with patch.object(pro_bridge, "_open_connection", new_callable=AsyncMock) as mock_open, \
+             patch.object(pro_bridge, "cmd_register_app", side_effect=track_register) as mock_register, \
+             patch.object(pro_bridge, "cmd_start_session", side_effect=track_session) as mock_session:
+
+            result = await pro_bridge.register(LOCAL_UUID, "test-app", 1234)
+
+        assert result is True
+        mock_open.assert_called_once_with(LOCAL_UUID)
+        mock_register.assert_called_once_with(LOCAL_UUID, "test-app", 1234)
+        mock_session.assert_called_once_with(True)
+        assert call_order == ["register", "session"]
+
+    @pytest.mark.asyncio
+    async def test_pro_wrong_pin(self, pro_bridge):
+        """Pro: cmd_register_app fails with wrong PIN → exception propagates, session never started."""
+        with patch.object(pro_bridge, "_open_connection", new_callable=AsyncMock), \
+             patch.object(pro_bridge, "cmd_register_app", new_callable=AsyncMock) as mock_register, \
+             patch.object(pro_bridge, "cmd_start_session", new_callable=AsyncMock) as mock_session:
+
+            mock_register.side_effect = ComfoConnectNotAllowed("wrong pin")
+
+            with pytest.raises(ComfoConnectNotAllowed):
+                await pro_bridge.register(LOCAL_UUID, "test-app", 9999)
+
+        mock_session.assert_not_called()

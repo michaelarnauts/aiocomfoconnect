@@ -44,9 +44,9 @@ _LOGGER = logging.getLogger(__name__)
 class ComfoConnect(Bridge):
     """Abstraction layer over the ComfoConnect LAN C API."""
 
-    def __init__(self, host: str, uuid: str, loop=None, sensor_callback=None, alarm_callback=None, sensor_delay=2, connect_timeout=30):
+    def __init__(self, host: str, uuid: str, loop=None, sensor_callback=None, alarm_callback=None, sensor_delay=2, connect_timeout=30, bridge_type: int = 0):
         """Initialize the ComfoConnect class."""
-        super().__init__(host, uuid, loop)
+        super().__init__(host, uuid, loop, bridge_type)
 
         self.set_sensor_callback(self._sensor_callback)  # Set the callback to our _sensor_callback method, so we can proces the callbacks.
         self.set_alarm_callback(self._alarm_callback)  # Set the callback to our _alarm_callback method, so we can proces the callbacks.

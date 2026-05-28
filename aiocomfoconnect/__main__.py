@@ -84,15 +84,18 @@ async def run_register(host: str, uuid: str, name: str, pin: int):
         raise BridgeNotFoundException("No bridge found")
 
     # Connect to the bridge
-    comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid)
+    comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid, bridge_type=bridges[0].bridge_type)
 
     try:
-        await comfoconnect.register(uuid, name, pin)
+        registered = await comfoconnect.register(uuid, name, pin)
     except ComfoConnectNotAllowed:
         print("Registration failed. Please check the PIN.")
         sys.exit(1)
 
-    print(f"UUID {uuid} is now registered.")
+    if registered:
+        print(f"UUID {uuid} is now registered.")
+    else:
+        print(f"UUID {uuid} is already registered.")
 
     # ListRegisteredApps
     print()
@@ -285,7 +288,7 @@ async def run_show_sensor(host: str, uuid: str, sensor: int, follow=False):
         print("Could not connect to bridge. Please register first.")
         sys.exit(1)
 
-    if not sensor in SENSORS:
+    if sensor not in SENSORS:
         print(f"Unknown sensor with ID {sensor}")
         sys.exit(1)
 
