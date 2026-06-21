@@ -6,6 +6,9 @@ authors = ["Michaël Arnauts <michael.arnauts@gmail.com>"]
 readme = "README.md"
 homepage = "https://github.com/michaelarnauts/aiocomfoconnect"
 
+[tool.poetry.scripts]
+aiocomfoconnect = "aiocomfoconnect.__main__:main_cli"
+
 [tool.poetry.dependencies]
 python = "^3.10"
 aiohttp = "^3.8.0"

@@ -389,7 +389,8 @@ async def run_set_flow_for_speed(host: str, uuid: str, speed: Literal["away", "l
     await comfoconnect.disconnect()
 
 
-if __name__ == "__main__":
+def main_cli():
+    """Parse arguments and start async event loop."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--debug", "-d", help="Enable debug logging", default=False, action="store_true")
     subparsers = parser.add_subparsers(required=True, dest="action")
@@ -472,3 +473,7 @@ if __name__ == "__main__":
         asyncio.run(main(arguments), debug=True)
     except KeyboardInterrupt:
         pass
+
+
+if __name__ == "__main__":
+    main_cli()
