@@ -131,6 +131,8 @@ factory mode or tries to perform an update.)
 | NODE              | 0x01    | 0x0C     |        | STRING | ?? NULL                                                                |
 | NODE              | 0x01    | 0x0D     | ro     | STRING | Current Country (BE)                                                   |
 | NODE              | 0x01    | 0x14     | ro     | STRING | Ventilation Unit Name (ComfoAirQ)                                      |
+| FILTER            | 0x01    | 0x02     |        | UINT8  | Filter pre-warning period in days (21)?                                |
+| FILTER            | 0x01    | 0x03     | rw     | UINT16 | Filter lifetime in days (150)                                          |
 | TEMPHUMCONTROL    | 0x01    | 0x01     |        | UINT8  | ?? `01` = 1                                                            |
 | TEMPHUMCONTROL    | 0x01    | 0x02     | rw     | INT16  | RMOT for heating period (180 -> 18°C)                                  |
 | TEMPHUMCONTROL    | 0x01    | 0x03     | rw     | INT16  | RMOT for cooling period (200 -> 20°C)                                  |
@@ -138,7 +140,7 @@ factory mode or tries to perform an update.)
 | TEMPHUMCONTROL    | 0x01    | 0x05     | rw     | UINT8  | ?? `00` = 0                                                            |
 | TEMPHUMCONTROL    | 0x01    | 0x06     | rw     | UINT8  | Humidity comfort control (o=off, 1=autoonly, 2=on)                     |
 | TEMPHUMCONTROL    | 0x01    | 0x07     | rw     | UINT8  | Humidity protection (0=off, 1=autoonly, 2=on)                          |
-| TEMPHUMCONTROL    | 0x01    | 0x08     | rw     | UINT8  | ?? `00` = 0                                                            |
+| TEMPHUMCONTROL    | 0x01    | 0x08     | rw     | UINT8  | Temperature profile mode (0=adaptive, 1=fixed, 2=ext. setpoint?)       |
 | TEMPHUMCONTROL    | 0x01    | 0x0A     | rw     | INT16  | Target temperature for profile: Heating (230 -> 23°C)                  |
 | TEMPHUMCONTROL    | 0x01    | 0x0B     | rw     | INT16  | Target temperature for profile: Normal (210 -> 21°C)                   |
 | TEMPHUMCONTROL    | 0x01    | 0x0C     | rw     | INT16  | Target temperature for profile: Cooling (190 -> 19°C)                  |
