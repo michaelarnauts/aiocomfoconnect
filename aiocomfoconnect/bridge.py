@@ -16,6 +16,7 @@ from google.protobuf.message import Message as ProtobufMessage
 from .const import VENTILATION_UNIT_PRODUCT_IDS
 from .exceptions import (
     AioComfoConnectNotConnected,
+    AioComfoConnectNotReachable,
     AioComfoConnectTimeout,
     ComfoConnectBadRequest,
     ComfoConnectError,
@@ -189,8 +190,13 @@ class Bridge:
         try:
             self._reader, self._writer = await asyncio.wait_for(asyncio.open_connection(self.host, self.PORT), TIMEOUT)
         except asyncio.TimeoutError as exc:
+            # Keep this before OSError, since TimeoutError is a subclass of it.
             _LOGGER.warning("Timeout while connecting to bridge %s", self.host)
             raise AioComfoConnectTimeout("Timeout while connecting to bridge") from exc
+        except OSError as exc:
+            # The bridge refused the connection, is gone from the network, or its hostname doesn't resolve.
+            _LOGGER.warning("Could not connect to bridge %s: %s", self.host, exc)
+            raise AioComfoConnectNotReachable(f"Could not connect to bridge: {exc}") from exc
 
         self._reference = itertools.count(1)
         self._local_uuid = uuid

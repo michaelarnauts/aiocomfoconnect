@@ -50,6 +50,10 @@ class AioComfoConnectTimeout(Exception):
     """An error occurred because the bridge didn't reply in time."""
 
 
+class AioComfoConnectNotReachable(Exception):
+    """An error occurred because the bridge could not be reached, for example when it moved to another address."""
+
+
 class BridgeNotFoundException(Exception):
     """Exception raised when no bridge is found."""
 
