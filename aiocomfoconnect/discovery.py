@@ -1,4 +1,4 @@
-""" Bridge discovery """
+"""Bridge discovery"""
 
 from __future__ import annotations
 
@@ -48,7 +48,13 @@ class BridgeDiscoveryProtocol(asyncio.DatagramProtocol):
         parser = zehnder_pb2.DiscoveryOperation()  # pylint: disable=no-member
         parser.ParseFromString(data)
 
-        self._bridges.append(Bridge(host=parser.searchGatewayResponse.ipaddress, uuid=parser.searchGatewayResponse.uuid.hex()))
+        self._bridges.append(
+            Bridge(
+                host=parser.searchGatewayResponse.ipaddress,
+                uuid=parser.searchGatewayResponse.uuid.hex(),
+                bridge_type=parser.searchGatewayResponse.type,
+            )
+        )
 
         # When we have passed a target, we only want to listen for that one
         if self._target:

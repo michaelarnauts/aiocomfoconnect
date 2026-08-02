@@ -1,4 +1,4 @@
-""" aiocomfoconnect CLI application """
+"""aiocomfoconnect CLI application"""
 
 from __future__ import annotations
 
@@ -84,26 +84,18 @@ async def run_register(host: str, uuid: str, name: str, pin: int):
         raise BridgeNotFoundException("No bridge found")
 
     # Connect to the bridge
-    comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid)
+    comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid, bridge_type=bridges[0].bridge_type)
 
     try:
-        # Login with the bridge
-        await comfoconnect.connect(uuid)
-        print(f"UUID {uuid} is already registered.")
-
+        registered = await comfoconnect.register(uuid, name, pin)
     except ComfoConnectNotAllowed:
-        # We probably are not registered yet...
-        try:
-            await comfoconnect.cmd_register_app(uuid, name, pin)
-        except ComfoConnectNotAllowed:
-            await comfoconnect.disconnect()
-            print("Registration failed. Please check the PIN.")
-            sys.exit(1)
+        print("Registration failed. Please check the PIN.")
+        sys.exit(1)
 
+    if registered:
         print(f"UUID {uuid} is now registered.")
-
-        # Connect to the bridge
-        await comfoconnect.cmd_start_session(True)
+    else:
+        print(f"UUID {uuid} is already registered.")
 
     # ListRegisteredApps
     print()
@@ -296,7 +288,7 @@ async def run_show_sensor(host: str, uuid: str, sensor: int, follow=False):
         print("Could not connect to bridge. Please register first.")
         sys.exit(1)
 
-    if not sensor in SENSORS:
+    if sensor not in SENSORS:
         print(f"Unknown sensor with ID {sensor}")
         sys.exit(1)
 

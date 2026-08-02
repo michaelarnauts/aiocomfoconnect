@@ -19,6 +19,7 @@ message SearchGatewayResponse {
     enum GatewayType {
         lanc = 0;
         season = 1;
+        pro = 2;
     }
     required string ipaddress = 1 [(nanopb).max_size = 16];
     required bytes uuid = 2 [(nanopb).max_size = 16];
@@ -32,7 +33,7 @@ message SearchGatewayResponse {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 message GatewayOperation {
     enum OperationType {
-        NoOperation = 0;	
+        NoOperation = 0;
 
         SetAddressRequestType = 1;
         RegisterAppRequestType = 2;
@@ -138,11 +139,11 @@ message GatewayOperation {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-// This is the base-message for all notifications. 
+// This is the base-message for all notifications.
 // The Gateway sends this message to the Backend and the connected App (if any).
-// The Gateway specifies the list of currently registered PushUUIDs in this message. 
+// The Gateway specifies the list of currently registered PushUUIDs in this message.
 // The Backend uses this list to send out the push-notifications if needed (depending on the contents of the push-message).
-// TODO: Tell Gateway which notifications to forward to the Backend and which to forward to the App only 
+// TODO: Tell Gateway which notifications to forward to the Backend and which to forward to the App only
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 message GatewayNotification {
     repeated bytes pushUUIDs = 1;
@@ -177,7 +178,7 @@ message SetDeviceSettingsConfirm {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-// Associates a GatewayUUID or AppUUID with a Backend-connection. 
+// Associates a GatewayUUID or AppUUID with a Backend-connection.
 // This way the Backend knows on which TCP-connection the specified UUID can be reached.
 //
 // Authentication:
@@ -231,7 +232,7 @@ message StartSessionConfirm {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Inform other side that the session is closed. CloseSessionConfirm is only sent back when
-// an error occurred. 
+// an error occurred.
 //
 // Authentication:
 // None
@@ -262,13 +263,13 @@ message ListRegisteredAppsConfirm {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-// Used to deregister a mobile app from the Gateway. 
-// The Gateway removes the specified uuid from the list of registered AppUUIDs. 
+// Used to deregister a mobile app from the Gateway.
+// The Gateway removes the specified uuid from the list of registered AppUUIDs.
 // The devicename for this uuid is also removed.
 //
 // Authentication:
 // This message is authenticated by srcuuid (must be a registered AppUUID or WebUUID).
-// SupportUUID is not allowed. 
+// SupportUUID is not allowed.
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 message DeregisterAppRequest {
     required bytes uuid = 1 [(nanopb).max_size = 16];
@@ -295,7 +296,7 @@ message ChangePinConfirm {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // This returns the currently set RemoteUUID at the Gateway or nothing if not set.
-// 
+//
 // Authentication:
 // This message is authenticated by srcuuid (must be a registered AppUUID).
 // SupportUUID/WebUUID are not allowed.
@@ -309,14 +310,14 @@ message GetRemoteAccessIdConfirm {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // The RemoteUUID is set at the Gateway when the user enables remote access from the App.
-// The Gateway stores the RemoteUUID in eeprom/flash and uses it to set its address at the Backend. 
-// When the Gateway has not received a RemoteUUID yet, it cannot set the address at the Backend and 
+// The Gateway stores the RemoteUUID in eeprom/flash and uses it to set its address at the Backend.
+// When the Gateway has not received a RemoteUUID yet, it cannot set the address at the Backend and
 // therefore there is no need to setup the connection to the Backend.
-// The App uses this RemoteUUID to gain access to the Gateway via the Backend. 
+// The App uses this RemoteUUID to gain access to the Gateway via the Backend.
 // The Backend routes messages from the App to the Gateway that registered this id with SetAddress.
-// Setting the RemoteUUID to a new value requires other Apps that still use the old value (or no value) 
+// Setting the RemoteUUID to a new value requires other Apps that still use the old value (or no value)
 // to get an updated RemoteAccessId.
-// Remote access can be disabled by keeping the uuid in the request empty. In this case the Gateway 
+// Remote access can be disabled by keeping the uuid in the request empty. In this case the Gateway
 // will remove the current RemoteUUID (if any) and close the connection to the Backend.
 //
 // Authentication:
@@ -346,9 +347,9 @@ message GetSupportIdConfirm {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // The SupportUUID is set at the Gateway when the user enables remote support from the App.
-// The Gateway stores the SupportUUID in eeprom/flash and uses it to authenticate incoming 
+// The Gateway stores the SupportUUID in eeprom/flash and uses it to authenticate incoming
 // requests (same way as AppUUID, WebUUID).
-// The SupportUUID is only valid for a limited time (to be determined). 
+// The SupportUUID is only valid for a limited time (to be determined).
 // The Gateway is responsible from removing the SupportUUID when the time is expired.
 // The SupportUUID can be removed from the Gateway by keeping the uuid in the request empty.
 //
@@ -365,7 +366,7 @@ message SetSupportIdConfirm {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // This returns the currently set WebUUID at the Gateway or nothing if not set.
-// 
+//
 // Authentication:
 // This message is authenticated by srcuuid (must be a registered AppUUID).
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -392,12 +393,12 @@ message SetWebIdConfirm {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-// The PushUUID is set at the Gateway when the user enables push-support in the App. 
+// The PushUUID is set at the Gateway when the user enables push-support in the App.
 // Multiple PushUUIDs can be set at the Gateway (one per AppUUID).
-// The Gateway stores the PushUUIDs in eeprom/flash and uses them when a notification is received 
-// from the ComfoNet-side. The notification is forwarded to the Backend and the connected App (if any) 
+// The Gateway stores the PushUUIDs in eeprom/flash and uses them when a notification is received
+// from the ComfoNet-side. The notification is forwarded to the Backend and the connected App (if any)
 // using the GatewayNotification (see TODO) messages.
-// The PushUUID can be removed from the Gateway by keeping the uuid in the request empty 
+// The PushUUID can be removed from the Gateway by keeping the uuid in the request empty
 // (for the AppUUID indicated by the srcuuid).
 //
 // Authentication:
@@ -700,12 +701,12 @@ message WiFiNetworksConfirm {
 
 message WiFiJoinNetworkRequest {
     required WiFiMode mode = 1;
-    optional string ssid = 2 [(nanopb).max_size = 32];             
+    optional string ssid = 2 [(nanopb).max_size = 32];
     optional string password = 3 [(nanopb).max_size = 64];
     optional WiFiSecurity security = 4 [default = WPA_WPA2];
 }
 
-message WiFiJoinNetworkConfirm {    
+message WiFiJoinNetworkConfirm {
 }
 
 
