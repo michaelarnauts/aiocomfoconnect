@@ -28,7 +28,7 @@ _LOGGER = logging.getLogger(__name__)
 async def main(args):
     """Main function."""
     if args.action == "discover":
-        await run_discover(args.host)
+        await run_discover(args.host, args.broadcast)
 
     elif args.action == "register":
         await run_register(args.host, args.uuid, args.name, args.pin)
@@ -67,9 +67,9 @@ async def main(args):
         raise UnknownActionException("Unknown action: " + args.action)
 
 
-async def run_discover(host: str = None):
+async def run_discover(host: str = None, broadcast_addresses: list = None):
     """Discover all bridges on the network."""
-    bridges = await discover_bridges(host)
+    bridges = await discover_bridges(host, broadcast_addresses=broadcast_addresses)
     print("Discovered bridges:")
     for bridge in bridges:
         print(bridge)
@@ -389,6 +389,7 @@ def main_cli():
 
     p_discover = subparsers.add_parser("discover", help="discover ComfoConnect LAN C devices on your network")
     p_discover.add_argument("--host", help="Host address of the bridge")
+    p_discover.add_argument("--broadcast", help="Broadcast address to search (eg. 192.168.1.255), can be repeated", action="append")
 
     p_register = subparsers.add_parser("register", help="register on a ComfoConnect LAN C device")
     p_register.add_argument("--pin", help="PIN code to register on the bridge", default=DEFAULT_PIN)
