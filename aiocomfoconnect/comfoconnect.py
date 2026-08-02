@@ -45,7 +45,7 @@ _LOGGER = logging.getLogger(__name__)
 class ComfoConnect(Bridge):
     """Abstraction layer over the ComfoConnect LAN C API."""
 
-    def __init__(self, host: str, uuid: str, loop=None, sensor_callback=None, alarm_callback=None, sensor_delay=2, connect_timeout=30, bridge_type: int = 0):
+    def __init__(self, host: str, uuid: str, loop=None, sensor_callback=None, alarm_callback=None, sensor_delay=5, connect_timeout=30, bridge_type: int = 0):
         """Initialize the ComfoConnect class."""
         super().__init__(host, uuid, loop, bridge_type)
 
@@ -58,21 +58,40 @@ class ComfoConnect(Bridge):
         self._alarm_callback_fn: Optional[Callable[[int, Dict[int, str]], None]] = alarm_callback
         self._sensors: Dict[int, Sensor] = {}
         self._sensors_values: Dict[int, Any] = {}
-        self._sensor_hold: Optional[asyncio.Handle] = None
+        self._sensor_holds: Dict[int, asyncio.Handle] = {}
 
         self._reconnect_task: Optional[asyncio.Task] = None
         self._is_stopping = False
         self._session_ready: Optional[asyncio.Future] = None
 
-    def _unhold_sensors(self):
-        """Unhold the sensors."""
-        _LOGGER.debug("Unholding sensors")
-        self._sensor_hold = None
+    def _hold_sensor(self, sensor_id: int):
+        """Hold a sensor, so we don't emit the invalid values that the bridge sends when we subscribe to it."""
+        if not self.sensor_delay or self._loop is None:
+            return
 
-        # Emit the current cached values of the sensors, by now, they should have received a correct update.
-        for sensor_id, _ in self._sensors.items():
-            if self._sensors_values.get(sensor_id) is not None:
-                self._sensor_callback(sensor_id, self._sensors_values.get(sensor_id))
+        # Restart the hold if the sensor is already held.
+        handle = self._sensor_holds.pop(sensor_id, None)
+        if handle is not None:
+            handle.cancel()
+
+        _LOGGER.debug("Holding sensor %s for %s second(s)", sensor_id, self.sensor_delay)
+        self._sensors_values[sensor_id] = None
+        self._sensor_holds[sensor_id] = self._loop.call_later(self.sensor_delay, self._unhold_sensor, sensor_id)
+
+    def _unhold_sensor(self, sensor_id: int):
+        """Unhold a sensor."""
+        _LOGGER.debug("Unholding sensor %s", sensor_id)
+        self._sensor_holds.pop(sensor_id, None)
+
+        # Emit the current cached value of the sensor, by now, it should have received a correct update.
+        if self._sensors_values.get(sensor_id) is not None:
+            self._sensor_callback(sensor_id, self._sensors_values.get(sensor_id))
+
+    def _cancel_sensor_holds(self):
+        """Cancel all pending sensor holds."""
+        for handle in self._sensor_holds.values():
+            handle.cancel()
+        self._sensor_holds.clear()
 
     async def connect(self, uuid: str):
         """Connect to the bridge with automatic reconnection."""
@@ -132,12 +151,10 @@ class ComfoConnect(Bridge):
                 await self.cmd_node_request()
                 _LOGGER.info("Using node %s for the ventilation unit", await self.wait_for_ventilation_node())
 
-                # Wait for a specified amount of seconds to buffer sensor values.
+                # Hold the sensor values for a specified amount of seconds.
                 # This is to work around a bug where the bridge sends invalid sensor values when connecting.
-                if self.sensor_delay:
-                    _LOGGER.debug("Holding sensors for %s second(s)", self.sensor_delay)
-                    self._sensors_values = {}
-                    self._sensor_hold = self._loop.call_later(self.sensor_delay, self._unhold_sensors)
+                for sensor_id in self._sensors:
+                    self._hold_sensor(sensor_id)
 
                 # Register the sensors again (in case we lost the connection)
                 for sensor in self._sensors.values():
@@ -189,10 +206,8 @@ class ComfoConnect(Bridge):
         _LOGGER.debug("Stopping reconnection and disconnecting")
         self._is_stopping = True
 
-        # Cancel sensor hold timer
-        if self._sensor_hold:
-            self._sensor_hold.cancel()
-            self._sensor_hold = None
+        # Cancel sensor hold timers
+        self._cancel_sensor_holds()
 
         # Stop reconnection loop
         if self._reconnect_task and not self._reconnect_task.done():
@@ -211,11 +226,21 @@ class ComfoConnect(Bridge):
         """Register a sensor on the bridge."""
         self._sensors[sensor.id] = sensor
         self._sensors_values[sensor.id] = None
+
+        # Sensors that are registered after we connected get their invalid values from the bridge now, so
+        # they need their own hold. The hold that was started when we connected has probably expired already.
+        self._hold_sensor(sensor.id)
+
         await self.cmd_rpdo_request(sensor.id, sensor.type)
 
     async def deregister_sensor(self, sensor: Sensor):
         """Deregister a sensor on the bridge."""
         await self.cmd_rpdo_request(sensor.id, sensor.type, timeout=0)
+
+        handle = self._sensor_holds.pop(sensor.id, None)
+        if handle is not None:
+            handle.cancel()
+
         del self._sensors[sensor.id]
         del self._sensors_values[sensor.id]
 
@@ -272,7 +297,7 @@ class ComfoConnect(Bridge):
         self._sensors_values[sensor_id] = sensor_value
 
         # Don't emit sensor values until we have received all the initial values.
-        if self._sensor_hold is not None:
+        if sensor_id in self._sensor_holds:
             return
 
         if sensor.value_fn:
