@@ -376,7 +376,7 @@ class TestComfoConnect:
                         await comfoconnect.connect(LOCAL_UUID)
 
         # Sensor hold should be active
-        assert comfoconnect._sensor_hold is not None
+        assert 276 in comfoconnect._sensor_holds
 
         # Sensor callback should not emit yet
         comfoconnect._sensor_callback(276, 100)
@@ -390,6 +390,48 @@ class TestComfoConnect:
 
         # Clean up
         await comfoconnect.disconnect()
+
+    @pytest.mark.asyncio
+    async def test_sensor_hold_when_registered_after_connect(self, comfoconnect):
+        """Test that a sensor registered after the connect hold expired is held as well."""
+        mock_callback = Mock()
+        comfoconnect._sensor_callback_fn = mock_callback
+        comfoconnect.sensor_delay = 1
+
+        mock_reader = AsyncMock()
+        mock_writer = MagicMock()
+        mock_writer.is_closing.return_value = False
+        mock_writer.drain = AsyncMock()
+        mock_writer.wait_closed = AsyncMock()
+
+        with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
+            with patch.object(comfoconnect, "cmd_start_session", AsyncMock()):
+                with patch.object(comfoconnect, "cmd_rpdo_request", AsyncMock()):
+
+                    async def mock_read():
+                        await asyncio.sleep(100)
+
+                    with patch.object(comfoconnect, "_read_messages", side_effect=mock_read):
+                        await comfoconnect.connect(LOCAL_UUID)
+
+                    # The hold that was started when we connected has expired by now.
+                    await asyncio.sleep(1.5)
+
+                    sensor = create_sensor(name="test_sensor", sensor_id=276, sensor_type=1)
+                    await comfoconnect.register_sensor(sensor)
+
+                    # The invalid value that the bridge sends when we subscribe should not be emitted.
+                    comfoconnect._sensor_callback(276, 0)
+                    assert not mock_callback.called
+
+                    # The correct value arrives during the hold and is emitted when it expires.
+                    comfoconnect._sensor_callback(276, 69)
+                    await asyncio.sleep(1.5)
+
+                    mock_callback.assert_called_once_with(sensor, 69)
+
+                    # Clean up
+                    await comfoconnect.disconnect()
 
     @pytest.mark.asyncio
     async def test_alarm_callback(self, comfoconnect):
