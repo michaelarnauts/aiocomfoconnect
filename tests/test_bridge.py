@@ -1,6 +1,7 @@
 """Tests for the Bridge class."""
 
 import asyncio
+import socket
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
@@ -14,6 +15,7 @@ LOCAL_UUID = "00000000000000000000000000000001"
 
 from aiocomfoconnect.exceptions import (
     AioComfoConnectNotConnected,
+    AioComfoConnectNotReachable,
     AioComfoConnectTimeout,
     ComfoConnectNotAllowed,
     VentilationUnitNotFoundException,
@@ -148,6 +150,26 @@ class TestBridge:
 
         with patch("asyncio.open_connection", side_effect=timeout_coro):
             with pytest.raises(AioComfoConnectTimeout, match="Timeout while connecting"):
+                await bridge.connect(LOCAL_UUID)
+        assert not bridge.is_connected()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "error",
+        [
+            OSError(113, "No route to host"),
+            ConnectionRefusedError(111, "Connection refused"),
+            socket.gaierror("Name or service not known"),
+        ],
+    )
+    async def test_connect_not_reachable(self, bridge, error):
+        """Test that a bridge we can't reach doesn't raise a bare OSError."""
+
+        async def error_coro(*args, **kwargs):
+            raise error
+
+        with patch("asyncio.open_connection", side_effect=error_coro):
+            with pytest.raises(AioComfoConnectNotReachable, match="Could not connect to bridge"):
                 await bridge.connect(LOCAL_UUID)
         assert not bridge.is_connected()
 

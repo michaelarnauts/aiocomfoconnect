@@ -31,6 +31,7 @@ from aiocomfoconnect.const import (
 )
 from aiocomfoconnect.exceptions import (
     AioComfoConnectNotConnected,
+    AioComfoConnectNotReachable,
     AioComfoConnectTimeout,
     ComfoConnectNotAllowed,
     VentilationUnitNotFoundException,
@@ -178,6 +179,10 @@ class ComfoConnect(Bridge):
 
             except AioComfoConnectTimeout:
                 _LOGGER.warning("Connection timeout, retrying in 5 seconds...")
+                await asyncio.sleep(5)
+
+            except AioComfoConnectNotReachable as exc:
+                _LOGGER.warning("%s. Retrying in 5 seconds...", exc)
                 await asyncio.sleep(5)
 
             except VentilationUnitNotFoundException as exc:
