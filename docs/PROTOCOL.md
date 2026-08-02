@@ -208,8 +208,11 @@ reference: 17
 takeover: 1
 ```
 
-Next, we see a few notifications. They seem to be messages to let the client know what nodes are available. We only
-send messages to `nodeId: 1`.
+Next, we see a few notifications. These messages let the client know what nodes are available. The ventilation unit
+isn't always `nodeId: 1`, so the node to send RMI messages to is the one whose `productId` is a ventilation unit
+(`1` for a ComfoAirQ, `8` for a ComfoAir Flex). The nodes are announced as soon as the session starts, and the
+discovery can be retriggered with a `CnNodeRequestType`. Until the ventilation unit has been announced, there is no
+way to know where to send RMI messages to.
 
 ```javascript
 type: CnNodeNotificationType
@@ -231,18 +234,27 @@ mode: NODE_NORMAL
 
 These are the known `productId`s.
 
-| productId | type           | description                    |
-|-----------|----------------|--------------------------------|
-| 1         | ComfoAirQ      | The ComfoAirQ ventilation unit |
-| 2         | ComfoSense     | ComfoSense C                   |
-| 3         | ComfoSwitch    | ComfoSwitch C                  |
-| 4         | OptionBox      |                                |
-| 5         | ZehnderGateway | ComfoConnect LAN C             |
-| 6         | ComfoCool      | ComfoCool Q600                 |
-| 7         | KNXGateway     | ComfoConnect KNX C             |
-| 8         | Service Tool   |                                |
-| 9         | PT Tool        | Production test tool           |
-| 10        | DVT Tool       | Design verification test tool  |
+| productId | type                        | description                        |
+|-----------|-----------------------------|------------------------------------|
+| 1         | ComfoAirQ                   | The ComfoAirQ ventilation unit     |
+| 2         | ComfoSense                  | ComfoSense C                       |
+| 3         | ComfoSwitch                 | ComfoSwitch C                      |
+| 4         | OptionBox                   |                                    |
+| 5         | ZehnderGateway              | ComfoConnect LAN C                 |
+| 6         | ComfoCool                   | ComfoCool Q600                     |
+| 7         | KNXGateway                  | ComfoConnect KNX C                 |
+| 8         | ComfoAirFlex                | The ComfoAir Flex ventilation unit |
+| 9         | ComfoAirFlexConnectionBoard | ComfoAir Flex connection board     |
+| 10        | CO2Sensor                   |                                    |
+| 13        | ComfoVarNgMainNode          |                                    |
+| 14        | ComfoVarNgPeripheralNode    |                                    |
+| 20        | ComfoClime                  |                                    |
+| 21        | ComfoDry                    |                                    |
+| 22        | ComfoPost                   |                                    |
+| 222       | ComfoConnectPro             | ComfoConnect PRO                   |
+| 253       | Service Tool                |                                    |
+| 254       | PT Tool                     | Production test tool               |
+| 255       | DVT Tool                    | Design verification test tool      |
 
 #### CloseSession (`CloseSessionRequestType`)
 

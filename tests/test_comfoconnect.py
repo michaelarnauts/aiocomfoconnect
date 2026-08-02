@@ -6,12 +6,14 @@ from unittest.mock import AsyncMock, MagicMock, Mock, call, patch
 import pytest
 
 from aiocomfoconnect.comfoconnect import ComfoConnect
+from aiocomfoconnect.const import ProductId
 from aiocomfoconnect.exceptions import (
     AioComfoConnectNotConnected,
     AioComfoConnectTimeout,
     ComfoConnectNotAllowed,
+    VentilationUnitNotFoundException,
 )
-from tests.conftest import create_sensor
+from tests.conftest import create_sensor, node_notification
 
 LOCAL_UUID = "00000000000000000000000000000001"
 
@@ -99,8 +101,61 @@ class TestComfoConnect:
         await comfoconnect.disconnect()
 
     @pytest.mark.asyncio
+    async def test_connect_discovers_ventilation_node(self, comfoconnect, mock_connection):
+        """Test that connect waits for the ventilation unit before it reports the session as ready."""
+        mock_reader, mock_writer = mock_connection
+
+        async def mock_read_messages():
+            await asyncio.sleep(100)
+
+        async def announce_nodes():
+            """Announce the nodes like a ComfoAir Flex setup does, in reply to the node request."""
+            node_notification(comfoconnect, node_id=41, product_id=ProductId.COMFOAIRFLEXCONNECTIONBOARD)
+            node_notification(comfoconnect, node_id=45, product_id=ProductId.COMFOAIRFLEX)
+
+        with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
+            with patch.object(comfoconnect, "cmd_start_session", AsyncMock()):
+                with patch.object(comfoconnect, "cmd_node_request", side_effect=announce_nodes):
+                    with patch.object(comfoconnect, "_read_messages", side_effect=mock_read_messages):
+                        await comfoconnect.connect(LOCAL_UUID)
+
+        assert comfoconnect.ventilation_node_id == 45
+
+        # Properties should be read from the discovered node, not from node 1.
+        with patch.object(comfoconnect, "_send", MagicMock()) as mock_send:
+            comfoconnect.cmd_rmi_request(b"\x01\x01\x01\x10\x08")
+        assert mock_send.call_args[0][2]["nodeId"] == 45
+
+        await comfoconnect.disconnect()
+
+    @pytest.mark.asyncio
+    async def test_connect_without_node_notifications(self, comfoconnect, mock_connection):
+        """Test that we don't consider the session ready when no ventilation unit is announced."""
+        mock_reader, mock_writer = mock_connection
+
+        async def mock_read_messages():
+            await asyncio.sleep(100)
+
+        with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
+            with patch.object(comfoconnect, "cmd_start_session", AsyncMock()):
+                with patch.object(comfoconnect, "cmd_node_request", AsyncMock()):
+                    with patch.object(comfoconnect, "_read_messages", side_effect=mock_read_messages):
+                        # The reconnect loop keeps retrying, so connect() gives up after its timeout.
+                        with pytest.raises(AioComfoConnectTimeout):
+                            await comfoconnect.connect(LOCAL_UUID)
+
+        assert comfoconnect.ventilation_node_id is None
+
+    @pytest.mark.asyncio
+    async def test_rmi_request_without_ventilation_node(self, comfoconnect):
+        """Test that RMI commands are refused instead of being sent to node 1."""
+        with pytest.raises(VentilationUnitNotFoundException):
+            await comfoconnect.get_speed()
+
+    @pytest.mark.asyncio
     async def test_connect_timeout(self, comfoconnect):
         """Test connection timeout on initial connect."""
+
         async def timeout_coro(*args, **kwargs):
             raise asyncio.TimeoutError()
 
@@ -179,6 +234,7 @@ class TestComfoConnect:
         with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
             with patch.object(comfoconnect, "cmd_start_session", AsyncMock()):
                 with patch.object(comfoconnect, "cmd_rpdo_request", AsyncMock()):
+
                     async def mock_read():
                         await asyncio.sleep(100)
 
@@ -211,6 +267,7 @@ class TestComfoConnect:
         with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
             with patch.object(comfoconnect, "cmd_start_session", AsyncMock()):
                 with patch.object(comfoconnect, "cmd_rpdo_request", AsyncMock()) as mock_rpdo:
+
                     async def mock_read():
                         await asyncio.sleep(100)
 
@@ -240,6 +297,7 @@ class TestComfoConnect:
         with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
             with patch.object(comfoconnect, "cmd_start_session", AsyncMock()):
                 with patch.object(comfoconnect, "cmd_rpdo_request", AsyncMock()) as mock_rpdo:
+
                     async def mock_read():
                         await asyncio.sleep(100)
 
@@ -310,6 +368,7 @@ class TestComfoConnect:
         with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
             with patch.object(comfoconnect, "cmd_start_session", AsyncMock()):
                 with patch.object(comfoconnect, "_send", AsyncMock()):
+
                     async def mock_read():
                         await asyncio.sleep(100)
 
@@ -413,6 +472,7 @@ class TestComfoConnect:
 
         with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
             with patch.object(comfoconnect, "cmd_start_session", AsyncMock()):
+
                 async def mock_read():
                     await asyncio.sleep(100)
 

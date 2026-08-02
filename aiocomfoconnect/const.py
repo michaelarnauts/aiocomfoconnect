@@ -1,6 +1,36 @@
 """ Constants """
 
 
+# ComfoNet product ids, as reported in the productId field of a CnNodeNotification.
+class ProductId:
+    """Defines a ComfoNet product id."""
+
+    COMFOAIRQ = 0x01
+    COMFOSENSE = 0x02
+    COMFOSWITCH = 0x03
+    OPTIONBOX = 0x04
+    ZEHNDERGATEWAY = 0x05
+    COMFOCOOL = 0x06
+    KNXGATEWAY = 0x07
+    COMFOAIRFLEX = 0x08
+    COMFOAIRFLEXCONNECTIONBOARD = 0x09
+    CO2SENSOR = 0x0A
+    COMFOVARNGMAINNODE = 0x0D
+    COMFOVARNGPERIPHERALNODE = 0x0E
+    COMFOCLIME = 0x14
+    COMFODRY = 0x15
+    COMFOPOST = 0x16
+    COMFOCONNECTPRO = 0xDE
+    SERVICETOOL = 0xFD
+    PRODUCTIONTESTTOOL = 0xFE
+    DESIGNVERIFICATIONTESTTOOL = 0xFF
+
+
+# The product ids of the nodes that accept the ventilation unit RMI commands. Other
+# nodes on the bus (gateway, connection board, sensors, ...) will reply with RMI_ERROR.
+VENTILATION_UNIT_PRODUCT_IDS = (ProductId.COMFOAIRQ, ProductId.COMFOAIRFLEX)
+
+
 # PDO Types
 class PdoType:
     """Defines a PDO type."""

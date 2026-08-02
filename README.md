@@ -77,7 +77,8 @@ $ python -m aiocomfoconnect get-property --host 192.168.1.213 1 1 8 9  # Unit 0x
 - `async cmd_deregister_app(uuid)`: Deregister an app.
 - `async cmd_version_request()`: Request the bridge's version.
 - `async cmd_time_request()`: Request the bridge's time.
-- `async cmd_rmi_request(message, node_id)`: Send a RMI request.
+- `async cmd_node_request()`: Retrigger the discovery of the nodes on the ComfoNet bus.
+- `async cmd_rmi_request(message, node_id)`: Send a RMI request. When no `node_id` is given, the discovered ventilation unit is used, and a `VentilationUnitNotFoundException` is raised when the bridge hasn't announced one.
 - `async cmd_rpdo_request(pdid, type, zone, timeout)`: Send a RPDO request.
 - `async cmd_keepalive()`: Send a keepalive message.
 
