@@ -7,11 +7,13 @@ import itertools
 import logging
 import struct
 from asyncio import StreamReader, StreamWriter
+from dataclasses import dataclass
 from typing import Awaitable, Callable, Dict, Iterator, Optional, Set
 
 from google.protobuf.message import DecodeError
 from google.protobuf.message import Message as ProtobufMessage
 
+from .const import VENTILATION_UNIT_PRODUCT_IDS
 from .exceptions import (
     AioComfoConnectNotConnected,
     AioComfoConnectTimeout,
@@ -24,6 +26,7 @@ from .exceptions import (
     ComfoConnectNotReachable,
     ComfoConnectOtherSession,
     ComfoConnectRmiError,
+    VentilationUnitNotFoundException,
 )
 from .protobuf import zehnder_pb2
 
@@ -32,9 +35,36 @@ _LOGGER = logging.getLogger(__name__)
 TIMEOUT = 5
 GATEWAY_TYPE_PRO = 2
 
+# How long we wait for the bridge to announce the ventilation unit before we give up.
+NODE_DISCOVERY_TIMEOUT = 5
+
 
 class SelfDeregistrationError(Exception):
     """Exception raised when trying to deregister self."""
+
+
+@dataclass(frozen=True)
+class Node:
+    """A node on the ComfoNet bus, as announced by a CnNodeNotification."""
+
+    node_id: int
+    product_id: int
+    zone_id: int
+    mode: int
+
+    @property
+    def is_offline(self) -> bool:
+        """Returns True if this node is no longer available on the bus."""
+        # pylint: disable=no-member
+        if self.mode == zehnder_pb2.CnNodeNotification.NODE_LEGACY:
+            # Legacy nodes don't report a mode, they are offline when they have no product id.
+            return self.product_id == 0
+        return self.mode == zehnder_pb2.CnNodeNotification.NODE_OFFLINE
+
+    @property
+    def is_ventilation_unit(self) -> bool:
+        """Returns True if this node is the ventilation unit that handles RMI commands."""
+        return self.product_id in VENTILATION_UNIT_PRODUCT_IDS
 
 
 class EventBus:
@@ -98,6 +128,9 @@ class Bridge:
         self._reference: Optional[Iterator[int]] = None
 
         self._event_bus: Optional[EventBus] = None
+
+        self._nodes: Dict[int, Node] = {}
+        self._ventilation_node_found: Optional[asyncio.Event] = None
 
         self.__sensor_callback_fn: Optional[Callable[[int, int], None]] = None
         self.__alarm_callback_fn: Optional[Callable[[int, ProtobufMessage], None]] = None
@@ -163,6 +196,10 @@ class Bridge:
         self._local_uuid = uuid
         self._event_bus = EventBus()
 
+        # The bridge announces its nodes at the start of every session, so forget what we knew.
+        self._nodes = {}
+        self._ventilation_node_found = asyncio.Event()
+
         # Start background task to read messages
         self._read_task = self._loop.create_task(self._read_messages())
         _LOGGER.debug("Connected to bridge %s", self.host)
@@ -183,6 +220,52 @@ class Bridge:
             _LOGGER.error("Unexpected error reading messages: %s", exc, exc_info=True)
             self._notify_pending_futures(AioComfoConnectNotConnected("Unexpected error during read"))
             raise
+
+    def _process_node_notification(self, msg: ProtobufMessage):
+        """Keep track of the nodes that are available on the ComfoNet bus."""
+        node = Node(node_id=msg.nodeId, product_id=msg.productId, zone_id=msg.zoneId, mode=msg.mode)
+
+        if node.is_offline:
+            _LOGGER.debug("Node %s went offline", node.node_id)
+            self._nodes.pop(node.node_id, None)
+            return
+
+        _LOGGER.debug("Discovered node %s with product id %s in zone %s", node.node_id, node.product_id, node.zone_id)
+        self._nodes[node.node_id] = node
+
+        if node.is_ventilation_unit and self._ventilation_node_found is not None:
+            self._ventilation_node_found.set()
+
+    @property
+    def nodes(self) -> Dict[int, Node]:
+        """The nodes that the bridge has announced for the current session, keyed by node id."""
+        return self._nodes
+
+    @property
+    def ventilation_node_id(self) -> Optional[int]:
+        """The node id of the ventilation unit, or None when the bridge hasn't announced it (yet)."""
+        candidates = [node.node_id for node in self._nodes.values() if node.is_ventilation_unit]
+        return min(candidates) if candidates else None
+
+    async def wait_for_ventilation_node(self, timeout: float = None) -> int:
+        """Wait until the bridge has announced the ventilation unit and return its node id.
+
+        Raises VentilationUnitNotFoundException when the bridge doesn't announce one in time.
+        """
+        if timeout is None:
+            timeout = NODE_DISCOVERY_TIMEOUT
+
+        if self._ventilation_node_found is not None:
+            try:
+                await asyncio.wait_for(self._ventilation_node_found.wait(), timeout)
+            except asyncio.TimeoutError:
+                pass
+
+        node_id = self.ventilation_node_id
+        if node_id is None:
+            raise VentilationUnitNotFoundException(f"The bridge did not announce a ventilation unit within {timeout} seconds")
+
+        return node_id
 
     def _notify_pending_futures(self, exc: Exception):
         """Fail all pending listeners so callers do not hang."""
@@ -218,6 +301,8 @@ class Bridge:
         self._read_task = None
         self._event_bus = None
         self._reference = None
+        self._nodes = {}
+        self._ventilation_node_found = None
 
     def is_connected(self) -> bool:
         """Returns True if the bridge is connected."""
@@ -341,7 +426,7 @@ class Bridge:
                 _LOGGER.debug("Unhandled GatewayNotificationType")
 
             elif message.cmd.type == zehnder_pb2.GatewayOperation.CnNodeNotificationType:
-                _LOGGER.debug("Unhandled CnNodeNotificationType")
+                self._process_node_notification(message.msg)
 
             elif message.cmd.type == zehnder_pb2.GatewayOperation.CnAlarmNotificationType:
                 if self.__alarm_callback_fn:
@@ -453,14 +538,29 @@ class Bridge:
             zehnder_pb2.GatewayOperation.CnTimeRequestType,
         )
 
-    def cmd_rmi_request(self, message, node_id: int = 1) -> Awaitable[Message]:
-        """Sends a RMI request."""
+    def cmd_node_request(self) -> Awaitable[Message]:
+        """(Re)triggers the discovery of the nodes on the ComfoNet bus."""
+        _LOGGER.debug("CnNodeRequest")
+        # pylint: disable=no-member
+        return self._send(
+            zehnder_pb2.CnNodeRequest,
+            zehnder_pb2.GatewayOperation.CnNodeRequestType,
+            reply=False,  # The nodes are reported back as CnNodeNotifications
+        )
+
+    def cmd_rmi_request(self, message, node_id: Optional[int] = None) -> Awaitable[Message]:
+        """Sends a RMI request to the given node, or to the discovered ventilation unit."""
         _LOGGER.debug("CnRmiRequest")
+        if not node_id:
+            node_id = self.ventilation_node_id
+            if node_id is None:
+                raise VentilationUnitNotFoundException("The bridge has not announced a ventilation unit")
+
         # pylint: disable=no-member
         return self._send(
             zehnder_pb2.CnRmiRequest,
             zehnder_pb2.GatewayOperation.CnRmiRequestType,
-            {"nodeId": node_id or 1, "message": message},
+            {"nodeId": node_id, "message": message},
         )
 
     def cmd_rpdo_request(self, pdid: int, pdo_type: int = 1, zone: int = 1, timeout=None) -> Awaitable[Message]:

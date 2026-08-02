@@ -54,5 +54,9 @@ class BridgeNotFoundException(Exception):
     """Exception raised when no bridge is found."""
 
 
+class VentilationUnitNotFoundException(Exception):
+    """Exception raised when the bridge didn't announce a ventilation unit on the ComfoNet bus."""
+
+
 class UnknownActionException(Exception):
     """Exception raised when an unknown action is provided."""

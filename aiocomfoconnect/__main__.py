@@ -7,7 +7,7 @@ import asyncio
 import logging
 import sys
 from asyncio import Future
-from typing import Literal
+from typing import Literal, Optional
 
 from aiocomfoconnect import DEFAULT_NAME, DEFAULT_PIN, DEFAULT_UUID
 from aiocomfoconnect.comfoconnect import ComfoConnect
@@ -321,7 +321,7 @@ async def run_show_sensor(host: str, uuid: str, sensor: int, follow=False):
     await comfoconnect.disconnect()
 
 
-async def run_get_property(host: str, uuid: str, node_id: int, unit: int, subunit: int, property_id: int, property_type: int):
+async def run_get_property(host: str, uuid: str, node_id: Optional[int], unit: int, subunit: int, property_id: int, property_type: int):
     """Get a property."""
     # Discover bridge so we know the UUID
     bridges = await discover_bridges(host)
@@ -439,7 +439,7 @@ def main_cli():
     p_sensor.add_argument("property_id", help="The id of the property", type=int)
     p_sensor.add_argument("property_type", help="The type of the property", type=int, default=0x09)
 
-    p_sensor.add_argument("--node_id", help="The Node ID of the query", type=int, default=0x01)
+    p_sensor.add_argument("--node_id", help="The Node ID of the query (defaults to the discovered ventilation unit)", type=int, default=None)
     p_sensor.add_argument("--host", help="Host address of the bridge")
     p_sensor.add_argument("--uuid", help="UUID of this app", default=DEFAULT_UUID)
 

@@ -2,12 +2,17 @@
 
 ## Nodes
 
-A RMI message is send towards a Node. There are two known nodes.
+A RMI message is send towards a Node. The node ids are not fixed: the bridge announces the nodes that are available
+with `CnNodeNotification` messages when a session starts, and the ventilation unit is the node whose `productId` is
+`1` (ComfoAirQ) or `8` (ComfoAir Flex). On a ComfoAirQ with a ComfoConnect LAN C, this typically results in:
 
 | Node | Description                   |
 |------|-------------------------------|
 | 0x01 | The Ventilation Unit itself   |
 | 0x30 | The ComfoConnect LAN C device |
+
+On other setups the ids differ. A ComfoAir Flex has for example been seen at node `0x2D` (45), with its connection
+board at node `0x29` (41).
 
 ## Units
 
