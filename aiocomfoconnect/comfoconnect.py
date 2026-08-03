@@ -301,9 +301,14 @@ class ComfoConnect(Bridge):
 
         self._sensors_values[sensor_id] = sensor_value
 
-        # Don't emit sensor values until we have received all the initial values.
+        # The bridge sends invalid (zero) values right after we subscribe to a sensor, so we hold them back.
+        # A non-zero value is a real value, so we can release the hold and emit it right away.
         if sensor_id in self._sensor_holds:
-            return
+            if not sensor_value:
+                return
+
+            _LOGGER.debug("Got a valid value for sensor %s, releasing the hold", sensor_id)
+            self._sensor_holds.pop(sensor_id).cancel()
 
         if sensor.value_fn:
             val = sensor.value_fn(sensor_value)

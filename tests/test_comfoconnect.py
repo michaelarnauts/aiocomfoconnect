@@ -378,15 +378,61 @@ class TestComfoConnect:
         # Sensor hold should be active
         assert 276 in comfoconnect._sensor_holds
 
-        # Sensor callback should not emit yet
-        comfoconnect._sensor_callback(276, 100)
+        # Sensor callback should not emit the invalid value yet
+        comfoconnect._sensor_callback(276, 0)
         assert not mock_callback.called
 
         # Wait for sensor hold to expire
         await asyncio.sleep(2.5)
 
         # Now callback should be called with cached value
-        assert mock_callback.called
+        mock_callback.assert_called_once_with(sensor, 0)
+
+        # Clean up
+        await comfoconnect.disconnect()
+
+    @pytest.mark.asyncio
+    async def test_sensor_hold_released_on_valid_value(self, comfoconnect):
+        """Test that a sensor hold is released as soon as a non-zero value arrives."""
+        mock_callback = Mock()
+        comfoconnect._sensor_callback_fn = mock_callback
+        comfoconnect.sensor_delay = 2
+
+        sensor = create_sensor(name="test_sensor", sensor_id=276, sensor_type=1)
+        comfoconnect._sensors[276] = sensor
+
+        mock_reader = AsyncMock()
+        mock_writer = MagicMock()
+        mock_writer.is_closing.return_value = False
+        mock_writer.drain = AsyncMock()
+        mock_writer.wait_closed = AsyncMock()
+
+        with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
+            with patch.object(comfoconnect, "cmd_start_session", AsyncMock()):
+                with patch.object(comfoconnect, "_send", AsyncMock()):
+
+                    async def mock_read():
+                        await asyncio.sleep(100)
+
+                    with patch.object(comfoconnect, "_read_messages", side_effect=mock_read):
+                        await comfoconnect.connect(LOCAL_UUID)
+
+        # The invalid value that the bridge sends when we subscribe is held back.
+        comfoconnect._sensor_callback(276, 0)
+        assert not mock_callback.called
+
+        # A non-zero value is valid, so it is emitted right away and the hold is released.
+        comfoconnect._sensor_callback(276, 69)
+        mock_callback.assert_called_once_with(sensor, 69)
+        assert 276 not in comfoconnect._sensor_holds
+
+        # Zero values are emitted normally once the hold is released.
+        comfoconnect._sensor_callback(276, 0)
+        mock_callback.assert_called_with(sensor, 0)
+
+        # The expired hold doesn't emit the cached value again.
+        await asyncio.sleep(2.5)
+        assert mock_callback.call_count == 2
 
         # Clean up
         await comfoconnect.disconnect()
@@ -424,10 +470,8 @@ class TestComfoConnect:
                     comfoconnect._sensor_callback(276, 0)
                     assert not mock_callback.called
 
-                    # The correct value arrives during the hold and is emitted when it expires.
+                    # The correct value arrives during the hold and is emitted right away.
                     comfoconnect._sensor_callback(276, 69)
-                    await asyncio.sleep(1.5)
-
                     mock_callback.assert_called_once_with(sensor, 69)
 
                     # Clean up
