@@ -179,3 +179,65 @@ Numbers are stored in little endian format.
 | 1302 | CN_BOOL   |                                                  |                                                                                                                  |
 | 1303 | CN_BOOL   |                                                  |                                                                                                                  |
 | 1304 | CN_BOOL   |                                                  |                                                                                                                  |
+
+
+## Device Time (PDO ID: 0x0A)
+
+The device maintains an internal real-time clock that can be synchronized via CAN bus.
+
+### Time Representation
+
+Time is stored as a 32-bit unsigned integer representing seconds elapsed since the device epoch: **2000-01-01 00:00:00**.
+
+**Conversion formula:**
+```
+Device Seconds = Unix Timestamp - 946684800
+```
+
+Where `946684800` is the number of seconds between the Unix epoch (1970-01-01) and the device epoch (2000-01-01).
+
+### Reading Device Time
+
+**Request:**
+- CAN ID: `0x10080028` (Extended)
+- Type: Remote Transmission Request (RTR)
+- DLC: 0
+
+**Response:**
+- CAN ID: `0x10040001` (Extended)
+- DLC: 4
+- Data: Little-endian uint32 (seconds since 2000-01-01)
+
+**Example:**
+```
+Request:  CAN ID 0x10080028, RTR, DLC 0
+Response: CAN ID 0x10040001, Data [14 EE 90 30]
+          = 0x3090EE14 = 814804500 seconds
+          = 2025-10-26 14:35:00
+```
+
+### Setting Device Time
+
+**Command:**
+- CAN ID: `0x10040001` (Extended)
+- DLC: 4
+- Data: Little-endian uint32 (seconds since 2000-01-01)
+
+**Note:** The device displays time without timezone conversion. Send local time directly for the device to display local time.
+
+**Example:**
+```
+To set device to 2025-10-27 15:30:00:
+Unix timestamp: 1730044200
+Device seconds: 1730044200 - 946684800 = 783359400 = 0x2EAEFAB8
+
+CAN ID: 0x10040001
+Data: [B8 FA AE 2E]  (little-endian)
+```
+
+### Notes
+
+- Multiple request attempts recommended for reliability (2-3 times with 100ms spacing)
+- Response timeout: 5 seconds
+- No explicit acknowledgment for set command; verify by reading time back
+- First request after boot may timeout
