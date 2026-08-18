@@ -218,6 +218,7 @@ units of a ventilation unit. Reverse engineered from the ComfoClime's own HTTP A
 | CLIME_TEMPCONFIG  | 0x01    | 0x0B     | rw     | INT16  | Maximum temperature while cooling (20.0 - 28.0 °C)                     |
 | CLIME_TEMPCONFIG  | 0x01    | 0x0C     | rw     | INT16  | Heating reduction delta (0.0 - 5.0 °C)                                 |
 | CLIME_TEMPCONFIG  | 0x01    | 0x0D     | rw     | INT16  | Manual target temperature (18.0 - 28.0 °C)                             |
+| CLIME_TEMPCONFIG  | 0x01    | 0x15     | rw     | UINT8  | Heat pump standby (0=active, 1=standby)                               |
 | CLIME_TEMPCONFIG  | 0x01    | 0x1D     | rw     | UINT8  | Temperature profile (0=comfort, 1=power, 2=eco)                        |
 | CLIME_HEATPUMP    | 0x01    | 0x03     | rw     | INT16  | Heat pump maximum temperature (40.0 - 60.0 °C)                         |
 | CLIME_HEATPUMP    | 0x01    | 0x04     | rw     | INT16  | Heat pump minimum temperature (10.0 - 17.0 °C)                         |

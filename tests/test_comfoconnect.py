@@ -14,7 +14,7 @@ from aiocomfoconnect.exceptions import (
     ComfoConnectNotAllowed,
     VentilationUnitNotFoundException,
 )
-from aiocomfoconnect.properties import PROPERTY_CLIME_HEATING_COMFORT_TEMP
+from aiocomfoconnect.properties import PROPERTY_CLIME_HEATPUMP_STANDBY, PROPERTY_CLIME_HEATING_COMFORT_TEMP
 from tests.conftest import create_sensor, node_notification
 
 LOCAL_UUID = "00000000000000000000000000000001"
@@ -665,3 +665,13 @@ class TestComfoConnect:
 
         with pytest.raises(ComfoClimeNotFoundException):
             await comfoconnect.get_comfoclime_property(PROPERTY_CLIME_HEATING_COMFORT_TEMP)
+
+    @pytest.mark.asyncio
+    async def test_set_comfoclime_standby_property(self, comfoconnect):
+        """Test the verified ComfoClime standby property framing."""
+        node_notification(comfoconnect, node_id=11, product_id=ProductId.COMFOCLIME)
+
+        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock()) as mock_rmi:
+            await comfoconnect.set_comfoclime_property(PROPERTY_CLIME_HEATPUMP_STANDBY, 1)
+
+            mock_rmi.assert_called_once_with(bytes([0x03, 0x16, 0x01, 0x15, 0x01]), node_id=11)
