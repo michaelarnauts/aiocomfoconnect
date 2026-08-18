@@ -11,6 +11,7 @@ from typing import Literal, Optional
 
 from aiocomfoconnect import DEFAULT_NAME, DEFAULT_PIN, DEFAULT_UUID
 from aiocomfoconnect.comfoconnect import ComfoConnect
+from aiocomfoconnect.const import ProductId
 from aiocomfoconnect.discovery import discover_bridges
 from aiocomfoconnect.exceptions import (
     AioComfoConnectNotConnected,
@@ -23,6 +24,8 @@ from aiocomfoconnect.properties import Property
 from aiocomfoconnect.sensors import SENSORS
 
 _LOGGER = logging.getLogger(__name__)
+
+PRODUCT_NAMES = {value: name.lower() for name, value in vars(ProductId).items() if not name.startswith("_")}
 
 
 async def main(args):
@@ -56,6 +59,12 @@ async def main(args):
 
     elif args.action == "get-property":
         await run_get_property(args.host, args.uuid, args.node_id, args.unit, args.subunit, args.property_id, args.property_type)
+
+    elif args.action == "set-property":
+        await run_set_property(args.host, args.uuid, args.node_id, args.unit, args.subunit, args.property_id, args.property_type, args.value)
+
+    elif args.action == "list-nodes":
+        await run_list_nodes(args.host, args.uuid)
 
     elif args.action == "get-flow-for-speed":
         await run_get_flow_for_speed(args.host, args.uuid, args.speed)
@@ -341,6 +350,54 @@ async def run_get_property(host: str, uuid: str, node_id: Optional[int], unit: i
     await comfoconnect.disconnect()
 
 
+async def run_set_property(host: str, uuid: str, node_id: Optional[int], unit: int, subunit: int, property_id: int, property_type: int, value: int):
+    """Set a property and print the value that is read back."""
+    # Discover bridge so we know the UUID
+    bridges = await discover_bridges(host)
+    if not bridges:
+        raise BridgeNotFoundException("No bridge found")
+
+    # Connect to the bridge
+    comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid)
+    try:
+        await comfoconnect.connect(uuid)
+    except ComfoConnectNotAllowed:
+        print("Could not connect to bridge. Please register first.")
+        sys.exit(1)
+
+    await comfoconnect.set_property_typed(unit, subunit, property_id, value, property_type, node_id=node_id)
+    print(await comfoconnect.get_property(Property(unit, subunit, property_id, property_type), node_id))
+
+    await comfoconnect.disconnect()
+
+
+async def run_list_nodes(host: str, uuid: str):
+    """List the nodes that the bridge sees on the ComfoNet bus."""
+    # Discover bridge so we know the UUID
+    bridges = await discover_bridges(host)
+    if not bridges:
+        raise BridgeNotFoundException("No bridge found")
+
+    # Connect to the bridge
+    comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid)
+    try:
+        await comfoconnect.connect(uuid)
+    except ComfoConnectNotAllowed:
+        print("Could not connect to bridge. Please register first.")
+        sys.exit(1)
+
+    await comfoconnect.cmd_node_request()
+    # Nodes arrive as unsolicited notifications, so give the bridge a moment to report them all.
+    await asyncio.sleep(2)
+
+    print("Nodes on the ComfoNet bus:")
+    for node in sorted(comfoconnect.nodes.values(), key=lambda n: n.node_id):
+        product = PRODUCT_NAMES.get(node.product_id, "unknown")
+        print(f"* node {node.node_id}: product {node.product_id} ({product}), zone {node.zone_id}, mode {node.mode}")
+
+    await comfoconnect.disconnect()
+
+
 async def run_get_flow_for_speed(host: str, uuid: str, speed: Literal["away", "low", "medium", "high"]):
     """Get the configured airflow for the specified speed."""
     # Discover bridge so we know the UUID
@@ -443,6 +500,20 @@ def main_cli():
     p_sensor.add_argument("--node_id", help="The Node ID of the query (defaults to the discovered ventilation unit)", type=int, default=None)
     p_sensor.add_argument("--host", help="Host address of the bridge")
     p_sensor.add_argument("--uuid", help="UUID of this app", default=DEFAULT_UUID)
+
+    p_set_property = subparsers.add_parser("set-property", help="set a property value")
+    p_set_property.add_argument("unit", help="The Unit of the property", type=int)
+    p_set_property.add_argument("subunit", help="The Subunit of the property", type=int)
+    p_set_property.add_argument("property_id", help="The id of the property", type=int)
+    p_set_property.add_argument("property_type", help="The type of the property", type=int)
+    p_set_property.add_argument("value", help="The raw value to write", type=int)
+    p_set_property.add_argument("--node_id", help="The Node ID to write to (defaults to the discovered ventilation unit)", type=int, default=None)
+    p_set_property.add_argument("--host", help="Host address of the bridge")
+    p_set_property.add_argument("--uuid", help="UUID of this app", default=DEFAULT_UUID)
+
+    p_list_nodes = subparsers.add_parser("list-nodes", help="list the nodes on the ComfoNet bus")
+    p_list_nodes.add_argument("--host", help="Host address of the bridge")
+    p_list_nodes.add_argument("--uuid", help="UUID of this app", default=DEFAULT_UUID)
 
     p_get_flow_speed = subparsers.add_parser("get-flow-for-speed", help="Get m³/h for given speed")
     p_get_flow_speed.add_argument("speed", help="Fan speed", choices=["low", "medium", "high", "away"])

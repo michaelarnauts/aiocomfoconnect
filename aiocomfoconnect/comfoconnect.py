@@ -33,6 +33,7 @@ from aiocomfoconnect.exceptions import (
     AioComfoConnectNotConnected,
     AioComfoConnectNotReachable,
     AioComfoConnectTimeout,
+    ComfoClimeNotFoundException,
     ComfoConnectNotAllowed,
     VentilationUnitNotFoundException,
 )
@@ -288,6 +289,28 @@ class ComfoConnect(Bridge):
         result = await self.cmd_rmi_request(message_bytes, node_id=node_id)
 
         return result.message
+
+    def _require_comfoclime_node_id(self) -> int:
+        """Return the node id of the ComfoClime, or raise when it isn't on the bus."""
+        node_id = self.comfoclime_node_id
+        if node_id is None:
+            raise ComfoClimeNotFoundException("The bridge has not announced a ComfoClime")
+        return node_id
+
+    async def get_comfoclime_property(self, prop: Property) -> Any:
+        """Get a property from the ComfoClime node."""
+        return await self.get_property(prop, node_id=self._require_comfoclime_node_id())
+
+    async def set_comfoclime_property(self, prop: Property, value: int) -> Any:
+        """Set a property on the ComfoClime node."""
+        return await self.set_property_typed(
+            prop.unit,
+            prop.subunit,
+            prop.property_id,
+            value,
+            prop.property_type,
+            node_id=self._require_comfoclime_node_id(),
+        )
 
     def _sensor_callback(self, sensor_id, sensor_value):
         """Callback function for sensor updates."""

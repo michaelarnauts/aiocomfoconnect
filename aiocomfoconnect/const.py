@@ -72,6 +72,11 @@ UNIT_POSTHEATER = 0x27
 UNIT_COMFOFOND = 0x28
 UNIT_CO2SENSOR = 0x2B
 UNIT_SERVICEPRINT = 0x2C
+
+# Units that only exist on a ComfoClime node. Unit numbers are reused across product types,
+# so 0x16 / 0x17 mean UNIT_VALVE / UNIT_FAN on a ComfoAir node.
+UNIT_CLIME_TEMPCONFIG = 0x16
+UNIT_CLIME_HEATPUMP = 0x17
 # UNIT_COOLER(21) = 0x15
 # UNIT_CC_TEMPERATURESENSOR(22) = 0x16
 # UNIT_IOSENSOR(21) = 0x15
@@ -245,3 +250,46 @@ class ComfoCoolMode:
 
     AUTO = "auto"
     OFF = "off"
+
+
+class ComfoClimeSeason:
+    """Enum for ComfoClime seasons."""
+
+    TRANSITION = "transition"
+    HEATING = "heating"
+    COOLING = "cooling"
+
+
+class ComfoClimeTemperatureProfile:
+    """Enum for ComfoClime temperature profiles."""
+
+    COMFORT = "comfort"
+    POWER = "power"
+    ECO = "eco"
+
+
+class ComfoClimeDeviceMode:
+    """Enum for the ComfoClime device mode."""
+
+    OFF = "off"
+    HEATING = "heating"
+    COOLING = "cooling"
+
+
+COMFOCLIME_SEASONS = {
+    0: ComfoClimeSeason.TRANSITION,
+    1: ComfoClimeSeason.HEATING,
+    2: ComfoClimeSeason.COOLING,
+}
+
+COMFOCLIME_TEMPERATURE_PROFILES = {
+    0: ComfoClimeTemperatureProfile.COMFORT,
+    1: ComfoClimeTemperatureProfile.POWER,
+    2: ComfoClimeTemperatureProfile.ECO,
+}
+
+COMFOCLIME_DEVICE_MODES = {
+    0: ComfoClimeDeviceMode.OFF,
+    1: ComfoClimeDeviceMode.HEATING,
+    2: ComfoClimeDeviceMode.COOLING,
+}

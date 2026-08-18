@@ -10,9 +10,11 @@ from aiocomfoconnect.const import ProductId
 from aiocomfoconnect.exceptions import (
     AioComfoConnectNotConnected,
     AioComfoConnectTimeout,
+    ComfoClimeNotFoundException,
     ComfoConnectNotAllowed,
     VentilationUnitNotFoundException,
 )
+from aiocomfoconnect.properties import PROPERTY_CLIME_HEATING_COMFORT_TEMP
 from tests.conftest import create_sensor, node_notification
 
 LOCAL_UUID = "00000000000000000000000000000001"
@@ -630,3 +632,36 @@ class TestComfoConnect:
         with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock()) as mock_rmi:
             await comfoconnect.clear_errors()
             mock_rmi.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_comfoclime_property(self, comfoconnect):
+        """Test that a ComfoClime property is read from the ComfoClime node."""
+        node_notification(comfoconnect, node_id=1, product_id=ProductId.COMFOAIRQ)
+        node_notification(comfoconnect, node_id=2, product_id=ProductId.COMFOCLIME)
+
+        mock_response = Mock()
+        mock_response.message = b"\xd7\x00"  # 215 in little-endian
+
+        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=mock_response)) as mock_rmi:
+            value = await comfoconnect.get_comfoclime_property(PROPERTY_CLIME_HEATING_COMFORT_TEMP)
+
+            assert value == 215
+            mock_rmi.assert_called_once_with(bytes([0x01, 0x16, 0x01, 0x10, 0x09]), node_id=2)
+
+    @pytest.mark.asyncio
+    async def test_set_comfoclime_property(self, comfoconnect):
+        """Test that a ComfoClime property is written to the ComfoClime node."""
+        node_notification(comfoconnect, node_id=2, product_id=ProductId.COMFOCLIME)
+
+        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock()) as mock_rmi:
+            await comfoconnect.set_comfoclime_property(PROPERTY_CLIME_HEATING_COMFORT_TEMP, 215)
+
+            mock_rmi.assert_called_once_with(bytes([0x03, 0x16, 0x01, 0x09, 0xD7, 0x00]), node_id=2)
+
+    @pytest.mark.asyncio
+    async def test_comfoclime_property_without_comfoclime(self, comfoconnect):
+        """Test that addressing a ComfoClime that isn't on the bus raises."""
+        node_notification(comfoconnect, node_id=1, product_id=ProductId.COMFOAIRQ)
+
+        with pytest.raises(ComfoClimeNotFoundException):
+            await comfoconnect.get_comfoclime_property(PROPERTY_CLIME_HEATING_COMFORT_TEMP)
