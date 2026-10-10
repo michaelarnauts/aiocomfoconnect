@@ -10,7 +10,7 @@ homepage = "https://github.com/michaelarnauts/aiocomfoconnect"
 aiocomfoconnect = "aiocomfoconnect.__main__:main_cli"
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = "^3.13"
 aiohttp = "^3.8.0"
 protobuf = ">=6.31,<8"
 
@@ -20,8 +20,8 @@ dpkt = "^1.9.8"
 black = "^24.4.0"
 isort = "^5.10.1"
 pylint = "^3.2"
-pytest = "^8.2.0"
-pytest-asyncio = "^0.23.0"
+pytest = "^8.4"
+pytest-asyncio = "^1.4.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -31,7 +31,7 @@ build-backend = "poetry.core.masonry.api"
 profile = "black"
 
 [tool.black]
-target-version = ["py310"]
+target-version = ["py313"]
 line-length = 180
 
 [tool.pylint.MAIN]

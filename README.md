@@ -5,7 +5,7 @@
 
 The [home-assistant-comfoconnect](https://github.com/michaelarnauts/home-assistant-comfoconnect) is using this library.
 
-It's compatible with Python 3.10 and higher.
+It's compatible with Python 3.13 and higher.
 
 ## Installation
 
