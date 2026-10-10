@@ -340,9 +340,10 @@ class ComfoConnect(Bridge):
         return VentilationMode.MANUAL if mode == 1 else VentilationMode.AUTO
 
     async def set_mode(self, mode: Literal["auto", "manual"]):
-        """Set the ventilation mode (auto / manual)."""
+        """Set ventilation mode, cancelling the temporary speed override for auto."""
         if mode == VentilationMode.AUTO:
             await self.cmd_rmi_request(bytes([0x85, UNIT_SCHEDULE, SUBUNIT_08, 0x01]))
+            await self.cmd_rmi_request(bytes([0x85, UNIT_SCHEDULE, SUBUNIT_01, 0x01]))
         elif mode == VentilationMode.MANUAL:
             await self.cmd_rmi_request(bytes([0x84, UNIT_SCHEDULE, SUBUNIT_08, 0x01, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01]))
         else:

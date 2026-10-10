@@ -46,7 +46,7 @@ $ python -m aiocomfoconnect get-property --host 192.168.1.213 1 1 8 9  # Unit 0x
 - `async register_sensor(sensor)`: Register a sensor.
 - `async deregister_sensor(sensor)`: Deregister a sensor.
 - `async get_mode()`: Get the ventilation mode.
-- `async set_mode(mode)`: Set the ventilation mode. (auto / manual)
+- `async set_mode(mode)`: Set the ventilation mode. (auto / manual) Selecting `auto` also cancels the temporary fan-speed override and returns control to the unit's schedule.
 - `async get_comfocool_mode()`: Get Comfocool mode
 - `async set_comfocool_mode()`: Set Comfocool mode. (auto / off)
 - `async get_speed()`: Get the ventilation speed.

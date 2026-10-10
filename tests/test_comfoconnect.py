@@ -611,6 +611,27 @@ class TestComfoConnect:
             mock_rmi.assert_called_once()
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "mode,expected_commands",
+        [
+            ("auto", [b"\x85\x15\x08\x01", b"\x85\x15\x01\x01"]),
+            ("manual", [b"\x84\x15\x08\x01\x00\x00\x00\x00\x01\x00\x00\x00\x01"]),
+        ],
+    )
+    async def test_set_mode_restores_schedule_only_for_auto(self, comfoconnect, mode, expected_commands):
+        """Auto cancels the speed timer; manual retains the selected speed."""
+        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock()) as mock_rmi:
+            await comfoconnect.set_mode(mode)
+            assert mock_rmi.await_args_list == [call(command) for command in expected_commands]
+
+    @pytest.mark.asyncio
+    async def test_auto_mode_reports_a_failed_speed_override_cancellation(self, comfoconnect):
+        """A partially completed mode change must not report full success."""
+        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(side_effect=[Mock(), AioComfoConnectNotConnected("Disconnected")])):
+            with pytest.raises(AioComfoConnectNotConnected):
+                await comfoconnect.set_mode("auto")
+
+    @pytest.mark.asyncio
     async def test_get_property(self, comfoconnect):
         """Test getting a property."""
         from aiocomfoconnect.const import PdoType
