@@ -4,6 +4,11 @@
 
 Numbers are stored in little endian format.
 
+Unsigned PDO notifications are decoded using the type requested for the subscription.
+An all-ones value is `255` for `CN_UINT8` and `4294967295` for `CN_UINT32`.
+These values represent the mode or no-change sentinels shown below; older versions
+decoded them as `-1`. Signed PDO types still preserve negative values.
+
 | type | description | remark                    |
 |------|-------------|---------------------------|
 | 0    | CN_BOOL     | `00` (false), `01` (true) |
@@ -30,16 +35,16 @@ Numbers are stored in little endian format.
 | 37   | CN_UINT8  |                                                  | 0                                                                                                                |
 | 40   | CN_UINT8  | ?? MANUALMODE                                    |                                                                                                                  |
 | 42   | CN_UINT8  |                                                  | 0                                                                                                                |
-| 49   | CN_UINT8  | Operating mode                                   | -1=auto, 1=limited manual, 5=unlimited manual, 6=boost, 11=away                                                  |
+| 49   | CN_UINT8  | Operating mode                                   | 255=auto, 1=limited manual, 5=unlimited manual, 6=boost, 11=away                                                  |
 | 50   | CN_UINT8  | ?? Bypass                                        |                                                                                                                  |
 | 51   | CN_UINT8  | ?? Temperature Profile                           |                                                                                                                  |
 | 52   | CN_UINT8  | ?? STANDBY                                       |                                                                                                                  |
-| 53   | CN_UINT8  | ?? COMFOCOOLOFF                                  | -1, 0, 1                                                                                                         |
-| 54   | CN_UINT8  | Supply Fan Mode                                  | -1=balanced, 1=supply only                                                                                       |
-| 55   | CN_UINT8  | Exhaust Fan Mode                                 | -1=balanced, 1=exhaust only                                                                                      |
-| 56   | CN_UINT8  | Manual Mode                                      | -1=auto, 1=unlimited manual                                                                                      |
-| 57   | CN_UINT8  |                                                  | -1, 0                                                                                                            |
-| 58   | CN_UINT8  |                                                  | -1, 0                                                                                                            |
+| 53   | CN_UINT8  | ?? COMFOCOOLOFF                                  | 255, 0, 1                                                                                                         |
+| 54   | CN_UINT8  | Supply Fan Mode                                  | 255=balanced, 1=supply only                                                                                       |
+| 55   | CN_UINT8  | Exhaust Fan Mode                                 | 255=balanced, 1=exhaust only                                                                                      |
+| 56   | CN_UINT8  | Manual Mode                                      | 255=auto, 1=unlimited manual                                                                                      |
+| 57   | CN_UINT8  |                                                  | 255, 0                                                                                                            |
+| 58   | CN_UINT8  |                                                  | 255, 0                                                                                                            |
 | 65   | CN_UINT8  | Fans: Fan speed setting                          | 0=away, 1=low, 2=medium, 3=high                                                                                  |
 | 66   | CN_UINT8  | Bypass activation mode                           | 0=auto, 1=full, 2=none                                                                                           |
 | 67   | CN_UINT8  | Temperature Profile                              | 0=normal, 1=cold, 2=warm                                                                                         |
@@ -50,14 +55,14 @@ Numbers are stored in little endian format.
 | 72   | CN_UINT8  | ?? MANUALMODE                                    |                                                                                                                  |
 | 73   | CN_UINT8  |                                                  | 0                                                                                                                |
 | 74   | CN_UINT8  |                                                  | 0                                                                                                                |
-| 81   | CN_UINT32 | Fan Speed Next Change                            | -1=no change, else countdown in seconds                                                                          |
-| 82   | CN_UINT32 | Bypass Next Change                               | -1=no change, else countdown in seconds                                                                          |
-| 85   | CN_UINT32 | ComfoCool Next Change                            | -1=no change, else countdown in seconds                                                                          |
-| 86   | CN_UINT32 | Supply Fan Next Change                           | -1=no change, else countdown in seconds                                                                          |
-| 87   | CN_UINT32 | Exhaust Fan Next Change                          | -1=no change, else countdown in seconds                                                                          |
+| 81   | CN_UINT32 | Fan Speed Next Change                            | 4294967295=no change, else countdown in seconds                                                                          |
+| 82   | CN_UINT32 | Bypass Next Change                               | 4294967295=no change, else countdown in seconds                                                                          |
+| 85   | CN_UINT32 | ComfoCool Next Change                            | 4294967295=no change, else countdown in seconds                                                                          |
+| 86   | CN_UINT32 | Supply Fan Next Change                           | 4294967295=no change, else countdown in seconds                                                                          |
+| 87   | CN_UINT32 | Exhaust Fan Next Change                          | 4294967295=no change, else countdown in seconds                                                                          |
 | 88   | CN_UINT32 | ?? MANUALMODE                                    |                                                                                                                  |
-| 89   | CN_UINT32 |                                                  | -1, 0                                                                                                            |
-| 90   | CN_UINT32 |                                                  | -1, 0                                                                                                            |
+| 89   | CN_UINT32 |                                                  | 4294967295, 0                                                                                                            |
+| 90   | CN_UINT32 |                                                  | 4294967295, 0                                                                                                            |
 | 96   | CN_BOOL   |                                                  |                                                                                                                  |
 | 115  | CN_BOOL   | ?? EXHAUST_F12                                   |                                                                                                                  |
 | 116  | CN_BOOL   | ?? SUPPLY_F22                                    |                                                                                                                  |

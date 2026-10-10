@@ -13,7 +13,7 @@ from typing import Awaitable, Callable, Dict, Iterator, Optional, Set
 from google.protobuf.message import DecodeError
 from google.protobuf.message import Message as ProtobufMessage
 
-from .const import VENTILATION_UNIT_PRODUCT_IDS
+from .const import VENTILATION_UNIT_PRODUCT_IDS, PdoType
 from .exceptions import (
     AioComfoConnectNotConnected,
     AioComfoConnectNotReachable,
@@ -134,6 +134,7 @@ class Bridge:
         self._ventilation_node_found: Optional[asyncio.Event] = None
 
         self.__sensor_callback_fn: Optional[Callable[[int, int], None]] = None
+        self._sensor_pdo_types: Dict[int, int] = {}
         self.__alarm_callback_fn: Optional[Callable[[int, ProtobufMessage], None]] = None
 
         self._loop: Optional[asyncio.AbstractEventLoop] = loop
@@ -424,7 +425,9 @@ class Bridge:
             # pylint: disable=no-member
             if message.cmd.type == zehnder_pb2.GatewayOperation.CnRpdoNotificationType:
                 if self.__sensor_callback_fn:
-                    self.__sensor_callback_fn(message.msg.pdid, int.from_bytes(message.msg.data, byteorder="little", signed=True))
+                    pdo_type = self._sensor_pdo_types.get(message.msg.pdid)
+                    signed = pdo_type not in (PdoType.TYPE_CN_UINT8, PdoType.TYPE_CN_UINT16, PdoType.TYPE_CN_UINT32)
+                    self.__sensor_callback_fn(message.msg.pdid, int.from_bytes(message.msg.data, byteorder="little", signed=signed))
                 else:
                     _LOGGER.info("Unhandled CnRpdoNotificationType since no callback is registered.")
 
@@ -572,6 +575,8 @@ class Bridge:
     def cmd_rpdo_request(self, pdid: int, pdo_type: int = 1, zone: int = 1, timeout=None) -> Awaitable[Message]:
         """Register a RPDO request."""
         _LOGGER.debug("CnRpdoRequest")
+        # Notifications can arrive before the subscription acknowledgement.
+        self._sensor_pdo_types[pdid] = pdo_type
         # pylint: disable=no-member
         return self._send(
             zehnder_pb2.CnRpdoRequest,
