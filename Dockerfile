@@ -10,22 +10,14 @@ ENV PYTHONDONTWRITEBYTECODE=1
 # the application crashes without emitting any logs due to buffering.
 ENV PYTHONUNBUFFERED=1
 
-# Choose poetry version
-ENV POETRY_VERSION=2.5.1
-
-# Download dependencies as a separate step to take advantage of Docker's caching.
-# Leverage a cache mount to /root/.cache/pip to speed up subsequent builds.
-# Leverage a bind mount to requirements.txt to avoid having to copy them into
-# into this layer.
-RUN --mount=type=cache,target=/root/.cache/pip \
-    python3 -m pip install "poetry==$POETRY_VERSION" poetry-plugin-export
-
-# Install all dependencies for aiocomfoconnect
-COPY pyproject.toml poetry.lock .
-RUN poetry export -f requirements.txt | python3 -m pip install -r /dev/stdin
-
 # Copy the source code into the container.
+WORKDIR /app
 COPY . .
+
+# Install aiocomfoconnect with its dependencies.
+# Leverage a cache mount to /root/.cache/pip to speed up subsequent builds.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python3 -m pip install .
 
 FROM base as final
 
