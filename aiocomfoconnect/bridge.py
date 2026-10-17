@@ -508,11 +508,10 @@ class Bridge:
     def is_comfoconnect_pro(self) -> bool:
         """Returns True if the bridge is a ComfoConnect Pro.
 
-        Discovery reports the gateway type, and a Pro also identifies itself with the devicename "ccpro" in the
-        confirmation of a session, so this also works for a bridge that was set up without discovery once the
-        session has started.
+        A Pro identifies itself with the devicename "ccpro" in the confirmation of a session, so this is only known
+        once a session has started.
         """
-        return self.bridge_type == GATEWAY_TYPE_PRO or self._session_device_name == "ccpro"
+        return self._session_device_name == "ccpro"
 
     def cmd_close_session(self) -> Awaitable[Message]:
         """Stops the current session."""

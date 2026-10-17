@@ -823,7 +823,3 @@ class TestComfoConnectProDetection:
         assert bridge.is_comfoconnect_pro is True
         assert reply.devicename == "ccpro"
         assert mock_send.call_args[0][2] == {"takeover": True}
-
-    def test_pro_from_discovery(self):
-        """The gateway type from discovery identifies a Pro before a session is started."""
-        assert Bridge("192.168.1.100", LOCAL_UUID, bridge_type=GATEWAY_TYPE_PRO).is_comfoconnect_pro is True
