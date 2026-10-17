@@ -85,10 +85,10 @@ decoded them as `-1`. Signed PDO types still preserve negative values.
 | 210  | CN_BOOL   | Heating Season is active                         | 0=inactive, 1=active                                                                                             |
 | 211  | CN_BOOL   | Cooling Season is active                         | 0=inactive, 1=active                                                                                             |
 | 212  | CN_UINT8  | Temperature profile target                       | value in °C (238 -> 23.8 °C)                                                                                     |
-| 213  | CN_UINT16 | Avoided Heating: Avoided actual                  | value in Watt (441 -> 4.41 W)                                                                                    |
+| 213  | CN_UINT16 | Avoided Heating: Avoided actual                  | value in Watt                                                                                                    |
 | 214  | CN_UINT16 | Avoided Heating: Avoided year-to-date            | value in kWh (477 kWh)                                                                                           |
 | 215  | CN_UINT16 | Avoided Heating: Avoided total                   | value in kWh (477 kWh)                                                                                           |
-| 216  | CN_UINT16 | Avoided Cooling: Avoided actual                  | value in Watt (441 -> 4.41 W)                                                                                    |
+| 216  | CN_UINT16 | Avoided Cooling: Avoided actual                  | value in Watt                                                                                                    |
 | 217  | CN_UINT16 | Avoided Cooling: Avoided year-to-date            | value in kWh (477 kWh)                                                                                           |
 | 218  | CN_UINT16 | Avoided Cooling: Avoided total                   | value in kWh (477 kWh)                                                                                           |
 | 219  | CN_UINT16 |                                                  | 0                                                                                                                |
