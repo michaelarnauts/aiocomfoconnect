@@ -632,7 +632,7 @@ class TestBridgeNodeDiscovery:
         """Test that RMI requests are sent to the discovered ventilation unit."""
         node_notification(bridge, node_id=45, product_id=ProductId.COMFOAIRFLEX)
 
-        with patch.object(bridge, "_send", MagicMock()) as mock_send:
+        with patch.object(bridge, "is_connected", return_value=True), patch.object(bridge, "_send", MagicMock()) as mock_send:
             bridge.cmd_rmi_request(b"\x01\x01\x01\x10\x08")
 
         assert mock_send.call_args[0][2]["nodeId"] == 45
@@ -642,7 +642,7 @@ class TestBridgeNodeDiscovery:
         """Test that an explicit node id overrules the discovered ventilation unit."""
         node_notification(bridge, node_id=45, product_id=ProductId.COMFOAIRFLEX)
 
-        with patch.object(bridge, "_send", MagicMock()) as mock_send:
+        with patch.object(bridge, "is_connected", return_value=True), patch.object(bridge, "_send", MagicMock()) as mock_send:
             bridge.cmd_rmi_request(b"\x01\x01\x01\x10\x08", node_id=11)
 
         assert mock_send.call_args[0][2]["nodeId"] == 11
@@ -652,9 +652,28 @@ class TestBridgeNodeDiscovery:
         """Test that RMI requests are refused when we don't know where the ventilation unit is."""
         node_notification(bridge, node_id=48, product_id=ProductId.ZEHNDERGATEWAY, zone_id=255)
 
-        with patch.object(bridge, "_send", MagicMock()) as mock_send:
+        with patch.object(bridge, "is_connected", return_value=True), patch.object(bridge, "_send", MagicMock()) as mock_send:
             with pytest.raises(VentilationUnitNotFoundException, match="has not announced a ventilation unit"):
                 bridge.cmd_rmi_request(b"\x01\x01\x01\x10\x08")
+
+        mock_send.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_rmi_request_when_not_connected(self, bridge):
+        """Test that RMI requests report the missing connection, not the missing ventilation unit."""
+        # The node table is empty while disconnected, like after disconnect().
+        with patch.object(bridge, "_send", MagicMock()) as mock_send:
+            with pytest.raises(AioComfoConnectNotConnected, match="Not connected"):
+                bridge.cmd_rmi_request(b"\x01\x01\x01\x10\x08")
+
+        mock_send.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_rmi_request_when_not_connected_with_explicit_node(self, bridge):
+        """Test that RMI requests to an explicit node are refused while disconnected too."""
+        with patch.object(bridge, "_send", MagicMock()) as mock_send:
+            with pytest.raises(AioComfoConnectNotConnected, match="Not connected"):
+                bridge.cmd_rmi_request(b"\x01\x01\x01\x10\x08", node_id=11)
 
         mock_send.assert_not_called()
 
