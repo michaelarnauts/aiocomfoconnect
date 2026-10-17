@@ -566,6 +566,24 @@ class TestBridgeNodeDiscovery:
         assert bridge.ventilation_node_id is None
 
     @pytest.mark.asyncio
+    async def test_comfoclime_node(self, bridge):
+        """Test that a ComfoClime on the bus is found, without becoming the ventilation unit."""
+        node_notification(bridge, node_id=1, product_id=ProductId.COMFOAIRQ)
+        node_notification(bridge, node_id=2, product_id=ProductId.COMFOCLIME, zone_id=3)
+
+        assert bridge.comfoclime_node_id == 2
+        assert bridge.comfoclime_zone_id == 3
+        assert bridge.ventilation_node_id == 1
+
+    @pytest.mark.asyncio
+    async def test_no_comfoclime_node(self, bridge):
+        """Test that comfoclime_node_id is None when there is no ComfoClime on the bus."""
+        node_notification(bridge, node_id=1, product_id=ProductId.COMFOAIRQ)
+
+        assert bridge.comfoclime_node_id is None
+        assert bridge.comfoclime_zone_id is None
+
+    @pytest.mark.asyncio
     async def test_offline_node_is_removed(self, bridge):
         """Test that a node that goes offline is forgotten."""
         node_notification(bridge, node_id=45, product_id=ProductId.COMFOAIRFLEX)

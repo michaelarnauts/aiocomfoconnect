@@ -184,3 +184,31 @@ decoded them as `-1`. Signed PDO types still preserve negative values.
 | 1302 | CN_BOOL   |                                                  |                                                                                                                  |
 | 1303 | CN_BOOL   |                                                  |                                                                                                                  |
 | 1304 | CN_BOOL   |                                                  |                                                                                                                  |
+
+# ComfoClime sensors
+
+These pdids are only reported when a ComfoClime (productId `0x14`) is present on the ComfoNet bus. They were
+reverse engineered from the ComfoClime's own HTTP API, which exposes them as "telemetry" ids. The entries
+marked `??` have not been identified yet.
+
+| pdid | type      | description                     | examples                            |
+|------|-----------|---------------------------------|-------------------------------------|
+| 4145 | CN_INT16  | TPMA Temperature                | value in °C (215 -> 21.5 °C)        |
+| 4148 | CN_INT16  | Target Temperature              | value in °C (215 -> 21.5 °C)        |
+| 4149 | CN_UINT8  | Device Mode                     | 0=off, 1=heating, 2=cooling         |
+| 4151 | CN_INT16  | Current Comfort Temperature     | value in °C (215 -> 21.5 °C)        |
+| 4154 | CN_INT16  | Indoor Temperature              | value in °C (215 -> 21.5 °C)        |
+| 4193 | CN_INT16  | Temperature: Supply Air         | value in °C (215 -> 21.5 °C)        |
+| 4194 | CN_INT16  | Temperature: Exhaust Air        | value in °C (215 -> 21.5 °C)        |
+| 4195 | CN_INT16  | Temperature: Supply Coil        | value in °C (215 -> 21.5 °C)        |
+| 4196 | CN_INT16  | Temperature: Exhaust Coil       | value in °C (215 -> 21.5 °C)        |
+| 4197 | CN_INT16  | Temperature: Compressor         | value in °C (215 -> 21.5 °C)        |
+| 4198 | CN_UINT8  | Heat Pump Duty                  | value in % (0-100)                  |
+| 4201 | CN_UINT16 | Power Consumption: Heat Pump    | value in Watt                       |
+| 4202 | CN_UINT16 | ??                              |                                     |
+| 4203 | CN_UINT16 | ??                              |                                     |
+| 4204 | CN_UINT16 | ??                              |                                     |
+| 4205 | CN_UINT16 | ??                              |                                     |
+| 4206 | CN_UINT16 | ??                              |                                     |
+| 4207 | CN_UINT16 | ??                              |                                     |
+| 4208 | CN_UINT16 | ??                              |                                     |

@@ -13,7 +13,7 @@ from typing import Awaitable, Callable, Dict, Iterator, Optional, Set
 from google.protobuf.message import DecodeError
 from google.protobuf.message import Message as ProtobufMessage
 
-from .const import VENTILATION_UNIT_PRODUCT_IDS, PdoType
+from .const import VENTILATION_UNIT_PRODUCT_IDS, ProductId, PdoType
 from .exceptions import (
     AioComfoConnectNotConnected,
     AioComfoConnectNotReachable,
@@ -66,6 +66,11 @@ class Node:
     def is_ventilation_unit(self) -> bool:
         """Returns True if this node is the ventilation unit that handles RMI commands."""
         return self.product_id in VENTILATION_UNIT_PRODUCT_IDS
+
+    @property
+    def is_comfoclime(self) -> bool:
+        """Returns True if this node is a ComfoClime heat pump module."""
+        return self.product_id == ProductId.COMFOCLIME
 
 
 class EventBus:
@@ -253,6 +258,18 @@ class Bridge:
         """The node id of the ventilation unit, or None when the bridge hasn't announced it (yet)."""
         candidates = [node.node_id for node in self._nodes.values() if node.is_ventilation_unit]
         return min(candidates) if candidates else None
+
+    @property
+    def comfoclime_node_id(self) -> Optional[int]:
+        """The node id of the ComfoClime, or None when the bridge hasn't announced one."""
+        candidates = [node.node_id for node in self._nodes.values() if node.is_comfoclime]
+        return min(candidates) if candidates else None
+
+    @property
+    def comfoclime_zone_id(self) -> Optional[int]:
+        """The zone id of the ComfoClime, or None when the bridge hasn't announced one."""
+        candidates = [node for node in self._nodes.values() if node.is_comfoclime]
+        return min(candidates, key=lambda node: node.node_id).zone_id if candidates else None
 
     async def wait_for_ventilation_node(self, timeout: float = None) -> int:
         """Wait until the bridge has announced the ventilation unit and return its node id.

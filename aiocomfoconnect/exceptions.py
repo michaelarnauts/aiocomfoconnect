@@ -62,5 +62,9 @@ class VentilationUnitNotFoundException(Exception):
     """Exception raised when the bridge didn't announce a ventilation unit on the ComfoNet bus."""
 
 
+class ComfoClimeNotFoundException(Exception):
+    """Exception raised when the bridge didn't announce a ComfoClime on the ComfoNet bus."""
+
+
 class UnknownActionException(Exception):
     """Exception raised when an unknown action is provided."""
