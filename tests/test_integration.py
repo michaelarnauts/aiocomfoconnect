@@ -1,323 +1,341 @@
-"""Integration tests for the Bridge and ComfoConnect classes."""
+"""Tests of the connection, the reconnects and the sensors against a fake bridge that speaks the real protocol."""
 
 import asyncio
-from contextlib import AsyncExitStack
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
 from aiocomfoconnect.bridge import Bridge
-from aiocomfoconnect.comfoconnect import ComfoConnect
-from aiocomfoconnect.exceptions import AioComfoConnectNotConnected
+from aiocomfoconnect.const import ERRORS, ProductId
+from aiocomfoconnect.exceptions import (
+    AioComfoConnectNotConnected,
+    AioComfoConnectTimeout,
+    ComfoConnectBadRequest,
+    ComfoConnectNotAllowed,
+    ComfoConnectRmiError,
+)
 from tests.conftest import create_sensor
+from tests.fake_bridge import BRIDGE_UUID, GO, LOCAL_UUID
 
-LOCAL_UUID = "00000000000000000000000000000001"
-
-
-class MockBridge:
-    """Mock bridge for testing complete scenarios."""
-
-    def __init__(self):
-        self.reader = AsyncMock()
-        self.writer = MagicMock()
-        self.writer.is_closing.return_value = False
-        self.writer.drain = AsyncMock()
-        self.writer.wait_closed = AsyncMock()
-        self.disconnect_after = None
-        self.connection_count = 0
-
-    async def open_connection(self, *args, **kwargs):
-        """Mock open_connection that can simulate disconnects."""
-        self.connection_count += 1
-        return (self.reader, self.writer)
-
-    async def read_messages_impl(self, bridge_instance=None):
-        """Mock read_messages that can disconnect after a delay."""
-        if self.disconnect_after:
-            await asyncio.sleep(self.disconnect_after)
-            raise AioComfoConnectNotConnected("Simulated disconnect")
-        else:
-            await asyncio.sleep(100)  # Keep running
+GET_SPEED = bytes([0x83, 0x15, 0x01, 0x01])
 
 
-class TestIntegrationScenarios:
-    """Test complete integration scenarios."""
-
-    @pytest.mark.asyncio
-    async def test_complete_connection_lifecycle(self):
-        """Test a complete connection, use, and disconnection lifecycle."""
-        mock = MockBridge()
-
-        bridge = Bridge("192.168.1.100", "00000000000000000000000000000001")
-
-        with patch("asyncio.open_connection", side_effect=mock.open_connection):
-            with patch.object(bridge, "_read_messages", new=AsyncMock(side_effect=mock.read_messages_impl)):
-                # Connect
-                await bridge.connect(LOCAL_UUID)
-                assert bridge.is_connected()
-                assert mock.connection_count == 1
-
-                # Verify we can check connection state
-                assert bridge.is_connected()
-
-                # Disconnect
-                await bridge.disconnect()
-                assert not bridge.is_connected()
-
-    @pytest.mark.asyncio
-    async def test_reconnection_after_disconnect(self):
-        """Test automatic reconnection after connection loss."""
-        mock = MockBridge()
-        mock.disconnect_after = 0.2  # Disconnect after 0.2 seconds
-
-        cc = ComfoConnect(
-            "192.168.1.100",
-            "00000000000000000000000000000001",
-            sensor_delay=0,
-        )
-
-        with patch("asyncio.open_connection", side_effect=mock.open_connection):
-            with patch.object(cc, "cmd_start_session", AsyncMock()):
-                with patch.object(cc, "_read_messages", new=AsyncMock(side_effect=mock.read_messages_impl)):
-                    # Connect
-                    await cc.connect(LOCAL_UUID)
-                    assert cc.is_connected()
-
-                    # Wait for disconnect and reconnect
-                    await asyncio.sleep(1.5)
-
-                    # Should have reconnected
-                    assert mock.connection_count >= 2
-
-                    # Clean up
-                    await cc.disconnect()
+async def roundtrip(client):
+    """Wait until the client has processed everything the fake bridge sent before."""
+    await client.cmd_time_request()
 
 
-@pytest.mark.asyncio
-async def test_sensor_registration():
-    """Test sensor registration after connection."""
-    mock = MockBridge()
+class TestConnect:
+    """Connecting and starting a session."""
 
-    async def mock_rpdo(pdid, sensor_type):
+    async def test_bridge_lifecycle(self, fake_bridge):
+        """The Bridge connects, talks to the bridge and disconnects."""
+        bridge = Bridge("127.0.0.1", BRIDGE_UUID)
+        await bridge.connect(LOCAL_UUID)
+        assert bridge.is_connected()
+
+        await bridge.cmd_start_session(True)
+        assert (await bridge.cmd_time_request()).currentTime == 1
+
+        await bridge.disconnect()
+        assert not bridge.is_connected()
+        assert fake_bridge.connections == 1
+
+    async def test_connect(self, fake_bridge, make_client):
+        """connect() starts a session, finds the ventilation unit and keeps the connection up."""
+        client = make_client()
+        await client.connect(LOCAL_UUID)
+
+        assert client.is_connected()
+        assert client.ventilation_node_id == 1
+        assert [msg.takeover for msg in fake_bridge.received(GO.StartSessionRequestType)] == [True]
+        assert len(fake_bridge.received(GO.CnNodeRequestType)) == 1
+        assert not client._reconnect_task.done()
+
+        # Connecting again while connected does nothing.
+        await client.connect(LOCAL_UUID)
+        assert fake_bridge.connections == 1
+
+    async def test_connect_waits_for_session(self, fake_bridge, make_client):
+        """connect() doesn't return before the bridge accepted the session."""
+        fake_bridge.withhold = {GO.StartSessionRequestType}
+        client = make_client()
+        connect_task = asyncio.create_task(client.connect(LOCAL_UUID))
+
+        await fake_bridge.wait_for(lambda: fake_bridge.received(GO.StartSessionRequestType))
+        await asyncio.sleep(0.01)
+        assert not connect_task.done()
+
+        fake_bridge.answer_pending()
+        await connect_task
+        assert client.is_connected()
+
+    async def test_connect_discovers_ventilation_node(self, fake_bridge, make_client):
+        """RMI requests go to the ventilation unit the bridge announced, which isn't always node 1."""
+        fake_bridge.nodes = [(41, ProductId.COMFOAIRFLEXCONNECTIONBOARD, 1), (45, ProductId.COMFOAIRFLEX, 1)]
+        fake_bridge.rmi_responses[GET_SPEED] = bytes.fromhex("0100000000ffffffffffffffff02")
+        client = make_client()
+        await client.connect(LOCAL_UUID)
+
+        assert client.ventilation_node_id == 45
+        assert await client.get_speed() == "medium"
+        assert fake_bridge.received(GO.CnRmiRequestType)[0].nodeId == 45
+
+    async def test_connect_without_ventilation_unit(self, fake_bridge, make_client):
+        """The session isn't ready when the bridge doesn't announce a ventilation unit, so connect() keeps retrying and times out."""
+        fake_bridge.nodes = [(48, ProductId.ZEHNDERGATEWAY, 255)]
+        client = make_client(connect_timeout=0.15)
+
+        with pytest.raises(AioComfoConnectTimeout):
+            await client.connect(LOCAL_UUID)
+
+        assert fake_bridge.connections >= 2
+        assert client.ventilation_node_id is None
+
+    async def test_connect_timeout(self, fake_bridge, make_client):
+        """connect() gives up after connect_timeout when the bridge doesn't answer, and stops retrying."""
+        fake_bridge.silent = True
+        client = make_client(connect_timeout=0.1)
+
+        with pytest.raises(AioComfoConnectTimeout, match="Failed to connect within 0.1 seconds"):
+            await client.connect(LOCAL_UUID)
+
+        assert client._is_stopping
+        assert client._reconnect_task is None
+        assert not client.is_connected()
+
+    async def test_connect_not_allowed(self, fake_bridge, make_client):
+        """An app that isn't registered gets an error right away, without retrying."""
+        fake_bridge.session_result = GO.NOT_ALLOWED
+        client = make_client()
+
+        with pytest.raises(ComfoConnectNotAllowed):
+            await client.connect(LOCAL_UUID)
+
+        assert fake_bridge.connections == 1
+        assert not client.is_connected()
+
+
+class TestReconnect:
+    """Losing the connection and getting it back."""
+
+    @pytest.mark.parametrize("lose_connection", ["drop", "close_session"])
+    async def test_reconnect(self, fake_bridge, make_client, lose_connection):
+        """The client reconnects and starts a new session every time the connection is lost."""
+        client = make_client()
+        await client.connect(LOCAL_UUID)
+
+        for connection in (2, 3):
+            getattr(fake_bridge, lose_connection)()
+            await fake_bridge.wait_for(lambda: fake_bridge.received(GO.CnNodeRequestType, connection))
+            await fake_bridge.wait_for(client.is_connected)
+
+        assert fake_bridge.connections == 3
+        assert len(fake_bridge.received(GO.StartSessionRequestType)) == 3
+        fake_bridge.rmi_responses[GET_SPEED] = bytes.fromhex("0100000000ffffffffffffffff01")
+        assert await client.get_speed() == "low"
+
+    async def test_disconnect(self, fake_bridge, make_client):
+        """disconnect() closes the connection and stops reconnecting."""
+        client = make_client()
+        await client.connect(LOCAL_UUID)
+
+        await client.disconnect()
+
+        assert not client.is_connected()
+        assert client._is_stopping
+        assert client._reconnect_task is None
+        # Give a reconnect the time to happen. The back-off is 10 ms in tests.
         await asyncio.sleep(0.05)
-        return b"\x01\x00\x00\x00"
+        assert fake_bridge.connections == 1
 
-    cc = ComfoConnect(
-        "192.168.1.100",
-        "00000000000000000000000000000001",
-        sensor_delay=0,
-    )
+        with pytest.raises(AioComfoConnectNotConnected):
+            await client.get_speed()
 
-    # Register sensors before connecting
-    sensor1 = create_sensor(name="temp", sensor_id=276, sensor_type=1)
-    sensor2 = create_sensor(name="humidity", sensor_id=277, sensor_type=1)
+    async def test_disconnect_when_not_connected(self, make_client):
+        """disconnect() without a connection doesn't raise."""
+        client = make_client()
+        await client.disconnect()
+        assert client._is_stopping
 
-    with patch("asyncio.open_connection", side_effect=mock.open_connection):
-        with patch.object(cc, "cmd_start_session", AsyncMock()):
-            with patch.object(cc, "cmd_rpdo_request", side_effect=mock_rpdo):
-                with patch.object(cc, "_read_messages", new=AsyncMock(side_effect=mock.read_messages_impl)):
-                    # Connect
-                    await cc.connect(LOCAL_UUID)
+    async def test_sensors_resubscribed_after_reconnect(self, fake_bridge, make_client):
+        """The sensors are subscribed again on the new session."""
+        client = make_client()
+        await client.connect(LOCAL_UUID)
+        await client.register_sensor(create_sensor(sensor_id=276))
+        await client.register_sensor(create_sensor(sensor_id=277, sensor_type=2))
 
-                    # Register sensors
-                    await cc.register_sensor(sensor1)
-                    await cc.register_sensor(sensor2)
+        fake_bridge.drop()
+        await fake_bridge.wait_for(lambda: len(fake_bridge.received(GO.CnRpdoRequestType, 2)) == 2)
 
-                    # Verify sensors are registered
-                    assert 276 in cc._sensors
-                    assert 277 in cc._sensors
+        assert [(msg.pdid, msg.type) for msg in fake_bridge.received(GO.CnRpdoRequestType, 2)] == [(276, 1), (277, 2)]
 
-                    # Simulate disconnect by triggering it
-                    mock.disconnect_after = 0.1
-                    await asyncio.sleep(1.5)
+    async def test_failing_sensor_does_not_block_session(self, fake_bridge, make_client):
+        """A sensor the bridge rejects after a reconnect doesn't stop the other sensors or the session."""
+        client = make_client()
+        await client.connect(LOCAL_UUID)
+        await client.register_sensor(create_sensor(sensor_id=276))
+        await client.register_sensor(create_sensor(sensor_id=277))
 
-                    # Reset for next connection
-                    mock.disconnect_after = None
+        fake_bridge.rpdo_results[276] = GO.BAD_REQUEST
+        fake_bridge.drop()
+        await fake_bridge.wait_for(lambda: len(fake_bridge.received(GO.CnRpdoRequestType, 2)) == 2)
+        await fake_bridge.wait_for(client.is_connected)
+        await roundtrip(client)
 
-                    # All should succeed
-                    assert cc.is_connected()
+        assert set(client._sensors) == {276, 277}
 
-                # Clean up
-                await cc.disconnect()
+    async def test_register_sensor_while_resubscribing(self, fake_bridge, make_client):
+        """Registering a sensor while the sensors are subscribed again doesn't break the session."""
+        client = make_client()
+        await client.connect(LOCAL_UUID)
+        await client.register_sensor(create_sensor(sensor_id=276))
 
+        fake_bridge.withhold = {GO.CnRpdoRequestType}
+        fake_bridge.drop()
+        await fake_bridge.wait_for(lambda: fake_bridge.received(GO.CnRpdoRequestType, 2))
+        register_task = asyncio.create_task(client.register_sensor(create_sensor(sensor_id=277)))
+        await fake_bridge.wait_for(lambda: len(fake_bridge.received(GO.CnRpdoRequestType, 2)) == 2)
 
-@pytest.mark.asyncio
-async def test_sensor_callbacks_work():
-    """Test that sensor callbacks are properly called."""
-    mock = MockBridge()
-    sensor_values = []
+        fake_bridge.withhold = set()
+        fake_bridge.answer_pending()
+        await register_task
+        await asyncio.sleep(0.05)  # The reconnect loop would fail and reconnect by now if the new sensor broke it.
 
-    def sensor_callback(sensor, value):
-        sensor_values.append((sensor.id, value))
-
-    cc = ComfoConnect(
-        "192.168.1.100",
-        "00000000000000000000000000000001",
-        sensor_callback=sensor_callback,
-        sensor_delay=0,
-    )
-
-    with patch("asyncio.open_connection", side_effect=mock.open_connection):
-        with patch.object(cc, "cmd_start_session", AsyncMock()):
-            with patch.object(cc, "cmd_rpdo_request", AsyncMock()):
-                with patch.object(cc, "_read_messages", new=AsyncMock(side_effect=mock.read_messages_impl)):
-                    # Connect
-                    await cc.connect(LOCAL_UUID)
-
-                    # Register sensor
-                    sensor = create_sensor(name="temp", sensor_id=276, sensor_type=1)
-                    await cc.register_sensor(sensor)
-
-                    # Simulate sensor data
-                    cc._sensor_callback(276, 1234)
-
-                    # Verify callback was called
-                    assert len(sensor_values) == 1
-                    assert sensor_values[0] == (276, 1234)
-
-                    # Clean up
-                    await cc.disconnect()
+        assert set(client._sensors) == {276, 277}
+        assert client.is_connected()
+        assert fake_bridge.connections == 2
 
 
-@pytest.mark.asyncio
-async def test_alarm_callbacks_work():
-    """Test that alarm callbacks are properly called."""
-    mock = MockBridge()
-    alarms = []
+class TestSensors:
+    """Subscribing to sensors and receiving their values."""
 
-    def alarm_callback(node_id, errors):
-        alarms.append((node_id, errors))
+    async def test_register_and_deregister_sensor(self, fake_bridge, make_client):
+        """A sensor is subscribed with its type, and unsubscribed with a timeout of 0."""
+        client = make_client()
+        await client.connect(LOCAL_UUID)
+        sensor = create_sensor(sensor_id=276, sensor_type=1)
 
-    cc = ComfoConnect(
-        "192.168.1.100",
-        "00000000000000000000000000000001",
-        alarm_callback=alarm_callback,
-        sensor_delay=0,
-    )
+        await client.register_sensor(sensor)
+        assert client._sensors == {276: sensor}
 
-    with patch("asyncio.open_connection", side_effect=mock.open_connection):
-        with patch.object(cc, "cmd_start_session", AsyncMock()):
-            with patch.object(cc, "_read_messages", new=AsyncMock(side_effect=mock.read_messages_impl)):
-                # Connect
-                await cc.connect(LOCAL_UUID)
+        await client.deregister_sensor(sensor)
+        assert client._sensors == {}
+        assert 276 not in client._sensors_values
 
-                # Simulate alarm
-                mock_alarm = Mock()
-                mock_alarm.swProgramVersion = 3222278145  # Firmware > 1.4.0
-                # Set bit 52 which corresponds to "The supply air fan has a malfunction"
-                # Byte index 6, bit 4 (52 = 6*8 + 4)
-                mock_alarm.errors = b"\x00\x00\x00\x00\x00\x00\x10\x00"
+        subscribe, unsubscribe = fake_bridge.received(GO.CnRpdoRequestType)
+        assert (subscribe.pdid, subscribe.type, subscribe.HasField("timeout")) == (276, 1, False)
+        assert (unsubscribe.pdid, unsubscribe.type, unsubscribe.timeout) == (276, 1, 0)
 
-                cc._alarm_callback(1, mock_alarm)
+    async def test_register_sensor_rejected(self, fake_bridge, make_client):
+        """A sensor the bridge rejects is not kept, so it isn't subscribed again on every reconnect."""
+        fake_bridge.rpdo_results[276] = GO.BAD_REQUEST
+        client = make_client(sensor_delay=5)
+        await client.connect(LOCAL_UUID)
 
-                # Verify callback was called
-                assert len(alarms) == 1
-                assert alarms[0][0] == 1
-                assert isinstance(alarms[0][1], dict)
+        with pytest.raises(ComfoConnectBadRequest):
+            await client.register_sensor(create_sensor(sensor_id=276))
 
-                # Clean up
-                await cc.disconnect()
+        assert 276 not in client._sensors
+        assert 276 not in client._sensors_values
+        assert 276 not in client._sensor_holds
+
+    async def test_register_sensors_concurrently(self, fake_bridge, make_client):
+        """Many sensors can be subscribed at the same time."""
+        client = make_client()
+        await client.connect(LOCAL_UUID)
+
+        await asyncio.gather(*[client.register_sensor(create_sensor(sensor_id=i)) for i in range(10)])
+
+        assert len(client._sensors) == 10
+        assert sorted(msg.pdid for msg in fake_bridge.received(GO.CnRpdoRequestType)) == list(range(10))
+
+    async def test_sensor_values(self, fake_bridge, make_client):
+        """Sensor values from the bridge reach the callback, converted by the value_fn of the sensor."""
+        values = []
+        client = make_client(sensor_callback=lambda sensor, value: values.append((sensor.id, value)))
+        await client.connect(LOCAL_UUID)
+        await client.register_sensor(create_sensor(sensor_id=276))
+        await client.register_sensor(create_sensor(sensor_id=277, sensor_type=2, value_fn=lambda value: value / 10))
+
+        fake_bridge.push_sensor(276, bytes([42]))
+        fake_bridge.push_sensor(277, (215).to_bytes(2, "little"))
+        await roundtrip(client)
+
+        assert values == [(276, 42), (277, 21.5)]
+
+    async def test_sensor_hold(self, fake_bridge, make_client):
+        """The zero value the bridge sends right after subscribing is held back, and emitted when the hold expires."""
+        values = []
+        client = make_client(sensor_callback=lambda sensor, value: values.append(value), sensor_delay=0.05)
+        await client.connect(LOCAL_UUID)
+        await client.register_sensor(create_sensor(sensor_id=276))
+
+        fake_bridge.push_sensor(276, bytes([0]))
+        await roundtrip(client)
+        assert not values
+
+        await fake_bridge.wait_for(lambda: values)
+        assert values == [0]
+
+    async def test_sensor_hold_released_on_valid_value(self, fake_bridge, make_client):
+        """A non-zero value ends the hold right away, and the expired hold doesn't emit the value again."""
+        values = []
+        client = make_client(sensor_callback=lambda sensor, value: values.append(value), sensor_delay=0.1)
+        await client.connect(LOCAL_UUID)
+        await client.register_sensor(create_sensor(sensor_id=276))
+
+        fake_bridge.push_sensor(276, bytes([0]))
+        fake_bridge.push_sensor(276, bytes([69]))
+        fake_bridge.push_sensor(276, bytes([0]))
+        await roundtrip(client)
+        assert values == [69, 0]
+        assert 276 not in client._sensor_holds
+
+        await asyncio.sleep(0.15)
+        assert values == [69, 0]
+
+    async def test_sensor_hold_after_reconnect(self, fake_bridge, make_client):
+        """The sensors are held again after a reconnect, since the bridge sends zero values for the new subscription."""
+        values = []
+        client = make_client(sensor_callback=lambda sensor, value: values.append(value), sensor_delay=5)
+        await client.connect(LOCAL_UUID)
+        await client.register_sensor(create_sensor(sensor_id=276))
+        fake_bridge.push_sensor(276, bytes([69]))
+        await roundtrip(client)
+        assert values == [69]
+
+        fake_bridge.drop()
+        await fake_bridge.wait_for(lambda: fake_bridge.received(GO.CnRpdoRequestType, 2))
+        await fake_bridge.wait_for(client.is_connected)
+
+        fake_bridge.push_sensor(276, bytes([0]))
+        fake_bridge.push_sensor(276, bytes([70]))
+        await roundtrip(client)
+        assert values == [69, 70]
+
+    async def test_alarm(self, fake_bridge, make_client):
+        """An alarm of the ventilation unit reaches the callback with its error messages."""
+        alarms = []
+        client = make_client(alarm_callback=lambda node_id, errors: alarms.append((node_id, errors)))
+        await client.connect(LOCAL_UUID)
+
+        fake_bridge.push_alarm(1, b"\x00\x00\x00\x00\x00\x00\x10\x00")  # Bit 52
+        await roundtrip(client)
+
+        assert alarms == [(1, {52: ERRORS[52]})]
 
 
-@pytest.mark.asyncio
-async def test_graceful_shutdown():
-    """Test graceful shutdown stops reconnection."""
-    mock = MockBridge()
+class TestRmi:
+    """RMI requests over the wire."""
 
-    cc = ComfoConnect(
-        "192.168.1.100",
-        "00000000000000000000000000000001",
-        sensor_delay=0,
-    )
+    async def test_rmi_error(self, fake_bridge, make_client):
+        """An RMI error of the unit is raised to the caller, and the session stays up."""
+        fake_bridge.rmi_responses[GET_SPEED] = GO.RMI_ERROR
+        client = make_client()
+        await client.connect(LOCAL_UUID)
 
-    with patch("asyncio.open_connection", side_effect=mock.open_connection):
-        with patch.object(cc, "cmd_start_session", AsyncMock()):
-            with patch.object(cc, "_read_messages", new=AsyncMock(side_effect=mock.read_messages_impl)):
-                # Connect
-                await cc.connect(LOCAL_UUID)
-                assert cc.is_connected()
+        with pytest.raises(ComfoConnectRmiError):
+            await client.get_speed()
 
-                initial_count = mock.connection_count
-
-                # Disconnect
-                await cc.disconnect()
-                assert not cc.is_connected()
-                assert cc._is_stopping
-
-                # Wait a bit to ensure no reconnection happens
-                await asyncio.sleep(1)
-
-                # Should not have reconnected
-                assert mock.connection_count == initial_count
-
-
-@pytest.mark.asyncio
-async def test_concurrent_operations():
-    """Test that concurrent operations work correctly."""
-    mock = MockBridge()
-
-    cc = ComfoConnect(
-        "192.168.1.100",
-        "00000000000000000000000000000001",
-        sensor_delay=0,
-    )
-
-    with patch("asyncio.open_connection", side_effect=mock.open_connection):
-        with patch.object(cc, "cmd_start_session", AsyncMock()):
-            with patch.object(cc, "_read_messages", new=AsyncMock(side_effect=mock.read_messages_impl)):
-                # Connect
-                await cc.connect(LOCAL_UUID)
-
-                # Register multiple sensors concurrently
-                with patch.object(cc, "cmd_rpdo_request", AsyncMock()):
-                    sensors = [create_sensor(name=f"sensor_{i}", sensor_id=i, sensor_type=1) for i in range(10)]
-
-                    await asyncio.gather(*[cc.register_sensor(s) for s in sensors])
-
-                    # All should be registered
-                    assert len(cc._sensors) == 10
-
-                # Clean up
-                await cc.disconnect()
-
-
-@pytest.mark.asyncio
-async def test_stress_reconnection():
-    """Test rapid reconnections."""
-    connection_count = 0
-
-    async def flaky_connection(*args, **kwargs):
-        nonlocal connection_count
-        connection_count += 1
-        reader = AsyncMock()
-        writer = MagicMock()
-        writer.is_closing.return_value = False
-        writer.drain = AsyncMock()
-        writer.wait_closed = AsyncMock()
-        return (reader, writer)
-
-    async def quick_disconnect():
-        # Disconnect quickly
-        await asyncio.sleep(0.05)
-        raise AioComfoConnectNotConnected("Quick disconnect")
-
-    cc = ComfoConnect(
-        "192.168.1.100",
-        "00000000000000000000000000000001",
-        sensor_delay=0,
-    )
-
-    with patch("asyncio.open_connection", side_effect=flaky_connection):
-        with patch.object(cc, "cmd_start_session", AsyncMock()):
-            with patch.object(cc, "_read_messages", side_effect=quick_disconnect):
-                # Connect
-                await cc.connect(LOCAL_UUID)
-
-                # Wait for multiple reconnections
-                await asyncio.sleep(2.5)
-
-                # Should have attempted multiple connections
-                assert connection_count >= 3
-
-                # Clean up
-                await cc.disconnect()
+        assert client.is_connected()
+        assert fake_bridge.rmi_requests == [GET_SPEED]

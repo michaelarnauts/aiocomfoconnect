@@ -5,30 +5,47 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from aiocomfoconnect import bridge as bridge_module
+from aiocomfoconnect import comfoconnect as comfoconnect_module
+from aiocomfoconnect.bridge import Bridge
 from aiocomfoconnect.comfoconnect import ComfoConnect
-from aiocomfoconnect.const import ProductId
 from aiocomfoconnect.protobuf import zehnder_pb2
+from tests.fake_bridge import BRIDGE_UUID, FakeBridge
 
 
 @pytest.fixture(autouse=True)
-def short_node_discovery_timeout(monkeypatch):
-    """Don't wait the full node discovery timeout in tests where no node is announced."""
+def short_delays(monkeypatch):
+    """Don't wait for the real node discovery timeout and reconnect back-off in tests."""
     monkeypatch.setattr(bridge_module, "NODE_DISCOVERY_TIMEOUT", 0.05)
+    monkeypatch.setattr(comfoconnect_module, "RECONNECT_DELAY", 0.01)
+    monkeypatch.setattr(comfoconnect_module, "RECONNECT_RETRY_DELAY", 0.01)
 
 
-@pytest.fixture(autouse=True)
-def announce_ventilation_node(monkeypatch):
-    """Announce a ventilation unit like a real bridge does when the nodes are requested.
+@pytest.fixture
+async def fake_bridge(monkeypatch):
+    """A fake bridge on localhost that the Bridge and ComfoConnect classes connect to."""
+    async with FakeBridge() as fake:
+        monkeypatch.setattr(Bridge, "PORT", fake.port)
+        # The fake bridge answers right away, so a request it doesn't answer can time out quickly.
+        monkeypatch.setattr(bridge_module, "TIMEOUT", 0.2)
+        yield fake
 
-    Without this, every test that connects would fail since we don't accept a bridge
-    that doesn't tell us where the ventilation unit is. Tests that want to test that
-    behaviour patch cmd_node_request again themselves.
-    """
 
-    async def cmd_node_request(self):
-        node_notification(self, node_id=1, product_id=ProductId.COMFOAIRQ)
+@pytest.fixture
+async def make_client(fake_bridge):  # pylint: disable=redefined-outer-name,unused-argument
+    """Create ComfoConnect clients for the fake bridge, and disconnect them at the end of the test."""
+    clients = []
 
-    monkeypatch.setattr(ComfoConnect, "cmd_node_request", cmd_node_request)
+    def factory(**kwargs) -> ComfoConnect:
+        kwargs.setdefault("sensor_delay", 0)
+        kwargs.setdefault("connect_timeout", 1)
+        client = ComfoConnect("127.0.0.1", BRIDGE_UUID, **kwargs)
+        clients.append(client)
+        return client
+
+    yield factory
+
+    for client in clients:
+        await client.disconnect()
 
 
 def node_notification(bridge, node_id, product_id, zone_id=1, mode=zehnder_pb2.CnNodeNotification.NODE_NORMAL):
