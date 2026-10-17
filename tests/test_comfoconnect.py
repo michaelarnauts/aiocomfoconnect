@@ -153,7 +153,28 @@ class TestComfoConnect:
     @pytest.mark.asyncio
     async def test_rmi_request_without_ventilation_node(self, comfoconnect):
         """Test that RMI commands are refused instead of being sent to node 1."""
-        with pytest.raises(VentilationUnitNotFoundException):
+        with patch.object(comfoconnect, "is_connected", return_value=True):
+            with pytest.raises(VentilationUnitNotFoundException):
+                await comfoconnect.get_speed()
+
+    @pytest.mark.asyncio
+    async def test_rmi_request_after_disconnect(self, comfoconnect, mock_connection):
+        """Test that commands raise AioComfoConnectNotConnected after a disconnect, not VentilationUnitNotFoundException."""
+        mock_reader, mock_writer = mock_connection
+
+        async def mock_read_messages():
+            await asyncio.sleep(100)
+
+        with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
+            with patch.object(comfoconnect, "cmd_start_session", AsyncMock()):
+                with patch.object(comfoconnect, "_read_messages", side_effect=mock_read_messages):
+                    await comfoconnect.connect(LOCAL_UUID)
+
+        assert comfoconnect.ventilation_node_id == 1
+
+        await comfoconnect.disconnect()
+
+        with pytest.raises(AioComfoConnectNotConnected):
             await comfoconnect.get_speed()
 
     @pytest.mark.asyncio

@@ -583,6 +583,11 @@ class Bridge:
     def cmd_rmi_request(self, message, node_id: Optional[int] = None) -> Awaitable[Message]:
         """Sends a RMI request to the given node, or to the discovered ventilation unit."""
         _LOGGER.debug("CnRmiRequest")
+        # Check the connection first: the node table is cleared on disconnect, so the
+        # ventilation unit check below would otherwise hide the real cause.
+        if not self.is_connected():
+            raise AioComfoConnectNotConnected("Not connected to bridge")
+
         if not node_id:
             node_id = self.ventilation_node_id
             if node_id is None:
