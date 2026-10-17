@@ -21,6 +21,8 @@ $ python -m aiocomfoconnect --help
 $ python -m aiocomfoconnect discover
 
 $ python -m aiocomfoconnect register --host 192.168.1.213
+$ python -m aiocomfoconnect deregister --host 192.168.1.213  # List the registered apps
+$ python -m aiocomfoconnect deregister --host 192.168.1.213 <uuid>  # Deregister an app
 
 $ python -m aiocomfoconnect set-speed away --host 192.168.1.213
 $ python -m aiocomfoconnect set-speed low --host 192.168.1.213
@@ -56,9 +58,9 @@ $ python -m aiocomfoconnect get-property --host 192.168.1.213 1 1 8 9  # Unit 0x
 - `async get_balance_mode()`: Get the balance mode.
 - `async set_balance_mode(mode, timeout=-1)`: Set the balance mode. (balance / supply only / exhaust only)
 - `async get_boost()`: Get the boost mode.
-- `async set_boost(mode, timeout=-1)`: Set the boost mode. (boolean)
+- `async set_boost(mode, timeout=3600)`: Set the boost mode. (boolean)
 - `async get_away()`: Get the away mode.
-- `async set_away(mode, timeout=-1)`: Set the away mode. (boolean)
+- `async set_away(mode, timeout=3600)`: Set the away mode. (boolean)
 - `async get_temperature_profile()`: Get the temperature profile.
 - `async set_temperature_profile(profile)`: Set the temperature profile. (warm / normal / cool)
 - `async get_sensor_ventmode_temperature_passive()`: Get the sensor based ventilation passive temperature control setting.
