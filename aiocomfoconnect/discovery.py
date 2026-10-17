@@ -6,6 +6,8 @@ import asyncio
 import logging
 from typing import Any, Iterable, List, Union
 
+from google.protobuf.message import DecodeError
+
 from .bridge import Bridge
 from .protobuf import zehnder_pb2
 
@@ -60,7 +62,14 @@ class BridgeDiscoveryProtocol(asyncio.DatagramProtocol):
 
         # Decode the response
         parser = zehnder_pb2.DiscoveryOperation()  # pylint: disable=no-member
-        parser.ParseFromString(data)
+        try:
+            parser.ParseFromString(data)
+        except DecodeError:
+            _LOGGER.debug("Ignoring invalid discovery response from %s:%d", addr[0], addr[1])
+            return
+        if not parser.HasField("searchGatewayResponse") or not parser.IsInitialized():
+            _LOGGER.debug("Ignoring incomplete discovery response from %s:%d", addr[0], addr[1])
+            return
 
         uuid = parser.searchGatewayResponse.uuid.hex()
 

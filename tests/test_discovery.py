@@ -111,3 +111,17 @@ class TestBridgeDiscoveryProtocol:
         protocol.disconnect()
 
         assert await protocol.get_bridges() == []
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("data", [b"\xff\xff\xff", b"", b"\x12\x00"])
+    async def test_invalid_datagram_is_ignored(self, data, caplog):
+        """Test that a datagram that isn't a valid discovery response is skipped without an error."""
+        protocol = BridgeDiscoveryProtocol()
+        targets_of(protocol)
+
+        protocol.datagram_received(data, ("192.168.1.10", Bridge.PORT))
+        protocol.datagram_received(discovery_response(), ("192.168.1.213", Bridge.PORT))
+        protocol.disconnect()
+
+        assert [bridge.host for bridge in await protocol.get_bridges()] == ["192.168.1.213"]
+        assert not [record for record in caplog.records if record.levelname == "ERROR"]

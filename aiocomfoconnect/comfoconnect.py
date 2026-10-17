@@ -269,14 +269,15 @@ class ComfoConnect(Bridge):
 
     async def deregister_sensor(self, sensor: Sensor):
         """Deregister a sensor on the bridge."""
-        await self.cmd_rpdo_request(sensor.id, sensor.type, timeout=0)
-
+        # Clean up locally first, so the sensor isn't subscribed again on the next reconnect when we can't reach the bridge now.
         handle = self._sensor_holds.pop(sensor.id, None)
         if handle is not None:
             handle.cancel()
 
-        del self._sensors[sensor.id]
-        del self._sensors_values[sensor.id]
+        self._sensors.pop(sensor.id, None)
+        self._sensors_values.pop(sensor.id, None)
+
+        await self.cmd_rpdo_request(sensor.id, sensor.type, timeout=0)
 
     async def get_property(self, prop: Property, node_id: Optional[int] = None) -> Any:
         """Get a property and convert to the right type."""
@@ -421,7 +422,7 @@ class ComfoConnect(Bridge):
             raise ValueError(f"Invalid mode: {mode}")
 
     async def get_speed(self):
-        """Set the ventilation speed (away / low / medium / high)."""
+        """Get the ventilation speed (away / low / medium / high)."""
         result = await self.cmd_rmi_request(bytes([0x83, UNIT_SCHEDULE, SUBUNIT_01, 0x01]))
         # 0100000000ffffffffffffffff00 = away
         # 0100000000ffffffffffffffff01 = low
@@ -441,7 +442,7 @@ class ComfoConnect(Bridge):
         raise ValueError(f"Invalid speed: {speed}")
 
     async def set_speed(self, speed: Literal["away", "low", "medium", "high"]):
-        """Get the ventilation speed (away / low / medium / high)."""
+        """Set the ventilation speed (away / low / medium / high)."""
         if speed == VentilationSpeed.AWAY:
             await self.cmd_rmi_request(bytes([0x84, UNIT_SCHEDULE, SUBUNIT_01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00]))
         elif speed == VentilationSpeed.LOW:
@@ -465,6 +466,8 @@ class ComfoConnect(Bridge):
                 property_id = 5
             case VentilationSpeed.HIGH:
                 property_id = 6
+            case _:
+                raise ValueError(f"Invalid speed: {speed}")
 
         return await self.get_single_property(UNIT_VENTILATIONCONFIG, SUBUNIT_01, property_id, PdoType.TYPE_CN_INT16)
 
@@ -480,6 +483,8 @@ class ComfoConnect(Bridge):
                 property_id = 5
             case VentilationSpeed.HIGH:
                 property_id = 6
+            case _:
+                raise ValueError(f"Invalid speed: {speed}")
 
         await self.set_property_typed(UNIT_VENTILATIONCONFIG, SUBUNIT_01, property_id, desired_flow, PdoType.TYPE_CN_INT16)
 
@@ -585,8 +590,10 @@ class ComfoConnect(Bridge):
     async def get_comfocool_mode(self):
         """Get the current comfocool mode."""
         result = await self.cmd_rmi_request(bytes([0x83, UNIT_SCHEDULE, SUBUNIT_05, 0x01]))
-        mode = result.message[0]
-        return mode == 0
+        # The first byte tells whether the "off" override is active.
+        if result.message[0] == 0:
+            return ComfoCoolMode.AUTO
+        return ComfoCoolMode.OFF
 
     async def set_comfocool_mode(self, mode: Literal["auto", "off"], timeout=-1):
         """Set the comfocool mode (auto / off)."""
@@ -594,6 +601,8 @@ class ComfoConnect(Bridge):
             await self.cmd_rmi_request(bytes([0x85, UNIT_SCHEDULE, SUBUNIT_05, 0x01]))
         elif mode == ComfoCoolMode.OFF:
             await self.cmd_rmi_request(bytestring([0x84, UNIT_SCHEDULE, SUBUNIT_05, 0x01, 0x00, 0x00, 0x00, 0x00, timeout.to_bytes(4, "little", signed=True), 0x00]))
+        else:
+            raise ValueError(f"Invalid mode: {mode}")
 
     async def get_temperature_profile(self):
         """Get the temperature profile (warm / normal / cool)."""

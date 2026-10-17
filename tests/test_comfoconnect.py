@@ -341,6 +341,28 @@ class TestComfoConnect:
                     await comfoconnect.disconnect()
 
     @pytest.mark.asyncio
+    async def test_deregister_unregistered_sensor(self, comfoconnect):
+        """Test that deregistering a sensor that was never registered doesn't raise."""
+        with patch.object(comfoconnect, "cmd_rpdo_request", AsyncMock()) as mock_rpdo:
+            await comfoconnect.deregister_sensor(create_sensor(name="test_sensor", sensor_id=276, sensor_type=1))
+
+            mock_rpdo.assert_called_once_with(276, 1, timeout=0)
+
+    @pytest.mark.asyncio
+    async def test_deregister_sensor_when_disconnected(self, comfoconnect):
+        """Test that a sensor is forgotten locally, even when the bridge can't be told."""
+        sensor = create_sensor(name="test_sensor", sensor_id=276, sensor_type=1)
+        comfoconnect._sensors[sensor.id] = sensor
+        comfoconnect._sensors_values[sensor.id] = None
+
+        with pytest.raises(AioComfoConnectNotConnected):
+            await comfoconnect.deregister_sensor(sensor)
+
+        # It must not be subscribed again on the next reconnect.
+        assert 276 not in comfoconnect._sensors
+        assert 276 not in comfoconnect._sensors_values
+
+    @pytest.mark.asyncio
     async def test_sensor_callback(self, comfoconnect):
         """Test sensor callback is called."""
         mock_callback = Mock()
@@ -768,6 +790,36 @@ class TestComfoConnect:
             mock_rmi.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_flow_for_speed_rejects_invalid_speed(self, comfoconnect):
+        """Test that an invalid speed raises a ValueError instead of an UnboundLocalError."""
+        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock()) as mock_rmi:
+            with pytest.raises(ValueError):
+                await comfoconnect.get_flow_for_speed("turbo")
+            with pytest.raises(ValueError):
+                await comfoconnect.set_flow_for_speed("turbo", 100)
+
+            mock_rmi.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_set_comfocool_mode_rejects_invalid_mode(self, comfoconnect):
+        """Test that an invalid comfocool mode raises like the other setters."""
+        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock()) as mock_rmi:
+            with pytest.raises(ValueError):
+                await comfoconnect.set_comfocool_mode("on")
+
+            mock_rmi.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("first_byte,expected", [(0x00, "auto"), (0x01, "off")])
+    async def test_get_comfocool_mode(self, comfoconnect, first_byte, expected):
+        """Test that the comfocool getter returns the same values the setter takes."""
+        mock_response = Mock()
+        mock_response.message = bytes([first_byte, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00])
+
+        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=mock_response)):
+            assert await comfoconnect.get_comfocool_mode() == expected
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "mode,expected_commands",
         [
@@ -829,6 +881,23 @@ class TestComfoConnect:
             constraints = await comfoconnect.get_property_constraints(PROPERTY_TEMPERATURE_PROFILE_MODE)
 
             assert constraints == PropertyConstraints(value=0, minimum=0, maximum=1, step=1)
+
+    @pytest.mark.asyncio
+    async def test_get_property_constraints_sensor_ventilation(self, comfoconnect):
+        """Test that the sensor ventilation properties are single bytes, like the unit sends them."""
+        from aiocomfoconnect.properties import (
+            PROPERTY_SENSOR_VENTILATION_HUMIDITY_COMFORT,
+            PROPERTY_SENSOR_VENTILATION_HUMIDITY_PROTECTION,
+            PROPERTY_SENSOR_VENTILATION_TEMP_PASSIVE,
+            PropertyConstraints,
+        )
+
+        mock_response = Mock()
+        mock_response.message = bytes.fromhex("01000201")  # autoonly, range 0 - 2, step 1
+
+        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=mock_response)):
+            for prop in (PROPERTY_SENSOR_VENTILATION_TEMP_PASSIVE, PROPERTY_SENSOR_VENTILATION_HUMIDITY_COMFORT, PROPERTY_SENSOR_VENTILATION_HUMIDITY_PROTECTION):
+                assert await comfoconnect.get_property_constraints(prop) == PropertyConstraints(value=1, minimum=0, maximum=2, step=1)
 
     @pytest.mark.asyncio
     async def test_get_property_constraints_signed(self, comfoconnect):
