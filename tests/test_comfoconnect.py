@@ -1,6 +1,6 @@
 """Tests for the ComfoConnect class."""
 
-from unittest.mock import AsyncMock, Mock, call, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -131,15 +131,6 @@ class TestComfoConnect:
             assert mode == VentilationMode.AUTO
 
     @pytest.mark.asyncio
-    async def test_set_speed(self, comfoconnect):
-        """Test setting ventilation speed."""
-        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock()) as mock_rmi:
-            from aiocomfoconnect.const import VentilationSpeed
-
-            await comfoconnect.set_speed(VentilationSpeed.LOW)
-            mock_rmi.assert_called_once()
-
-    @pytest.mark.asyncio
     async def test_flow_for_speed_rejects_invalid_speed(self, comfoconnect):
         """Test that an invalid speed raises a ValueError instead of an UnboundLocalError."""
         with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock()) as mock_rmi:
@@ -168,20 +159,6 @@ class TestComfoConnect:
 
         with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=mock_response)):
             assert await comfoconnect.get_comfocool_mode() == expected
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        "mode,expected_commands",
-        [
-            ("auto", [b"\x85\x15\x08\x01", b"\x85\x15\x01\x01"]),
-            ("manual", [b"\x84\x15\x08\x01\x00\x00\x00\x00\x01\x00\x00\x00\x01"]),
-        ],
-    )
-    async def test_set_mode_restores_schedule_only_for_auto(self, comfoconnect, mode, expected_commands):
-        """Auto cancels the speed timer; manual retains the selected speed."""
-        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock()) as mock_rmi:
-            await comfoconnect.set_mode(mode)
-            assert mock_rmi.await_args_list == [call(command) for command in expected_commands]
 
     @pytest.mark.asyncio
     async def test_auto_mode_reports_a_failed_speed_override_cancellation(self, comfoconnect):
@@ -278,13 +255,6 @@ class TestComfoConnect:
             await comfoconnect.get_property_constraints(PROPERTY_RMOT_COOLING_THRESHOLD)
 
     @pytest.mark.asyncio
-    async def test_clear_errors(self, comfoconnect):
-        """Test clearing errors."""
-        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock()) as mock_rmi:
-            await comfoconnect.clear_errors()
-            mock_rmi.assert_called_once()
-
-    @pytest.mark.asyncio
     async def test_get_comfoclime_property(self, comfoconnect):
         """Test that a ComfoClime property is read from the ComfoClime node."""
         node_notification(comfoconnect, node_id=1, product_id=ProductId.COMFOAIRQ)
@@ -327,3 +297,67 @@ class TestComfoConnect:
 
             mock_rmi.assert_called_once_with(bytes([0x03, 0x16, 0x01, 0x15, 0x01]), node_id=11)
 
+
+# The RMI requests that the high-level commands send. A schedule request (0x84) is the command, the unit, the subunit, the
+# schedule item, four zero bytes, a signed 32-bit little-endian field with the timeout in seconds for the commands that take
+# one (-1 is no timeout), and the value.
+@pytest.mark.parametrize(
+    "method, args, expected",
+    [
+        ("get_mode", (), ["83 15 08 01"]),
+        ("set_mode", ("auto",), ["85 15 08 01", "85 15 01 01"]),
+        ("set_mode", ("manual",), ["84 15 08 01 00000000 01000000 01"]),
+        ("get_speed", (), ["83 15 01 01"]),
+        ("set_speed", ("away",), ["84 15 01 01 00000000 01000000 00"]),
+        ("set_speed", ("low",), ["84 15 01 01 00000000 01000000 01"]),
+        ("set_speed", ("medium",), ["84 15 01 01 00000000 01000000 02"]),
+        ("set_speed", ("high",), ["84 15 01 01 00000000 01000000 03"]),
+        ("get_bypass", (), ["83 15 02 01"]),
+        ("set_bypass", ("auto",), ["85 15 02 01"]),
+        ("set_bypass", ("on",), ["84 15 02 01 00000000 ffffffff 01"]),
+        ("set_bypass", ("off",), ["84 15 02 01 00000000 ffffffff 02"]),
+        ("set_bypass", ("on", 3600), ["84 15 02 01 00000000 100e0000 01"]),
+        ("get_balance_mode", (), ["83 15 06 01", "83 15 07 01"]),
+        ("set_balance_mode", ("balance",), ["85 15 06 01", "85 15 07 01"]),
+        ("set_balance_mode", ("supply_only",), ["84 15 06 01 00000000 ffffffff 01", "85 15 07 01"]),
+        ("set_balance_mode", ("exhaust_only",), ["85 15 06 01", "84 15 07 01 00000000 ffffffff 01"]),
+        ("set_balance_mode", ("supply_only", 600), ["84 15 06 01 00000000 58020000 01", "85 15 07 01"]),
+        ("get_boost", (), ["83 15 01 06"]),
+        ("set_boost", (True,), ["84 15 01 06 00000000 100e0000 03"]),
+        ("set_boost", (True, 600), ["84 15 01 06 00000000 58020000 03"]),
+        ("set_boost", (False,), ["85 15 01 06"]),
+        ("get_away", (), ["83 15 01 0b"]),
+        ("set_away", (True,), ["84 15 01 0b 00000000 100e0000 00"]),
+        ("set_away", (True, -1), ["84 15 01 0b 00000000 ffffffff 00"]),
+        ("set_away", (False,), ["85 15 01 0b"]),
+        ("get_comfocool_mode", (), ["83 15 05 01"]),
+        ("set_comfocool_mode", ("auto",), ["85 15 05 01"]),
+        ("set_comfocool_mode", ("off",), ["84 15 05 01 00000000 ffffffff 00"]),
+        ("set_comfocool_mode", ("off", 3600), ["84 15 05 01 00000000 100e0000 00"]),
+        ("get_temperature_profile", (), ["83 15 03 01"]),
+        ("set_temperature_profile", ("warm",), ["84 15 03 01 00000000 ffffffff 02"]),
+        ("set_temperature_profile", ("normal",), ["84 15 03 01 00000000 ffffffff 00"]),
+        ("set_temperature_profile", ("cool",), ["84 15 03 01 00000000 ffffffff 01"]),
+        ("set_temperature_profile", ("warm", 3600), ["84 15 03 01 00000000 100e0000 02"]),
+        ("get_sensor_ventmode_temperature_passive", (), ["01 1d 01 10 04"]),
+        ("set_sensor_ventmode_temperature_passive", ("auto",), ["03 1d 01 04 01"]),
+        ("set_sensor_ventmode_temperature_passive", ("on",), ["03 1d 01 04 02"]),
+        ("set_sensor_ventmode_temperature_passive", ("off",), ["03 1d 01 04 00"]),
+        ("get_sensor_ventmode_humidity_comfort", (), ["01 1d 01 10 06"]),
+        ("set_sensor_ventmode_humidity_comfort", ("auto",), ["03 1d 01 06 01"]),
+        ("set_sensor_ventmode_humidity_comfort", ("on",), ["03 1d 01 06 02"]),
+        ("set_sensor_ventmode_humidity_comfort", ("off",), ["03 1d 01 06 00"]),
+        ("get_sensor_ventmode_humidity_protection", (), ["01 1d 01 10 07"]),
+        ("set_sensor_ventmode_humidity_protection", ("auto",), ["03 1d 01 07 01"]),
+        ("set_sensor_ventmode_humidity_protection", ("on",), ["03 1d 01 07 02"]),
+        ("set_sensor_ventmode_humidity_protection", ("off",), ["03 1d 01 07 00"]),
+        ("clear_errors", (), ["82 03 01"]),
+    ],
+)
+async def test_command_rmi_bytes(method, args, expected):
+    """Every high-level command sends exactly these RMI requests."""
+    comfoconnect = ComfoConnect("127.0.0.1", LOCAL_UUID)
+    with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=Mock(message=b"\x01"))) as mock_rmi:
+        await getattr(comfoconnect, method)(*args)
+
+    assert [rmi_call.args for rmi_call in mock_rmi.await_args_list] == [(bytes.fromhex(request),) for request in expected]
