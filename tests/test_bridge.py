@@ -7,9 +7,10 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 
 from aiocomfoconnect.bridge import GATEWAY_TYPE_PRO, Bridge, EventBus, Message, Node
+from aiocomfoconnect.comfoconnect import ComfoConnect
 from aiocomfoconnect.const import GatewayType, ProductId
 from aiocomfoconnect.protobuf import zehnder_pb2
-from tests.conftest import node_notification
+from tests.conftest import create_sensor, node_notification
 
 LOCAL_UUID = "00000000000000000000000000000001"
 
@@ -850,3 +851,121 @@ class TestGatewayTypeFromSession:
             await bridge.cmd_start_session(True)
 
         assert bridge.bridge_type == GatewayType.SEASON
+
+
+def _frame(cmd_type, msg=None):
+    """Encode a frame like the bridge sends it, including the 4 byte length prefix."""
+    cmd = zehnder_pb2.GatewayOperation()
+    cmd.type = cmd_type
+    return Message(cmd, msg or zehnder_pb2.KeepAlive(), LOCAL_UUID, LOCAL_UUID).encode()
+
+
+def _raw_frame(cmd_buf):
+    """Encode a frame with a hand-made command, for values the protobuf classes refuse to encode."""
+    packet = bytes.fromhex(LOCAL_UUID) + bytes.fromhex(LOCAL_UUID) + len(cmd_buf).to_bytes(2, byteorder="big") + cmd_buf
+    return len(packet).to_bytes(4, byteorder="big") + packet
+
+
+def _sensor_frame(pdid, value):
+    """Encode a CnRpdoNotification frame for a sensor."""
+    return _frame(zehnder_pb2.GatewayOperation.CnRpdoNotificationType, zehnder_pb2.CnRpdoNotification(pdid=pdid, data=bytes([value])))
+
+
+class TestReadLoopResilience:
+    """Bad messages and failing callbacks must not end the read loop, only transport errors may."""
+
+    @staticmethod
+    async def run_read_loop(bridge, *frames):
+        """Feed the frames to the bridge and run the read loop until the stream ends."""
+        bridge._reader = asyncio.StreamReader()
+        for frame in frames:
+            bridge._reader.feed_data(frame)
+        bridge._reader.feed_eof()
+
+        # The end of the stream is a transport error, the only way the loop may end.
+        with pytest.raises(AioComfoConnectNotConnected, match="connection was closed"):
+            await bridge._read_messages()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "cmd_type",
+        [
+            zehnder_pb2.GatewayOperation.NoOperation,
+            zehnder_pb2.GatewayOperation.CnWhoAmIConfirmType,
+            zehnder_pb2.GatewayOperation.WiFiNetworksConfirmType,
+            200,  # Not in the enum at all
+        ],
+    )
+    async def test_unknown_message_type_is_skipped(self, cmd_type, caplog):
+        """A message type without a mapping is skipped with a debug log."""
+        bridge = Bridge("192.168.1.100", LOCAL_UUID)
+        received = Mock()
+        bridge.set_sensor_callback(received)
+
+        if cmd_type in zehnder_pb2.GatewayOperation.OperationType.values():
+            frame = _frame(cmd_type)
+        else:
+            # Field 1 (type) with the varint 200, which protobuf doesn't let us encode since it's not in the enum
+            assert cmd_type == 200
+            frame = _raw_frame(bytes([0x08, 0xC8, 0x01]))
+
+        with caplog.at_level("DEBUG", logger="aiocomfoconnect.bridge"):
+            await self.run_read_loop(bridge, frame, _sensor_frame(276, 42))
+
+        received.assert_called_once_with(276, 42)
+        assert any(r.levelname == "DEBUG" and "unknown type" in r.getMessage() for r in caplog.records)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("length", [0, 20, 33])
+    async def test_short_packet_is_skipped(self, length, caplog):
+        """A packet shorter than the header is skipped with a warning."""
+        bridge = Bridge("192.168.1.100", LOCAL_UUID)
+        received = Mock()
+        bridge.set_sensor_callback(received)
+
+        short_frame = length.to_bytes(4, byteorder="big") + bytes(length)
+        await self.run_read_loop(bridge, short_frame, _sensor_frame(276, 42))
+
+        received.assert_called_once_with(276, 42)
+        assert any(r.levelname == "WARNING" and "shorter than" in r.getMessage() for r in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_sensor_callback_exception_is_logged(self, caplog):
+        """An exception in the sensor callback is logged and the next message is still processed."""
+        bridge = Bridge("192.168.1.100", LOCAL_UUID)
+        received = Mock(side_effect=[RuntimeError("boom"), None])
+        bridge.set_sensor_callback(received)
+
+        await self.run_read_loop(bridge, _sensor_frame(276, 1), _sensor_frame(276, 2))
+
+        assert received.call_args_list == [((276, 1),), ((276, 2),)]
+        errors = [r for r in caplog.records if r.levelname == "ERROR" and r.exc_info]
+        assert len(errors) == 1
+        assert isinstance(errors[0].exc_info[1], RuntimeError)
+
+    @pytest.mark.asyncio
+    async def test_alarm_callback_exception_is_logged(self, caplog):
+        """An exception in the alarm callback is logged and the next message is still processed."""
+        bridge = Bridge("192.168.1.100", LOCAL_UUID)
+        bridge.set_alarm_callback(Mock(side_effect=RuntimeError("boom")))
+        received = Mock()
+        bridge.set_sensor_callback(received)
+
+        alarm = _frame(zehnder_pb2.GatewayOperation.CnAlarmNotificationType, zehnder_pb2.CnAlarmNotification(nodeId=1))
+        await self.run_read_loop(bridge, alarm, _sensor_frame(276, 42))
+
+        received.assert_called_once_with(276, 42)
+        assert any(r.levelname == "ERROR" and isinstance(r.exc_info[1], RuntimeError) for r in caplog.records if r.exc_info)
+
+    @pytest.mark.asyncio
+    async def test_value_fn_exception_is_logged(self, caplog):
+        """An exception in a sensor's value_fn is logged and the next message is still processed."""
+        received = Mock()
+        comfoconnect = ComfoConnect("192.168.1.100", LOCAL_UUID, sensor_callback=received, sensor_delay=0)
+        comfoconnect._sensors[276] = create_sensor(sensor_id=276, value_fn=lambda value: 1 / 0)
+        comfoconnect._sensors[277] = create_sensor(sensor_id=277)
+
+        await self.run_read_loop(comfoconnect, _sensor_frame(276, 1), _sensor_frame(277, 2))
+
+        received.assert_called_once_with(comfoconnect._sensors[277], 2)
+        assert any(isinstance(r.exc_info[1], ZeroDivisionError) for r in caplog.records if r.exc_info)
