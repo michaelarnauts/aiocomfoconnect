@@ -648,6 +648,62 @@ class TestComfoConnect:
             assert value == 100
 
     @pytest.mark.asyncio
+    async def test_get_property_constraints(self, comfoconnect):
+        """Test getting a property with its range and step size in one request."""
+        from aiocomfoconnect.properties import PROPERTY_RMOT_COOLING_THRESHOLD, PropertyConstraints
+
+        mock_response = Mock()
+        # Captured from a ComfoAir Q: 16.0 °C, range 15.0 - 40.0 °C, step 1.0 °C.
+        mock_response.message = bytes.fromhex("a000960090010a00")
+
+        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=mock_response)) as mock_rmi:
+            constraints = await comfoconnect.get_property_constraints(PROPERTY_RMOT_COOLING_THRESHOLD)
+
+            assert constraints == PropertyConstraints(value=160, minimum=150, maximum=400, step=10)
+            mock_rmi.assert_called_once_with(bytes([0x01, 0x1D, 0x01, 0x70, 0x03]), node_id=None)
+
+    @pytest.mark.asyncio
+    async def test_get_property_constraints_uint8(self, comfoconnect):
+        """Test that the value size follows the property type."""
+        from aiocomfoconnect.properties import PROPERTY_TEMPERATURE_PROFILE_MODE, PropertyConstraints
+
+        mock_response = Mock()
+        mock_response.message = bytes.fromhex("00000101")  # adaptive, range 0 - 1, step 1
+
+        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=mock_response)):
+            constraints = await comfoconnect.get_property_constraints(PROPERTY_TEMPERATURE_PROFILE_MODE)
+
+            assert constraints == PropertyConstraints(value=0, minimum=0, maximum=1, step=1)
+
+    @pytest.mark.asyncio
+    async def test_get_property_constraints_signed(self, comfoconnect):
+        """Test that signed property types keep negative values."""
+        from aiocomfoconnect.const import PdoType
+        from aiocomfoconnect.properties import Property
+
+        mock_response = Mock()
+        mock_response.message = bytes.fromhex("ceff9cff64000100")  # -5.0, range -10.0 - 10.0, step 0.1
+
+        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=mock_response)):
+            constraints = await comfoconnect.get_property_constraints(Property(0x1D, 0x01, 0x02, PdoType.TYPE_CN_INT16))
+
+            assert (constraints.value, constraints.minimum, constraints.maximum, constraints.step) == (-50, -100, 100, 1)
+
+    @pytest.mark.asyncio
+    async def test_get_property_constraints_rejects_invalid(self, comfoconnect):
+        """Test that non-numeric types and unexpected responses raise."""
+        from aiocomfoconnect.properties import PROPERTY_NAME, PROPERTY_RMOT_COOLING_THRESHOLD
+
+        with pytest.raises(ValueError):
+            await comfoconnect.get_property_constraints(PROPERTY_NAME)
+
+        mock_response = Mock()
+        mock_response.message = bytes.fromhex("a000")  # only the value
+
+        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=mock_response)), pytest.raises(ValueError):
+            await comfoconnect.get_property_constraints(PROPERTY_RMOT_COOLING_THRESHOLD)
+
+    @pytest.mark.asyncio
     async def test_clear_errors(self, comfoconnect):
         """Test clearing errors."""
         with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock()) as mock_rmi:
