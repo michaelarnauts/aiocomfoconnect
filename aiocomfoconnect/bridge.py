@@ -92,10 +92,20 @@ class EventBus:
         _LOGGER.debug("Adding listener for event %s", event_name)
         self._listeners.setdefault(event_name, set()).add(future)
 
-    def emit(self, event_name: int, event):
-        """Emit an event to the event bus."""
+    def remove_listener(self, event_name: int, future: asyncio.Future):
+        """Remove a listener from the event bus, if it is still there."""
+        futures = self._listeners.get(event_name)
+        if futures is None:
+            return
+        futures.discard(future)
+        if not futures:
+            del self._listeners[event_name]
+
+    def emit(self, event_name: int, event) -> bool:
+        """Emit an event to the event bus. Returns False when nobody was waiting for it."""
         _LOGGER.debug("Emitting for event %s", event_name)
         futures = self._listeners.pop(event_name, set())
+        delivered = False
         for future in futures:
             if future.done():
                 continue
@@ -103,6 +113,8 @@ class EventBus:
                 future.set_exception(event)
             else:
                 future.set_result(event)
+            delivered = True
+        return delivered
 
     def fail_all(self, exc: Exception):
         """Fail all pending listeners with the provided exception."""
@@ -192,6 +204,9 @@ class Bridge:
             _LOGGER.warning("Already connected to bridge %s", self.host)
             return
 
+        # Clean up what is left of a connection that ended by itself.
+        await self._close()
+
         # Get the running loop if not provided
         if self._loop is None:
             self._loop = asyncio.get_running_loop()
@@ -221,7 +236,12 @@ class Bridge:
         _LOGGER.debug("Connected to bridge %s", self.host)
 
     async def _read_messages(self):
-        """Read messages from the bridge until disconnected or cancelled."""
+        """Read messages from the bridge until disconnected or cancelled.
+
+        However the loop ends, the connection is closed and all pending requests fail, so is_connected() turns False
+        and new requests fail right away.
+        """
+        reason = "Disconnected"
         try:
             while True:
                 await self._process_message()
@@ -230,12 +250,16 @@ class Bridge:
             raise
         except AioComfoConnectNotConnected as exc:
             _LOGGER.info("Disconnected from bridge")
-            self._notify_pending_futures(exc)
+            reason = str(exc)
             raise
         except Exception as exc:
             _LOGGER.error("Unexpected error reading messages: %s", exc, exc_info=True)
-            self._notify_pending_futures(AioComfoConnectNotConnected("Unexpected error during read"))
+            reason = "Unexpected error during read"
             raise
+        finally:
+            if self._writer is not None:
+                self._writer.close()
+            self._notify_pending_futures(AioComfoConnectNotConnected(reason))
 
     def _process_node_notification(self, msg: ProtobufMessage):
         """Keep track of the nodes that are available on the ComfoNet bus."""
@@ -303,25 +327,34 @@ class Bridge:
 
     async def disconnect(self):
         """Disconnect from the bridge."""
-        if not self.is_connected():
+        await self._close()
+
+    async def _close(self):
+        """Close the connection and clear its state. Also cleans up a connection that already ended by itself."""
+        if self._read_task is None and self._writer is None:
             return
 
         _LOGGER.debug("Disconnecting from bridge %s", self.host)
 
-        # Cancel the read task
-        if self._read_task and not self._read_task.done():
-            self._read_task.cancel()
+        # Stop the read task, or collect the exception of a read task that already ended, so asyncio doesn't log
+        # "Task exception was never retrieved". The read loop has already logged it.
+        if self._read_task is not None:
+            if not self._read_task.done():
+                self._read_task.cancel()
             try:
                 await self._read_task
-            except asyncio.CancelledError:
+            except (asyncio.CancelledError, Exception):  # pylint: disable=broad-exception-caught
                 pass
 
         self._notify_pending_futures(AioComfoConnectNotConnected("Disconnected"))
 
-        # Close the connection
-        if self._writer:
+        # Close the connection. When the connection was lost, waiting for it to close can raise the original error.
+        if self._writer is not None:
             self._writer.close()
-            await self._writer.wait_closed()
+            try:
+                await self._writer.wait_closed()
+            except (ConnectionError, OSError) as exc:
+                _LOGGER.debug("Error while closing the connection: %s", exc)
 
         # Clear state
         self._reader = None
@@ -372,35 +405,38 @@ class Bridge:
 
         # Create and register future BEFORE sending to avoid race condition
         # where response arrives before listener is registered
-        fut = self._loop.create_future()
+        event_bus = self._event_bus
+        fut = None
         if reply:
-            if self._event_bus is None:
+            if event_bus is None:
                 raise RuntimeError("Event bus is not initialized")
-            self._event_bus.add_listener(reference, fut)
-        else:
-            fut.set_result(None)
+            fut = self._loop.create_future()
+            event_bus.add_listener(reference, fut)
 
-        # Send message (no lock needed - TCP writes are serialized by the OS)
-        _LOGGER.debug("TX %s", message)
         try:
-            self._writer.write(message.encode())
-            await self._writer.drain()
-        except (ConnectionError, OSError) as exc:
-            send_exc = AioComfoConnectNotConnected("Connection lost while sending")
-            _LOGGER.warning("Failed to send message: %s", exc)
-            # Clean up the registered listener on send failure
-            if reply and self._event_bus is not None:
-                self._event_bus.emit(reference, send_exc)
-            elif not fut.done():
-                fut.set_exception(send_exc)
-            raise send_exc from exc
+            # Send message (no lock needed - TCP writes are serialized by the OS)
+            _LOGGER.debug("TX %s", message)
+            try:
+                self._writer.write(message.encode())
+                await self._writer.drain()
+            except (ConnectionError, OSError) as exc:
+                _LOGGER.warning("Failed to send message: %s", exc)
+                raise AioComfoConnectNotConnected("Connection lost while sending") from exc
 
-        # Wait for response
-        try:
-            return await asyncio.wait_for(fut, timeout)
-        except asyncio.TimeoutError as exc:
-            _LOGGER.warning("Timeout while waiting for response from bridge")
-            raise AioComfoConnectTimeout("Timeout while waiting for response from bridge") from exc
+            if not reply:
+                return None
+
+            # Wait for response
+            try:
+                return await asyncio.wait_for(fut, timeout)
+            except asyncio.TimeoutError as exc:
+                _LOGGER.warning("Timeout while waiting for response from bridge")
+                raise AioComfoConnectTimeout("Timeout while waiting for response from bridge") from exc
+
+        finally:
+            # Whatever happened, nobody waits for this reply anymore.
+            if fut is not None:
+                event_bus.remove_listener(reference, fut)
 
     async def _read(self) -> Message | None:
         """Read the next message from the bridge. Returns None for a message that we can't decode and should skip."""
@@ -452,19 +488,16 @@ class Bridge:
 
         except asyncio.IncompleteReadError as exc:
             _LOGGER.info("The connection was closed.")
-            disconnect_exc = AioComfoConnectNotConnected("The connection was closed.")
-            self._notify_pending_futures(disconnect_exc)
-            raise disconnect_exc from exc
+            raise AioComfoConnectNotConnected("The connection was closed.") from exc
 
         except (ConnectionError, OSError) as exc:
             _LOGGER.info("Connection error: %s", exc)
-            disconnect_exc = AioComfoConnectNotConnected("Connection error")
-            self._notify_pending_futures(disconnect_exc)
-            raise disconnect_exc from exc
+            raise AioComfoConnectNotConnected("Connection error") from exc
 
         except ComfoConnectError as exc:
-            if exc.message.cmd.reference and self._event_bus:
-                self._event_bus.emit(exc.message.cmd.reference, exc)
+            reference = exc.message.cmd.reference
+            if not (reference and self._event_bus and self._event_bus.emit(reference, exc)):
+                _LOGGER.warning("Received an error reply without a matching request (reference %s): %r", reference, exc)
             return
 
         except DecodeError as exc:
