@@ -228,11 +228,6 @@ async def run_set_flow_for_speed(args):
         await comfoconnect.set_flow_for_speed(args.speed, args.flow)
 
 
-async def main(args):
-    """Run the selected command."""
-    await args.func(args)
-
-
 def build_parser() -> argparse.ArgumentParser:
     """Build the argument parser."""
     parser = argparse.ArgumentParser()
@@ -274,7 +269,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_set_boost = subparsers.add_parser("set-boost", parents=[bridge], help="trigger or cancel a boost")
     p_set_boost.add_argument("mode", help="Boost mode", choices=["on", "off"])
-    p_set_boost.add_argument("--timeout", "-t", help="Timeout in seconds (default: %(default)s)", type=int, default=600)
+    p_set_boost.add_argument("--timeout", "-t", help="Timeout in seconds (default: %(default)s)", type=int, default=3600)
     p_set_boost.set_defaults(func=run_set_boost)
 
     p_sensors = subparsers.add_parser("show-sensors", parents=[bridge], help="show the sensor values")
@@ -327,7 +322,7 @@ def main_cli(argv=None):
         logging.basicConfig(level=logging.WARNING)
 
     try:
-        asyncio.run(main(arguments), debug=arguments.debug)
+        asyncio.run(arguments.func(arguments), debug=arguments.debug)
     except KeyboardInterrupt:
         pass
     except (BridgeNotFoundException, CliError) as exc:

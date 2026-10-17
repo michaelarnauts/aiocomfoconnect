@@ -111,15 +111,15 @@ class TestArguments:
         assert args.func is cli.run_discover
 
     def test_set_boost_timeout(self):
-        """The boost timeout keeps its default and short option."""
-        assert parse("set-boost", "on").timeout == 600
+        """The boost timeout defaults to the library's default, and has a short option."""
+        assert parse("set-boost", "on").timeout == 3600
         assert parse("set-boost", "on", "-t", "1200").timeout == 1200
 
     @pytest.mark.parametrize("debug", [False, True])
     def test_asyncio_debug_follows_debug_flag(self, debug):
         """asyncio debug mode is only enabled with --debug."""
         argv = ["--debug", "list-nodes"] if debug else ["list-nodes"]
-        with patch.object(cli.asyncio, "run") as run, patch.object(cli, "main", MagicMock()):
+        with patch.object(cli.asyncio, "run") as run, patch.object(cli, "run_list_nodes", MagicMock()):
             cli.main_cli(argv)
         assert run.call_args.kwargs["debug"] is debug
 
