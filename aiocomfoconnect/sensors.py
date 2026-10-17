@@ -57,6 +57,9 @@ SENSOR_NEXT_CHANGE_FAN_EXHAUST = 87
 SENSOR_NEXT_CHANGE_FAN_SUPPLY = 86
 SENSOR_OPERATING_MODE = 56
 SENSOR_OPERATING_MODE_2 = 49
+SENSOR_POSTHEATER_PRESENT = 402
+SENSOR_POSTHEATER_STATE = 401
+SENSOR_POSTHEATER_TEMPERATURE_BEFORE = 278
 SENSOR_POWER_USAGE = 128
 SENSOR_POWER_USAGE_TOTAL = 130
 SENSOR_POWER_USAGE_TOTAL_YEAR = 129
@@ -171,7 +174,7 @@ SENSORS: Dict[int, Sensor] = {
     SENSOR_TEMPERATURE_EXHAUST: Sensor("Exhaust Air Temperature", UNIT_CELCIUS, 275, PdoType.TYPE_CN_INT16, lambda x: x / 10),
     SENSOR_TEMPERATURE_OUTDOOR: Sensor("Outdoor Air Temperature", UNIT_CELCIUS, 276, PdoType.TYPE_CN_INT16, lambda x: x / 10),
     277: Sensor("Outdoor Air Temperature (?)", UNIT_CELCIUS, 277, PdoType.TYPE_CN_INT16, lambda x: x / 10),
-    278: Sensor("Supply Air Temperature (?)", UNIT_CELCIUS, 278, PdoType.TYPE_CN_INT16, lambda x: x / 10),
+    SENSOR_POSTHEATER_TEMPERATURE_BEFORE: Sensor("Temperature before Postheater", UNIT_CELCIUS, 278, PdoType.TYPE_CN_INT16, lambda x: x / 10),
     SENSOR_HUMIDITY_EXTRACT: Sensor("Extract Air Humidity", UNIT_PERCENT, 290, PdoType.TYPE_CN_UINT8),
     SENSOR_HUMIDITY_EXHAUST: Sensor("Exhaust Air Humidity", UNIT_PERCENT, 291, PdoType.TYPE_CN_UINT8),
     SENSOR_HUMIDITY_OUTDOOR: Sensor("Outdoor Air Humidity", UNIT_PERCENT, 292, PdoType.TYPE_CN_UINT8),
@@ -191,8 +194,8 @@ SENSORS: Dict[int, Sensor] = {
     384: Sensor("sensor_384", None, 384, PdoType.TYPE_CN_INT16, lambda x: x / 10),
     386: Sensor("sensor_386", None, 386, PdoType.TYPE_CN_BOOL, bool),
     400: Sensor("sensor_400", None, 400, PdoType.TYPE_CN_INT16, lambda x: x / 10),
-    401: Sensor("sensor_401", None, 401, PdoType.TYPE_CN_UINT8),
-    402: Sensor("sensor_402", None, 402, PdoType.TYPE_CN_BOOL, bool),
+    SENSOR_POSTHEATER_STATE: Sensor("Postheater State", UNIT_PERCENT, 401, PdoType.TYPE_CN_UINT8),
+    SENSOR_POSTHEATER_PRESENT: Sensor("Postheater Present", None, 402, PdoType.TYPE_CN_BOOL, bool),
     SENSOR_COMFOFOND_TEMP_OUTDOOR: Sensor("ComfoFond Outdoor Air Temperature", None, 416, PdoType.TYPE_CN_INT16, lambda x: x / 10),
     SENSOR_COMFOFOND_TEMP_GROUND: Sensor("ComfoFond Ground Temperature", None, 417, PdoType.TYPE_CN_INT16, lambda x: x / 10),
     SENSOR_COMFOFOND_GHE_STATE: Sensor("ComfoFond GHE State Percentage", None, 418, PdoType.TYPE_CN_UINT8),
