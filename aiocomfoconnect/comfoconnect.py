@@ -214,9 +214,8 @@ class ComfoConnect(Bridge):
                 await asyncio.sleep(5)
 
             finally:
-                # Ensure we're properly disconnected before reconnecting
-                if self.is_connected():
-                    await super().disconnect()
+                # Clean up the connection before reconnecting, also when it already ended by itself.
+                await super().disconnect()
 
         _LOGGER.info("Reconnect loop stopped")
         if self._session_ready and not self._session_ready.done():
