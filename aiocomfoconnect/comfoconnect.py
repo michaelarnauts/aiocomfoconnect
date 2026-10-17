@@ -34,6 +34,7 @@ from aiocomfoconnect.exceptions import (
     AioComfoConnectNotReachable,
     AioComfoConnectTimeout,
     ComfoClimeNotFoundException,
+    ComfoConnectError,
     ComfoConnectNotAllowed,
     VentilationUnitNotFoundException,
 )
@@ -168,9 +169,13 @@ class ComfoConnect(Bridge):
                 for sensor_id in self._sensors:
                     self._hold_sensor(sensor_id)
 
-                # Register the sensors again (in case we lost the connection)
-                for sensor in self._sensors.values():
-                    await self.cmd_rpdo_request(sensor.id, sensor.type)
+                # Register the sensors again (in case we lost the connection). Iterate over a copy, since
+                # register_sensor can be called while we wait. A sensor that fails shouldn't block the session.
+                for sensor in list(self._sensors.values()):
+                    try:
+                        await self.cmd_rpdo_request(sensor.id, sensor.type)
+                    except (ComfoConnectError, AioComfoConnectTimeout) as exc:
+                        _LOGGER.warning("Failed to subscribe to sensor %s (%s): %r", sensor.id, sensor.name, exc)
 
                 if self._session_ready and not self._session_ready.done():
                     self._session_ready.set_result(True)
@@ -240,6 +245,7 @@ class ComfoConnect(Bridge):
 
     async def register_sensor(self, sensor: Sensor):
         """Register a sensor on the bridge."""
+        previous = self._sensors.get(sensor.id)
         self._sensors[sensor.id] = sensor
         self._sensors_values[sensor.id] = None
 
@@ -247,7 +253,19 @@ class ComfoConnect(Bridge):
         # they need their own hold. The hold that was started when we connected has probably expired already.
         self._hold_sensor(sensor.id)
 
-        await self.cmd_rpdo_request(sensor.id, sensor.type)
+        try:
+            await self.cmd_rpdo_request(sensor.id, sensor.type)
+        except BaseException:
+            # Only keep the sensor when the bridge accepted the subscription, so we don't retry it on every reconnect.
+            handle = self._sensor_holds.pop(sensor.id, None)
+            if handle is not None:
+                handle.cancel()
+            if previous is None:
+                self._sensors.pop(sensor.id, None)
+                self._sensors_values.pop(sensor.id, None)
+            else:
+                self._sensors[sensor.id] = previous
+            raise
 
     async def deregister_sensor(self, sensor: Sensor):
         """Deregister a sensor on the bridge."""

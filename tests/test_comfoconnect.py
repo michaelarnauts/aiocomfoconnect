@@ -11,6 +11,7 @@ from aiocomfoconnect.exceptions import (
     AioComfoConnectNotConnected,
     AioComfoConnectTimeout,
     ComfoClimeNotFoundException,
+    ComfoConnectBadRequest,
     ComfoConnectNotAllowed,
     VentilationUnitNotFoundException,
 )
@@ -548,6 +549,92 @@ class TestComfoConnect:
 
         # Clean up
         await comfoconnect.disconnect()
+
+    @pytest.mark.asyncio
+    async def test_failing_sensor_does_not_block_session(self, comfoconnect, mock_connection):
+        """Test that a sensor the bridge rejects on reconnect doesn't stop the others or the session."""
+        mock_reader, mock_writer = mock_connection
+        rpdo_calls = []
+
+        async def mock_rpdo(pdid, pdo_type, *args, **kwargs):
+            rpdo_calls.append(pdid)
+            if pdid == 276:
+                raise ComfoConnectBadRequest("rejected")
+
+        async def mock_read():
+            await asyncio.sleep(100)
+
+        sensor1 = create_sensor(name="test_sensor1", sensor_id=276, sensor_type=1)
+        sensor2 = create_sensor(name="test_sensor2", sensor_id=277, sensor_type=1)
+        comfoconnect._sensors[276] = sensor1
+        comfoconnect._sensors[277] = sensor2
+
+        with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
+            with patch.object(comfoconnect, "cmd_start_session", AsyncMock()):
+                with patch.object(comfoconnect, "cmd_rpdo_request", side_effect=mock_rpdo):
+                    with patch.object(comfoconnect, "_read_messages", side_effect=mock_read):
+                        await comfoconnect.connect(LOCAL_UUID)
+
+                        assert rpdo_calls == [276, 277]
+                        assert comfoconnect.is_connected()
+
+                        # Clean up
+                        await comfoconnect.disconnect()
+
+    @pytest.mark.asyncio
+    async def test_register_sensor_while_resubscribing(self, comfoconnect, mock_connection):
+        """Test that registering a sensor while the sensors are re-subscribed doesn't break the session."""
+        mock_reader, mock_writer = mock_connection
+        sensor1 = create_sensor(name="test_sensor1", sensor_id=276, sensor_type=1)
+        sensor2 = create_sensor(name="test_sensor2", sensor_id=277, sensor_type=1)
+        comfoconnect._sensors[276] = sensor1
+
+        async def mock_rpdo(pdid, pdo_type, *args, **kwargs):
+            if pdid == 276:
+                # Another task registers a sensor while we wait for the bridge.
+                comfoconnect._sensors[277] = sensor2
+
+        async def mock_read():
+            await asyncio.sleep(100)
+
+        with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
+            with patch.object(comfoconnect, "cmd_start_session", AsyncMock()):
+                with patch.object(comfoconnect, "cmd_rpdo_request", side_effect=mock_rpdo):
+                    with patch.object(comfoconnect, "_read_messages", side_effect=mock_read):
+                        await comfoconnect.connect(LOCAL_UUID)
+
+                        assert comfoconnect.is_connected()
+
+                        # Clean up
+                        await comfoconnect.disconnect()
+
+    @pytest.mark.asyncio
+    async def test_register_sensor_failure_rolls_back(self, comfoconnect, mock_connection):
+        """Test that a sensor is not kept when the bridge rejects the subscription."""
+        mock_reader, mock_writer = mock_connection
+
+        async def mock_read():
+            await asyncio.sleep(100)
+
+        with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
+            with patch.object(comfoconnect, "cmd_start_session", AsyncMock()):
+                with patch.object(comfoconnect, "cmd_rpdo_request", AsyncMock()) as mock_rpdo:
+                    with patch.object(comfoconnect, "_read_messages", side_effect=mock_read):
+                        await comfoconnect.connect(LOCAL_UUID)
+
+                    comfoconnect.sensor_delay = 5
+                    mock_rpdo.side_effect = ComfoConnectBadRequest("rejected")
+
+                    sensor = create_sensor(name="test_sensor", sensor_id=276, sensor_type=1)
+                    with pytest.raises(ComfoConnectBadRequest):
+                        await comfoconnect.register_sensor(sensor)
+
+                    assert 276 not in comfoconnect._sensors
+                    assert 276 not in comfoconnect._sensors_values
+                    assert 276 not in comfoconnect._sensor_holds
+
+                    # Clean up
+                    await comfoconnect.disconnect()
 
     @pytest.mark.asyncio
     async def test_connect_already_connecting(self, comfoconnect):
