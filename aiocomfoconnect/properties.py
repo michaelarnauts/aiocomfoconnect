@@ -24,6 +24,16 @@ class Property:
     property_type: int
 
 
+@dataclass
+class PropertyConstraints:
+    """The raw value of a numeric property, with the range and step size the unit accepts."""
+
+    value: int
+    minimum: int
+    maximum: int
+    step: int
+
+
 PROPERTY_SERIAL_NUMBER = Property(UNIT_NODE, 0x01, 0x04, PdoType.TYPE_CN_STRING)
 PROPERTY_FIRMWARE_VERSION = Property(UNIT_NODE, 0x01, 0x06, PdoType.TYPE_CN_UINT32)
 PROPERTY_MODEL = Property(UNIT_NODE, 0x01, 0x08, PdoType.TYPE_CN_STRING)
@@ -40,6 +50,12 @@ PROPERTY_SENSOR_VENTILATION_HUMIDITY_PROTECTION = Property(UNIT_TEMPHUMCONTROL, 
 # Temperatures are stored in tenths of a degree.
 PROPERTY_RMOT_HEATING_THRESHOLD = Property(UNIT_TEMPHUMCONTROL, 0x01, 0x02, PdoType.TYPE_CN_INT16)
 PROPERTY_RMOT_COOLING_THRESHOLD = Property(UNIT_TEMPHUMCONTROL, 0x01, 0x03, PdoType.TYPE_CN_INT16)
+PROPERTY_PROFILE_TEMPERATURE_WARM = Property(UNIT_TEMPHUMCONTROL, 0x01, 0x0A, PdoType.TYPE_CN_INT16)
+PROPERTY_PROFILE_TEMPERATURE_NORMAL = Property(UNIT_TEMPHUMCONTROL, 0x01, 0x0B, PdoType.TYPE_CN_INT16)
+PROPERTY_PROFILE_TEMPERATURE_COOL = Property(UNIT_TEMPHUMCONTROL, 0x01, 0x0C, PdoType.TYPE_CN_INT16)
+
+# 0=adaptive (the target follows the RMOT), 1=fixed (the target is the temperature of the active profile).
+PROPERTY_TEMPERATURE_PROFILE_MODE = Property(UNIT_TEMPHUMCONTROL, 0x01, 0x08, PdoType.TYPE_CN_UINT8)
 
 # ComfoClime properties. These live on the ComfoClime node, not on the ventilation unit.
 PROPERTY_CLIME_AUTO_SEASON = Property(UNIT_CLIME_TEMPCONFIG, 0x01, 0x02, PdoType.TYPE_CN_UINT8)

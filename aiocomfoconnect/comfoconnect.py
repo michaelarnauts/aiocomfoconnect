@@ -37,11 +37,21 @@ from aiocomfoconnect.exceptions import (
     ComfoConnectNotAllowed,
     VentilationUnitNotFoundException,
 )
-from aiocomfoconnect.properties import Property
+from aiocomfoconnect.properties import Property, PropertyConstraints
 from aiocomfoconnect.sensors import Sensor
 from aiocomfoconnect.util import bytearray_to_bits, bytestring, encode_pdo_value
 
 _LOGGER = logging.getLogger(__name__)
+
+# The size in bytes and the signedness of the numeric property types.
+NUMERIC_PROPERTY_TYPES = {
+    PdoType.TYPE_CN_UINT8: (1, False),
+    PdoType.TYPE_CN_UINT16: (2, False),
+    PdoType.TYPE_CN_UINT32: (4, False),
+    PdoType.TYPE_CN_INT8: (1, True),
+    PdoType.TYPE_CN_INT16: (2, True),
+    PdoType.TYPE_CN_INT64: (8, True),
+}
 
 
 class ComfoConnect(Bridge):
@@ -268,6 +278,24 @@ class ComfoConnect(Bridge):
             return bool(result.message[0])
 
         return result.message
+
+    async def get_property_constraints(self, prop: Property, node_id: Optional[int] = None) -> PropertyConstraints:
+        """Get the raw value of a numeric property, together with the range and step size the unit accepts.
+
+        The range isn't always fixed, so read it together with the value instead of caching it.
+        """
+        if prop.property_type not in NUMERIC_PROPERTY_TYPES:
+            raise ValueError(f"Property type {prop.property_type} has no range")
+        size, signed = NUMERIC_PROPERTY_TYPES[prop.property_type]
+
+        # Request the actual value (0x10), the range (0x20) and the step size (0x40) at once.
+        result = await self.cmd_rmi_request(bytes([0x01, prop.unit, prop.subunit, 0x70, prop.property_id]), node_id=node_id)
+
+        message = bytes(result.message)
+        if len(message) != 4 * size:
+            raise ValueError(f"Unexpected response length {len(message)} for a value with its range and step size")
+        value, minimum, maximum, step = (int.from_bytes(message[i : i + size], byteorder="little", signed=signed) for i in range(0, 4 * size, size))
+        return PropertyConstraints(value=value, minimum=minimum, maximum=maximum, step=step)
 
     async def get_multiple_properties(self, unit: int, subunit: int, property_ids: List[int], node_id: Optional[int] = None) -> Any:
         """Get multiple properties."""

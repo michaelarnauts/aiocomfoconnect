@@ -78,6 +78,12 @@ There are three commands which always exist on a given Unit:
   Each writable property may have a range & step size. You can get those values by using the `0x20` and `0x40` `Type` values. You can request multiple types
   at the same time by OR'ing the value.
 
+  Example: Request: `01 1d 01 70 03`, Response: `a0 00 96 00 90 01 0a 00`
+  This gets the actual value, the range and the step size of the RMOT cooling threshold (an INT16) at once: 160 (16.0 °C), range 150 - 400, step 10.
+
+  The range isn't always fixed: on a ComfoAir Q, the minimum of the warm profile temperature and the maximum of the RMOT heating threshold were equal to
+  their current values. So read the range together with the value instead of caching it.
+
   Example: Request: `01 20 01 10 03`, Response: `34 32 31 30 00` (4210\0)
   This gets the maintainer password. Unit is `NODECONFIGURATION`, SubUnit is `01`, get the actual value, Property `03`.
 
@@ -140,7 +146,7 @@ factory mode or tries to perform an update.)
 | TEMPHUMCONTROL    | 0x01    | 0x05     | rw     | UINT8  | ?? `00` = 0                                                            |
 | TEMPHUMCONTROL    | 0x01    | 0x06     | rw     | UINT8  | Humidity comfort control (o=off, 1=autoonly, 2=on)                     |
 | TEMPHUMCONTROL    | 0x01    | 0x07     | rw     | UINT8  | Humidity protection (0=off, 1=autoonly, 2=on)                          |
-| TEMPHUMCONTROL    | 0x01    | 0x08     | rw     | UINT8  | Temperature profile mode (0=adaptive, 1=fixed, 2=ext. setpoint?)       |
+| TEMPHUMCONTROL    | 0x01    | 0x08     | rw     | UINT8  | Temperature profile mode (0=adaptive, 1=fixed; a ComfoAir Q reports a range of 0-1) |
 | TEMPHUMCONTROL    | 0x01    | 0x0A     | rw     | INT16  | Target temperature for profile: Heating (230 -> 23°C)                  |
 | TEMPHUMCONTROL    | 0x01    | 0x0B     | rw     | INT16  | Target temperature for profile: Normal (210 -> 21°C)                   |
 | TEMPHUMCONTROL    | 0x01    | 0x0C     | rw     | INT16  | Target temperature for profile: Cooling (190 -> 19°C)                  |
