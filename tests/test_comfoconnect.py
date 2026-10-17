@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, call, patch
 import pytest
 
 from aiocomfoconnect.comfoconnect import ComfoConnect
-from aiocomfoconnect.const import ProductId
+from aiocomfoconnect.const import ERRORS, ERRORS_BASE, ProductId
 from aiocomfoconnect.exceptions import (
     AioComfoConnectNotConnected,
     AioComfoConnectTimeout,
@@ -15,6 +15,7 @@ from aiocomfoconnect.exceptions import (
     VentilationUnitNotFoundException,
 )
 from aiocomfoconnect.properties import PROPERTY_CLIME_HEATPUMP_STANDBY, PROPERTY_CLIME_HEATING_COMFORT_TEMP
+from aiocomfoconnect.protobuf import zehnder_pb2
 from tests.conftest import create_sensor, node_notification
 
 LOCAL_UUID = "00000000000000000000000000000001"
@@ -485,6 +486,8 @@ class TestComfoConnect:
         mock_callback = Mock()
         comfoconnect._alarm_callback_fn = mock_callback
 
+        node_notification(comfoconnect, node_id=1, product_id=ProductId.COMFOAIRQ)
+
         mock_alarm = Mock()
         mock_alarm.swProgramVersion = 3222278145  # Firmware > 1.4.0
         # Set bit 52 which corresponds to "The supply air fan has a malfunction"
@@ -497,7 +500,51 @@ class TestComfoConnect:
         args = mock_callback.call_args[0]
         assert args[0] == 1  # node_id
         assert isinstance(args[1], dict)  # errors dict
-        assert 52 in args[1]  # Should contain error bit 52
+        assert args[1] == {52: ERRORS[52]}
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "sw_version, bit",
+        [
+            (3222278145, 36),  # A gap in ERRORS
+            (3222278145, 105),  # Beyond ERRORS
+            (3222278144, 87),  # Beyond ERRORS_140
+        ],
+    )
+    async def test_alarm_callback_unknown_bit(self, comfoconnect, sw_version, bit):
+        """Test that an alarm bit we have no message for is reported as unknown instead of raising."""
+        mock_callback = Mock()
+        comfoconnect._alarm_callback_fn = mock_callback
+        node_notification(comfoconnect, node_id=1, product_id=ProductId.COMFOAIRQ)
+
+        alarm = zehnder_pb2.CnAlarmNotification()
+        alarm.nodeId = 1
+        alarm.swProgramVersion = sw_version
+        errors = bytearray(14)
+        errors[bit // 8] |= 1 << (bit % 8)
+        errors[52 // 8] |= 1 << (52 % 8)
+        alarm.errors = bytes(errors)
+
+        comfoconnect._alarm_callback(1, alarm)
+
+        mock_callback.assert_called_once_with(1, {52: ERRORS_BASE[52], bit: f"Unknown error {bit}"})
+
+    @pytest.mark.asyncio
+    async def test_alarm_callback_other_node(self, comfoconnect):
+        """Test that alarms of a node that isn't the ventilation unit aren't decoded with its error table."""
+        mock_callback = Mock()
+        comfoconnect._alarm_callback_fn = mock_callback
+        node_notification(comfoconnect, node_id=1, product_id=ProductId.COMFOAIRQ)
+        node_notification(comfoconnect, node_id=10, product_id=ProductId.COMFOSENSE)
+
+        alarm = zehnder_pb2.CnAlarmNotification()
+        alarm.nodeId = 10
+        alarm.swProgramVersion = 3222278145
+        alarm.errors = b"\x00\x00\x20"  # Bit 21
+
+        comfoconnect._alarm_callback(10, alarm)
+
+        mock_callback.assert_called_once_with(10, {21: "Unknown error 21"})
 
     @pytest.mark.asyncio
     async def test_sensors_reregistered_after_reconnect(self, comfoconnect):
