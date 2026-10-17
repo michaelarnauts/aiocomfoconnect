@@ -81,8 +81,7 @@ There are three commands which always exist on a given Unit:
   Example: Request: `01 1d 01 70 03`, Response: `a0 00 96 00 90 01 0a 00`
   This gets the actual value, the range and the step size of the RMOT cooling threshold (an INT16) at once: 160 (16.0 °C), range 150 - 400, step 10.
 
-  The range isn't always fixed: on a ComfoAir Q, the minimum of the warm profile temperature and the maximum of the RMOT heating threshold were equal to
-  their current values. So read the range together with the value instead of caching it.
+  Reading the range and the step size together with the value costs no extra request.
 
   Example: Request: `01 20 01 10 03`, Response: `34 32 31 30 00` (4210\0)
   This gets the maintainer password. Unit is `NODECONFIGURATION`, SubUnit is `01`, get the actual value, Property `03`.

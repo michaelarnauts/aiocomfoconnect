@@ -280,10 +280,7 @@ class ComfoConnect(Bridge):
         return result.message
 
     async def get_property_constraints(self, prop: Property, node_id: Optional[int] = None) -> PropertyConstraints:
-        """Get the raw value of a numeric property, together with the range and step size the unit accepts.
-
-        The range isn't always fixed, so read it together with the value instead of caching it.
-        """
+        """Get the raw value of a numeric property, together with the range and step size the unit accepts, in one request."""
         if prop.property_type not in NUMERIC_PROPERTY_TYPES:
             raise ValueError(f"Property type {prop.property_type} has no range")
         size, signed = NUMERIC_PROPERTY_TYPES[prop.property_type]
