@@ -797,3 +797,33 @@ class TestBridgeRegister:
                 await pro_bridge.register(LOCAL_UUID, "test-app", 9999)
 
         mock_session.assert_not_called()
+
+
+class TestComfoConnectProDetection:
+    """Tests for Bridge.is_comfoconnect_pro."""
+
+    @pytest.mark.asyncio
+    async def test_lanc_session(self):
+        """A LAN C leaves the devicename of the session confirmation empty."""
+        bridge = Bridge("192.168.1.100", LOCAL_UUID)
+        with patch.object(bridge, "_send", AsyncMock(return_value=zehnder_pb2.StartSessionConfirm())):
+            await bridge.cmd_start_session(True)
+
+        assert bridge.is_comfoconnect_pro is False
+
+    @pytest.mark.asyncio
+    async def test_pro_session(self):
+        """A Pro identifies itself with devicename "ccpro", also without discovery."""
+        bridge = Bridge("192.168.1.100", LOCAL_UUID)
+        assert bridge.is_comfoconnect_pro is False
+
+        with patch.object(bridge, "_send", AsyncMock(return_value=zehnder_pb2.StartSessionConfirm(devicename="ccpro"))) as mock_send:
+            reply = await bridge.cmd_start_session(True)
+
+        assert bridge.is_comfoconnect_pro is True
+        assert reply.devicename == "ccpro"
+        assert mock_send.call_args[0][2] == {"takeover": True}
+
+    def test_pro_from_discovery(self):
+        """The gateway type from discovery identifies a Pro before a session is started."""
+        assert Bridge("192.168.1.100", LOCAL_UUID, bridge_type=GATEWAY_TYPE_PRO).is_comfoconnect_pro is True

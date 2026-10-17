@@ -127,6 +127,8 @@ class Bridge:
         self.host: str = host
         self.uuid: str = uuid
         self.bridge_type: int = bridge_type
+        # The devicename in the confirmation of the last session that was started. A ComfoConnect Pro sets it to "ccpro".
+        self._session_device_name: Optional[str] = None
         self._local_uuid: Optional[str] = None
 
         self._reader: Optional[StreamReader] = None
@@ -490,15 +492,27 @@ class Bridge:
         except DecodeError as exc:
             _LOGGER.error("Failed to decode message: %s", exc)
 
-    def cmd_start_session(self, take_over: bool = False) -> Awaitable[Message]:
+    async def cmd_start_session(self, take_over: bool = False) -> Message:
         """Starts the session on the device by logging in and optionally disconnecting an already existing session."""
         _LOGGER.debug("StartSessionRequest")
         # pylint: disable=no-member
-        return self._send(
+        reply = await self._send(
             zehnder_pb2.StartSessionRequest,
             zehnder_pb2.GatewayOperation.StartSessionRequestType,
             {"takeover": take_over},
         )
+        self._session_device_name = getattr(reply, "devicename", None)
+        return reply
+
+    @property
+    def is_comfoconnect_pro(self) -> bool:
+        """Returns True if the bridge is a ComfoConnect Pro.
+
+        Discovery reports the gateway type, and a Pro also identifies itself with the devicename "ccpro" in the
+        confirmation of a session, so this also works for a bridge that was set up without discovery once the
+        session has started.
+        """
+        return self.bridge_type == GATEWAY_TYPE_PRO or self._session_device_name == "ccpro"
 
     def cmd_close_session(self) -> Awaitable[Message]:
         """Stops the current session."""
