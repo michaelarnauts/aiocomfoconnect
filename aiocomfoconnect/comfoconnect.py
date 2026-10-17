@@ -369,13 +369,18 @@ class ComfoConnect(Bridge):
         if self._alarm_callback_fn is None:
             return
 
-        if alarm.swProgramVersion <= 3222278144:
+        node = self._nodes.get(node_id)
+        if node is None or not node.is_ventilation_unit:
+            # The error tables only describe the ventilation unit, other nodes use their own bits.
+            error_messages = {}
+        elif alarm.swProgramVersion <= 3222278144:
             # Firmware 1.4.0 and below
             error_messages = ERRORS_140
         else:
             error_messages = ERRORS
 
-        errors = {bit: error_messages[bit] for bit in bytearray_to_bits(alarm.errors)}
+        # Don't fail on bits we don't know, this would end the read loop.
+        errors = {bit: error_messages.get(bit, f"Unknown error {bit}") for bit in bytearray_to_bits(alarm.errors)}
         self._alarm_callback_fn(node_id, errors)
 
     async def get_mode(self):
