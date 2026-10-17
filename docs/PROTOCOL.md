@@ -187,6 +187,10 @@ result: OK
 reference: 16
 ```
 
+A ComfoConnect Pro fills in `devicename: "ccpro"` in this confirmation, while a LAN C leaves it empty. The official app
+uses this to recognise a Pro, since the gateway type from the discovery isn't known when a bridge is added by IP
+address.
+
 If another client is already logged in, the bridge will respond with a `result` of `OTHER_SESSION`. The name of the
 other device will be in `devicename`.
 
