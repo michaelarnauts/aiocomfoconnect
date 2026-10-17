@@ -39,6 +39,9 @@ GATEWAY_TYPE_PRO = GatewayType.PRO
 # How long we wait for the bridge to announce the ventilation unit before we give up.
 NODE_DISCOVERY_TIMEOUT = 5
 
+# Source UUID (16 bytes), destination UUID (16 bytes) and the length of the command (2 bytes)
+HEADER_LENGTH = 34
+
 
 class SelfDeregistrationError(Exception):
     """Exception raised when trying to deregister self."""
@@ -399,7 +402,8 @@ class Bridge:
             _LOGGER.warning("Timeout while waiting for response from bridge")
             raise AioComfoConnectTimeout("Timeout while waiting for response from bridge") from exc
 
-    async def _read(self) -> Message:
+    async def _read(self) -> Message | None:
+        """Read the next message from the bridge. Returns None for a message that we can't decode and should skip."""
         # Read packet size
         msg_len_buf = await self._reader.readexactly(4)
 
@@ -409,6 +413,8 @@ class Bridge:
 
         # Decode message
         message = Message.decode(msg_buf)
+        if message is None:
+            return None
 
         _LOGGER.debug("RX %s", message)
 
@@ -436,41 +442,13 @@ class Bridge:
         return message
 
     async def _process_message(self):
-        """Process a message from the bridge."""
+        """Process a message from the bridge.
+
+        Only transport errors end the read loop (by raising AioComfoConnectNotConnected). A message that can't be decoded
+        or handled, or an exception in a callback, is logged and skipped.
+        """
         try:
             message = await self._read()
-
-            # pylint: disable=no-member
-            if message.cmd.type == zehnder_pb2.GatewayOperation.CnRpdoNotificationType:
-                if self.__sensor_callback_fn:
-                    pdo_type = self._sensor_pdo_types.get(message.msg.pdid)
-                    signed = pdo_type not in (PdoType.TYPE_CN_UINT8, PdoType.TYPE_CN_UINT16, PdoType.TYPE_CN_UINT32)
-                    self.__sensor_callback_fn(message.msg.pdid, int.from_bytes(message.msg.data, byteorder="little", signed=signed))
-                else:
-                    _LOGGER.info("Unhandled CnRpdoNotificationType since no callback is registered.")
-
-            elif message.cmd.type == zehnder_pb2.GatewayOperation.GatewayNotificationType:
-                _LOGGER.debug("Unhandled GatewayNotificationType")
-
-            elif message.cmd.type == zehnder_pb2.GatewayOperation.CnNodeNotificationType:
-                self._process_node_notification(message.msg)
-
-            elif message.cmd.type == zehnder_pb2.GatewayOperation.CnAlarmNotificationType:
-                if self.__alarm_callback_fn:
-                    self.__alarm_callback_fn(message.msg.nodeId, message.msg)
-                else:
-                    _LOGGER.info("Unhandled CnAlarmNotificationType since no callback is registered.")
-
-            elif message.cmd.type == zehnder_pb2.GatewayOperation.CloseSessionRequestType:
-                _LOGGER.info("The Bridge has asked us to close the connection.")
-                raise AioComfoConnectNotConnected("Bridge requested connection close")
-
-            elif message.cmd.reference and self._event_bus:
-                # Emit to the event bus
-                self._event_bus.emit(message.cmd.reference, message.msg)
-
-            else:
-                _LOGGER.warning("Unhandled message type %s: %s", message.cmd.type, message)
 
         except asyncio.IncompleteReadError as exc:
             _LOGGER.info("The connection was closed.")
@@ -487,9 +465,54 @@ class Bridge:
         except ComfoConnectError as exc:
             if exc.message.cmd.reference and self._event_bus:
                 self._event_bus.emit(exc.message.cmd.reference, exc)
+            return
 
         except DecodeError as exc:
             _LOGGER.error("Failed to decode message: %s", exc)
+            return
+
+        if message is None:
+            return
+
+        # pylint: disable=no-member
+        if message.cmd.type == zehnder_pb2.GatewayOperation.CloseSessionRequestType:
+            _LOGGER.info("The Bridge has asked us to close the connection.")
+            raise AioComfoConnectNotConnected("Bridge requested connection close")
+
+        try:
+            self._dispatch_message(message)
+        except Exception:  # pylint: disable=broad-exception-caught
+            _LOGGER.exception("Error while processing message of type %s", message.cmd.type)
+
+    def _dispatch_message(self, message: Message):
+        """Hand a received message to the callbacks or to the request that is waiting for it."""
+        # pylint: disable=no-member
+        if message.cmd.type == zehnder_pb2.GatewayOperation.CnRpdoNotificationType:
+            if self.__sensor_callback_fn:
+                pdo_type = self._sensor_pdo_types.get(message.msg.pdid)
+                signed = pdo_type not in (PdoType.TYPE_CN_UINT8, PdoType.TYPE_CN_UINT16, PdoType.TYPE_CN_UINT32)
+                self.__sensor_callback_fn(message.msg.pdid, int.from_bytes(message.msg.data, byteorder="little", signed=signed))
+            else:
+                _LOGGER.info("Unhandled CnRpdoNotificationType since no callback is registered.")
+
+        elif message.cmd.type == zehnder_pb2.GatewayOperation.GatewayNotificationType:
+            _LOGGER.debug("Unhandled GatewayNotificationType")
+
+        elif message.cmd.type == zehnder_pb2.GatewayOperation.CnNodeNotificationType:
+            self._process_node_notification(message.msg)
+
+        elif message.cmd.type == zehnder_pb2.GatewayOperation.CnAlarmNotificationType:
+            if self.__alarm_callback_fn:
+                self.__alarm_callback_fn(message.msg.nodeId, message.msg)
+            else:
+                _LOGGER.info("Unhandled CnAlarmNotificationType since no callback is registered.")
+
+        elif message.cmd.reference and self._event_bus:
+            # Emit to the event bus
+            self._event_bus.emit(message.cmd.reference, message.msg)
+
+        else:
+            _LOGGER.warning("Unhandled message type %s: %s", message.cmd.type, message)
 
     async def cmd_start_session(self, take_over: bool = False) -> Message:
         """Starts the session on the device by logging in and optionally disconnecting an already existing session."""
@@ -708,8 +731,12 @@ class Message:
         return msg_len_buf + bytes.fromhex(self.src) + bytes.fromhex(self.dst) + cmd_len_buf + cmd_buf + msg_buf
 
     @classmethod
-    def decode(cls, packet) -> Message:
-        """Decode a packet from a byte buffer"""
+    def decode(cls, packet) -> Message | None:
+        """Decode a packet from a byte buffer. Returns None for a packet that is too short or has an unknown type."""
+        if len(packet) < HEADER_LENGTH:
+            _LOGGER.warning("Skipping a packet of %d bytes, shorter than the %d byte header", len(packet), HEADER_LENGTH)
+            return None
+
         src_buf = packet[0:16]
         dst_buf = packet[16:32]
         cmd_len = struct.unpack(">H", packet[32:34])[0]
@@ -722,6 +749,9 @@ class Message:
 
         # Parse message
         cmd_type = cls.REQUEST_MAPPING.get(cmd.type)
+        if cmd_type is None:
+            _LOGGER.debug("Skipping a message of unknown type %s", cmd.type)
+            return None
         msg = cmd_type()
         msg.ParseFromString(msg_buf)
 
