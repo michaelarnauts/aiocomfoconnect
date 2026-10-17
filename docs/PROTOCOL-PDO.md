@@ -107,7 +107,7 @@ decoded them as `-1`. Signed PDO types still preserve negative values.
 | 275  | CN_INT16  | Temperature: Exhaust Air                         | value in °C (86 -> 8.6 °C)                                                                                       |
 | 276  | CN_INT16  | Temperature: Outdoor Air                         | value in °C (60 -> 6.0 °C)                                                                                       |
 | 277  | CN_INT16  | ?? Temperature: Outdoor Air (Preheated?)         | value in °C (60 -> 6.0 °C)                                                                                       |
-| 278  | CN_INT16  | ?? Temperature: Supply Air (Preheated?)          | value in °C (184 -> 18.4 °C)                                                                                     |
+| 278  | CN_INT16  | Temperature: before the Postheater               | value in °C (184 -> 18.4 °C), the temperature after the postheater is 221                                        |
 | 290  | CN_UINT8  | Humidity: Extract Air                            | value in % (49%)                                                                                                 |
 | 291  | CN_UINT8  | Humidity: Exhaust Air                            | value in % (87%)                                                                                                 |
 | 292  | CN_UINT8  | Humidity: Outdoor Air                            | value in % (67%)                                                                                                 |
@@ -131,9 +131,9 @@ decoded them as `-1`. Signed PDO types still preserve negative values.
 | 372  | CN_UINT8  | Analog Input 0-10V 4                             | 0                                                                                                                |
 | 384  | CN_INT16  |                                                  | 0.0                                                                                                              |
 | 386  | CN_BOOL   |                                                  | 0                                                                                                                |
-| 400  | CN_INT16  |                                                  | 0.0                                                                                                              |
-| 401  | CN_UINT8  |                                                  | 0                                                                                                                |
-| 402  | CN_BOOL   | ?? PostHeaterPresent                             | 0                                                                                                                |
+| 400  | CN_INT16  | ?? Temperature: after the Postheater             | value in °C, the same as 221 in every sample on a unit with a postheater                                         |
+| 401  | CN_UINT8  | Postheater State                                 | value in % (0-100)                                                                                               |
+| 402  | CN_BOOL   | Postheater Present                               | 0=absent, 1=present                                                                                              |
 | 416  | CN_INT16  | ComfoFond Outdoor Air Temperature                | -40.0                                                                                                            |
 | 417  | CN_INT16  | ComfoFond Ground Temperature                     | 10.0                                                                                                             |
 | 418  | CN_UINT8  | ComfoFond GHE State Percentage                   | 0                                                                                                                |
