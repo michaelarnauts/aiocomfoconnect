@@ -69,7 +69,7 @@ $ python -m aiocomfoconnect get-property --host 192.168.1.213 1 1 8 9  # Unit 0x
 - `async set_sensor_ventmode_humidity_protection(mode)`: Set the sensor based ventilation humidity protection setting. (auto / on / off)
 - `async get_property(prop)`: Get the value of a property, e.g. `PROPERTY_RMOT_HEATING_THRESHOLD`.
 - `async get_property_constraints(prop)`: Get the raw value of a numeric property, together with the range and step size the unit accepts.
-- `is_comfoconnect_pro`: True if the bridge is a ComfoConnect Pro. Only known once a session has started.
+- `bridge_type`: The type of the bridge (`GatewayType.LANC`, `SEASON` or `PRO`). Discovery reports it, and a ComfoConnect Pro is also recognised once a session has started.
 
 ### Low-level API
 

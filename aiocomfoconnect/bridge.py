@@ -13,7 +13,7 @@ from typing import Awaitable, Callable, Dict, Iterator, Optional, Set
 from google.protobuf.message import DecodeError
 from google.protobuf.message import Message as ProtobufMessage
 
-from .const import VENTILATION_UNIT_PRODUCT_IDS, ProductId, PdoType
+from .const import VENTILATION_UNIT_PRODUCT_IDS, GatewayType, ProductId, PdoType
 from .exceptions import (
     AioComfoConnectNotConnected,
     AioComfoConnectNotReachable,
@@ -34,7 +34,7 @@ from .protobuf import zehnder_pb2
 _LOGGER = logging.getLogger(__name__)
 
 TIMEOUT = 5
-GATEWAY_TYPE_PRO = 2
+GATEWAY_TYPE_PRO = GatewayType.PRO
 
 # How long we wait for the bridge to announce the ventilation unit before we give up.
 NODE_DISCOVERY_TIMEOUT = 5
@@ -126,9 +126,8 @@ class Bridge:
     ):
         self.host: str = host
         self.uuid: str = uuid
+        # One of GatewayType. Discovery reports it, and a ComfoConnect Pro also identifies itself when a session starts.
         self.bridge_type: int = bridge_type
-        # The devicename in the confirmation of the last session that was started. A ComfoConnect Pro sets it to "ccpro".
-        self._session_device_name: Optional[str] = None
         self._local_uuid: Optional[str] = None
 
         self._reader: Optional[StreamReader] = None
@@ -501,17 +500,11 @@ class Bridge:
             zehnder_pb2.GatewayOperation.StartSessionRequestType,
             {"takeover": take_over},
         )
-        self._session_device_name = getattr(reply, "devicename", None)
+        # A ComfoConnect Pro sets the devicename of a successful session to "ccpro", a LAN C leaves it empty. This also
+        # tells us the type of a bridge that was connected to by IP address, without discovery.
+        if getattr(reply, "devicename", None) == "ccpro":
+            self.bridge_type = GatewayType.PRO
         return reply
-
-    @property
-    def is_comfoconnect_pro(self) -> bool:
-        """Returns True if the bridge is a ComfoConnect Pro.
-
-        A Pro identifies itself with the devicename "ccpro" in the confirmation of a session, so this is only known
-        once a session has started.
-        """
-        return self._session_device_name == "ccpro"
 
     def cmd_close_session(self) -> Awaitable[Message]:
         """Stops the current session."""

@@ -32,6 +32,14 @@ VENTILATION_UNIT_PRODUCT_IDS = (ProductId.COMFOAIRQ, ProductId.COMFOAIRFLEX)
 
 
 # PDO Types
+class GatewayType:
+    """Defines the type of a bridge, with the values of the GatewayType in the discovery response."""
+
+    LANC = 0  # ComfoConnect LAN C
+    SEASON = 1  # The built-in WiFi module of a ComfoAir Flex
+    PRO = 2  # ComfoConnect Pro
+
+
 class PdoType:
     """Defines a PDO type."""
 

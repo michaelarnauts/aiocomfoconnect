@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 
 from aiocomfoconnect.bridge import GATEWAY_TYPE_PRO, Bridge, EventBus, Message, Node
-from aiocomfoconnect.const import ProductId
+from aiocomfoconnect.const import GatewayType, ProductId
 from aiocomfoconnect.protobuf import zehnder_pb2
 from tests.conftest import node_notification
 
@@ -799,27 +799,35 @@ class TestBridgeRegister:
         mock_session.assert_not_called()
 
 
-class TestComfoConnectProDetection:
-    """Tests for Bridge.is_comfoconnect_pro."""
+class TestGatewayTypeFromSession:
+    """Tests for recognising a ComfoConnect Pro when the session starts."""
 
     @pytest.mark.asyncio
     async def test_lanc_session(self):
-        """A LAN C leaves the devicename of the session confirmation empty."""
+        """A LAN C leaves the devicename of the session confirmation empty, so the type stays LAN C."""
         bridge = Bridge("192.168.1.100", LOCAL_UUID)
         with patch.object(bridge, "_send", AsyncMock(return_value=zehnder_pb2.StartSessionConfirm())):
             await bridge.cmd_start_session(True)
 
-        assert bridge.is_comfoconnect_pro is False
+        assert bridge.bridge_type == GatewayType.LANC
 
     @pytest.mark.asyncio
     async def test_pro_session(self):
-        """A Pro identifies itself with devicename "ccpro", also without discovery."""
+        """A Pro identifies itself with devicename "ccpro", also when it wasn't found by discovery."""
         bridge = Bridge("192.168.1.100", LOCAL_UUID)
-        assert bridge.is_comfoconnect_pro is False
 
         with patch.object(bridge, "_send", AsyncMock(return_value=zehnder_pb2.StartSessionConfirm(devicename="ccpro"))) as mock_send:
             reply = await bridge.cmd_start_session(True)
 
-        assert bridge.is_comfoconnect_pro is True
+        assert bridge.bridge_type == GatewayType.PRO
         assert reply.devicename == "ccpro"
         assert mock_send.call_args[0][2] == {"takeover": True}
+
+    @pytest.mark.asyncio
+    async def test_discovered_type_is_kept(self):
+        """A session without "ccpro" keeps the type from discovery, e.g. the WiFi module of a ComfoAir Flex."""
+        bridge = Bridge("192.168.1.100", LOCAL_UUID, bridge_type=GatewayType.SEASON)
+        with patch.object(bridge, "_send", AsyncMock(return_value=zehnder_pb2.StartSessionConfirm())):
+            await bridge.cmd_start_session(True)
+
+        assert bridge.bridge_type == GatewayType.SEASON
