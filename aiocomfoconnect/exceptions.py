@@ -7,28 +7,12 @@ class AioComfoConnectError(Exception):
     """Base class for all errors raised by aiocomfoconnect."""
 
 
-def _describe(message) -> str:
-    """Build a readable description of an error reply from the bridge."""
-    cmd = getattr(message, "cmd", None)
-    if cmd is None:
-        return str(message)
-
-    def enum_name(field: str) -> str:
-        value = getattr(cmd, field)
-        enum_value = cmd.DESCRIPTOR.fields_by_name[field].enum_type.values_by_number.get(value)
-        return enum_value.name if enum_value else str(value)
-
-    description = f"Bridge replied {enum_name('result')} to {enum_name('type')} (reference {cmd.reference})"
-    if cmd.resultDescription:
-        description += f": {cmd.resultDescription}"
-    return description
-
-
 class ComfoConnectError(AioComfoConnectError):
     """Base error for ComfoConnect"""
 
     def __init__(self, message):
-        super().__init__(_describe(message))
+        cmd = getattr(message, "cmd", None)
+        super().__init__((cmd.resultDescription or f"reference {cmd.reference}") if cmd else str(message))
         self.message = message
 
 
