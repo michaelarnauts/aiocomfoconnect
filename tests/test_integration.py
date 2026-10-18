@@ -201,11 +201,28 @@ class TestReconnect:
         for connection in (2, 3):
             getattr(fake_bridge, lose_connection)()
             await fake_bridge.wait_for(lambda: fake_bridge.received(GO.CnNodeRequestType, connection))
-            await fake_bridge.wait_for(client.is_connected)
+            await fake_bridge.wait_for(lambda: client.connection_state == ConnectionState.CONNECTED)
 
         assert fake_bridge.connections == 3
         assert len(fake_bridge.received(GO.StartSessionRequestType)) == 3
         fake_bridge.rmi_responses[GET_SPEED] = bytes.fromhex("0100000000ffffffffffffffff01")
+        assert await client.get_speed() == "low"
+
+    async def test_commands_wait_for_session(self, fake_bridge, make_client):
+        """While a reconnect is busy, a command fails as not connected, also when the new connection is already open."""
+        fake_bridge.rmi_responses[GET_SPEED] = bytes.fromhex("0100000000ffffffffffffffff01")
+        client = make_client()
+        await client.connect(LOCAL_UUID)
+
+        fake_bridge.withhold = {GO.CnNodeRequestType}
+        fake_bridge.drop()
+        await fake_bridge.wait_for(lambda: fake_bridge.received(GO.CnNodeRequestType, 2))
+        assert client.is_connected()
+        with pytest.raises(AioComfoConnectNotConnected):
+            await client.get_speed()
+
+        fake_bridge.answer_pending()
+        await fake_bridge.wait_for(lambda: client.connection_state == ConnectionState.CONNECTED)
         assert await client.get_speed() == "low"
 
     async def test_reconnect_retries(self, fake_bridge, make_client):
