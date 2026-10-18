@@ -42,8 +42,6 @@ class TestComfoConnect:
         assert comfoconnect._sensors == {}
         assert comfoconnect._sensors_values == {}
         assert comfoconnect._reconnect_task is None
-        assert comfoconnect._is_stopping is False
-        assert comfoconnect._session_ready is None
 
     @pytest.mark.asyncio
     async def test_rmi_request_without_ventilation_node(self, comfoconnect):

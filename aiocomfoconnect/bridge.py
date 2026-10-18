@@ -337,14 +337,14 @@ class Bridge:
         _LOGGER.debug("Disconnecting from bridge %s", self.host)
 
         # Stop the read task, or collect the exception of a read task that already ended, so asyncio doesn't log
-        # "Task exception was never retrieved". The read loop has already logged it.
-        if self._read_task is not None:
-            if not self._read_task.done():
-                self._read_task.cancel()
-            try:
-                await self._read_task
-            except (asyncio.CancelledError, Exception):  # pylint: disable=broad-exception-caught
-                pass
+        # "Task exception was never retrieved". The read loop has already logged it. Unlike awaiting the task,
+        # asyncio.wait() doesn't raise its exception, so it can't swallow a cancellation of our caller either.
+        read_task = self._read_task
+        if read_task is not None:
+            read_task.cancel()
+            await asyncio.wait([read_task])
+            if not read_task.cancelled():
+                read_task.exception()
 
         self._notify_pending_futures(AioComfoConnectNotConnected("Disconnected"))
 

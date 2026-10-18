@@ -1031,6 +1031,21 @@ class TestConnectionLifecycle:
         assert unretrieved == []
 
     @pytest.mark.asyncio
+    async def test_cancelled_disconnect(self, fake_bridge):
+        """A disconnect() that is cancelled while it waits for the read loop raises CancelledError."""
+        bridge = Bridge("127.0.0.1", LOCAL_UUID)
+        await bridge.connect(LOCAL_UUID)
+
+        disconnect_task = asyncio.create_task(bridge.disconnect())
+        await asyncio.sleep(0)
+        disconnect_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await disconnect_task
+
+        await bridge.disconnect()
+        assert not bridge.is_connected()
+
+    @pytest.mark.asyncio
     async def test_disconnect_when_closing_fails(self, bridge_with_writer):
         """disconnect() still clears its state when waiting for the connection to close raises."""
         bridge = bridge_with_writer
