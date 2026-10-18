@@ -40,6 +40,14 @@ class GatewayType:
     PRO = 2  # ComfoConnect Pro
 
 
+class ConnectionState:
+    """The state of the session with the bridge, as reported to the connection state callback."""
+
+    CONNECTED = "connected"  # The session is up and the sensors are subscribed.
+    DISCONNECTED = "disconnected"  # There is no session. After a lost connection, the client is reconnecting.
+    NOT_ALLOWED = "not_allowed"  # The bridge refused the session (the app isn't registered), so the client stopped reconnecting.
+
+
 class PdoType:
     """Defines a PDO type."""
 

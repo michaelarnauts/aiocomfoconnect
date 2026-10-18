@@ -6,7 +6,7 @@ import socket
 import pytest
 
 from aiocomfoconnect.bridge import Bridge
-from aiocomfoconnect.const import ERRORS, ProductId
+from aiocomfoconnect.const import ERRORS, ConnectionState, ProductId
 from aiocomfoconnect.exceptions import (
     AioComfoConnectNotConnected,
     AioComfoConnectNotReachable,
@@ -327,6 +327,73 @@ class TestReconnect:
         assert set(client._sensors) == {276, 277}
         assert client.is_connected()
         assert fake_bridge.connections == 2
+
+
+class TestConnectionState:
+    """Reporting the state of the session to the connection state callback."""
+
+    async def test_connection_state(self, fake_bridge, make_client):
+        """The callback hears when the session is up, when it is lost and when it is back, and after disconnect()."""
+        states = []
+        client = make_client(connection_state_callback=states.append)
+        assert client.connection_state == ConnectionState.DISCONNECTED
+
+        await client.connect(LOCAL_UUID)
+        assert states == [ConnectionState.CONNECTED]
+        assert client.connection_state == ConnectionState.CONNECTED
+
+        fake_bridge.drop()
+        await fake_bridge.wait_for(lambda: len(states) == 3)
+        assert states == [ConnectionState.CONNECTED, ConnectionState.DISCONNECTED, ConnectionState.CONNECTED]
+        assert client.is_connected()
+
+        await client.disconnect()
+        assert states[-1] == ConnectionState.DISCONNECTED
+        assert client.connection_state == ConnectionState.DISCONNECTED
+
+    async def test_not_allowed(self, fake_bridge, make_client):
+        """When the bridge doesn't allow the session anymore, the client reports it and stops reconnecting."""
+        states = []
+        client = make_client(connection_state_callback=states.append)
+        await client.connect(LOCAL_UUID)
+
+        fake_bridge.session_result = GO.NOT_ALLOWED
+        fake_bridge.drop()
+        await fake_bridge.wait_for(lambda: len(states) == 3)
+        assert states == [ConnectionState.CONNECTED, ConnectionState.DISCONNECTED, ConnectionState.NOT_ALLOWED]
+        assert client.connection_state == ConnectionState.NOT_ALLOWED
+
+        await asyncio.sleep(0.05)
+        assert fake_bridge.connections == 2
+        assert not client.is_connected()
+
+    async def test_failed_connect(self, fake_bridge, make_client):
+        """A connect() that fails raises its error, and doesn't call the callback."""
+        fake_bridge.session_result = GO.NOT_ALLOWED
+        states = []
+        client = make_client(connection_state_callback=states.append)
+
+        with pytest.raises(ComfoConnectNotAllowed):
+            await client.connect(LOCAL_UUID)
+
+        assert states == []
+        assert client.connection_state == ConnectionState.DISCONNECTED
+
+    async def test_callback_error(self, fake_bridge, make_client, caplog):
+        """A callback that raises is logged, and doesn't stop connect() or the reconnect loop."""
+
+        def callback(state):
+            raise RuntimeError(f"boom {state}")
+
+        client = make_client(connection_state_callback=callback)
+        await client.connect(LOCAL_UUID)
+
+        fake_bridge.drop()
+        await fake_bridge.wait_for(lambda: fake_bridge.received(GO.CnNodeRequestType, 2))
+        await fake_bridge.wait_for(client.is_connected)
+        await roundtrip(client)
+        assert client.connection_state == ConnectionState.CONNECTED
+        assert "boom disconnected" in caplog.text
 
 
 class TestSensors:
