@@ -89,8 +89,6 @@ class TestArguments:
             ["get-property", "1", "1", "8"],
             ["set-property", "1", "1", "8", "3", "1"],
             ["list-nodes"],
-            ["get-flow-for-speed", "low"],
-            ["set-flow-for-speed", "low", "100"],
         ],
     )
     def test_bridge_commands_accept_host_and_uuid(self, argv):

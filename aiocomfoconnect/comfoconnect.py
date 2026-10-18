@@ -16,7 +16,6 @@ from aiocomfoconnect.const import (
     NUMERIC_PROPERTY_TYPES,
     UNIT_ERROR,
     UNIT_SCHEDULE,
-    UNIT_VENTILATIONCONFIG,
     ComfoCoolMode,
     ConnectionState,
     PdoType,
@@ -64,14 +63,6 @@ RECONNECT_SESSION_CLOSED_DELAY = 60
 SPEEDS = (VentilationSpeed.AWAY, VentilationSpeed.LOW, VentilationSpeed.MEDIUM, VentilationSpeed.HIGH)
 BYPASS_MODES = (VentilationSetting.AUTO, VentilationSetting.ON, VentilationSetting.OFF)
 TEMPERATURE_PROFILES = (VentilationTemperatureProfile.NORMAL, VentilationTemperatureProfile.COOL, VentilationTemperatureProfile.WARM)
-
-# The properties with the airflow in m³/h of each speed.
-FLOW_FOR_SPEED = {
-    VentilationSpeed.AWAY: Property(UNIT_VENTILATIONCONFIG, 0x01, 0x03, PdoType.TYPE_CN_INT16),
-    VentilationSpeed.LOW: Property(UNIT_VENTILATIONCONFIG, 0x01, 0x04, PdoType.TYPE_CN_INT16),
-    VentilationSpeed.MEDIUM: Property(UNIT_VENTILATIONCONFIG, 0x01, 0x05, PdoType.TYPE_CN_INT16),
-    VentilationSpeed.HIGH: Property(UNIT_VENTILATIONCONFIG, 0x01, 0x06, PdoType.TYPE_CN_INT16),
-}
 
 
 @dataclass
@@ -496,20 +487,6 @@ class ComfoConnect(Bridge):
 
         # A duration of 1 lets the unit pick its default, like the official app: until cancelled in manual mode, 2 hours in auto mode.
         await self.set_timer(SCHEDULE_PRESET, TIMER_DEFAULT, SPEEDS.index(speed), duration=1)
-
-    async def get_flow_for_speed(self, speed: Literal["away", "low", "medium", "high"]) -> int:
-        """Get the targeted airflow in m³/h for the given VentilationSpeed (away / low / medium / high)."""
-        if speed not in FLOW_FOR_SPEED:
-            raise ValueError(f"Invalid speed: {speed}")
-
-        return await self.get_property(FLOW_FOR_SPEED[speed])
-
-    async def set_flow_for_speed(self, speed: Literal["away", "low", "medium", "high"], desired_flow: int):
-        """Set the targeted airflow in m³/h for the given VentilationSpeed (away / low / medium / high)."""
-        if speed not in FLOW_FOR_SPEED:
-            raise ValueError(f"Invalid speed: {speed}")
-
-        await self.set_property(FLOW_FOR_SPEED[speed], desired_flow)
 
     async def get_bypass(self):
         """Get the bypass mode (auto / on / off)."""

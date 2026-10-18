@@ -19,6 +19,10 @@ from aiocomfoconnect.properties import (
     PROPERTY_CLIME_HEATPUMP_STANDBY,
     PROPERTY_CLIME_SEASON,
     PROPERTY_CLIME_TEMPERATURE_PROFILE,
+    PROPERTY_FLOW_AWAY,
+    PROPERTY_FLOW_HIGH,
+    PROPERTY_FLOW_LOW,
+    PROPERTY_FLOW_MEDIUM,
     PROPERTY_RMOT_HEATING_THRESHOLD,
     PROPERTY_SENSOR_VENTILATION_HUMIDITY_COMFORT,
     PROPERTY_SENSOR_VENTILATION_HUMIDITY_PROTECTION,
@@ -130,17 +134,6 @@ class TestComfoConnect:
         comfoconnect._alarm_callback(10, alarm)
 
         mock_callback.assert_called_once_with(10, {21: "Unknown error 21"})
-
-    @pytest.mark.asyncio
-    async def test_flow_for_speed_rejects_invalid_speed(self, comfoconnect):
-        """Test that an invalid speed raises a ValueError instead of an UnboundLocalError."""
-        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock()) as mock_rmi:
-            with pytest.raises(ValueError):
-                await comfoconnect.get_flow_for_speed("turbo")
-            with pytest.raises(ValueError):
-                await comfoconnect.set_flow_for_speed("turbo", 100)
-
-            mock_rmi.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_set_comfocool_mode_rejects_invalid_mode(self, comfoconnect):
@@ -470,14 +463,14 @@ class TestComfoConnect:
         ("set_property", (PROPERTY_SENSOR_VENTILATION_HUMIDITY_PROTECTION, "on"), ["03 1d 01 07 02"]),
         ("set_property", (PROPERTY_SENSOR_VENTILATION_HUMIDITY_PROTECTION, "off"), ["03 1d 01 07 00"]),
         ("clear_errors", (), ["82 03 01"]),
-        ("get_flow_for_speed", ("away",), ["01 1e 01 10 03"]),
-        ("get_flow_for_speed", ("low",), ["01 1e 01 10 04"]),
-        ("get_flow_for_speed", ("medium",), ["01 1e 01 10 05"]),
-        ("get_flow_for_speed", ("high",), ["01 1e 01 10 06"]),
-        ("set_flow_for_speed", ("away", 0), ["03 1e 01 03 0000"]),
-        ("set_flow_for_speed", ("low", 100), ["03 1e 01 04 6400"]),
-        ("set_flow_for_speed", ("medium", 200), ["03 1e 01 05 c800"]),
-        ("set_flow_for_speed", ("high", 300), ["03 1e 01 06 2c01"]),
+        ("get_property", (PROPERTY_FLOW_AWAY,), ["01 1e 01 10 03"]),
+        ("get_property", (PROPERTY_FLOW_LOW,), ["01 1e 01 10 04"]),
+        ("get_property", (PROPERTY_FLOW_MEDIUM,), ["01 1e 01 10 05"]),
+        ("get_property", (PROPERTY_FLOW_HIGH,), ["01 1e 01 10 06"]),
+        ("set_property", (PROPERTY_FLOW_AWAY, 0), ["03 1e 01 03 0000"]),
+        ("set_property", (PROPERTY_FLOW_LOW, 100), ["03 1e 01 04 6400"]),
+        ("set_property", (PROPERTY_FLOW_MEDIUM, 200), ["03 1e 01 05 c800"]),
+        ("set_property", (PROPERTY_FLOW_HIGH, 300), ["03 1e 01 06 2c01"]),
         ("get_property", (PROPERTY_TEMPERATURE_PROFILE_MODE,), ["01 1d 01 10 08"]),
         ("set_property", (PROPERTY_TEMPERATURE_PROFILE_MODE, "fixed"), ["03 1d 01 08 01"]),
         ("set_property", (PROPERTY_RMOT_HEATING_THRESHOLD, -15), ["03 1d 01 02 f1ff"]),
