@@ -24,45 +24,48 @@ decoded them as `-1`. Signed PDO types still preserve negative values.
 
 # Overview of known sensors
 
+Most pdids from 33 to 90 and from 321 to 346 belong to a schedule; see [Schedule PDOs](#schedule-pdos).
+Entries marked † have a meaning derived from that pattern and the official app, but are not yet verified on a unit.
+
 | pdid | type      | description                                      | examples                                                                                                         |
 |------|-----------|--------------------------------------------------|------------------------------------------------------------------------------------------------------------------|
 | 16   | CN_UINT8  | Device state                                     | 0=init, 1=normal, 2=filterwizard, 3=commissioning, 4=supplierfactory, 5=zehnderfactory, 6=standby, 7=away, 8=DFC |
 | 17   | CN_UINT8  | ?? ROOM_T10                                      |                                                                                                                  |
 | 18   | CN_UINT8  | Changing filters                                 | 1=active, 2=changing filter                                                                                      |
-| 33   | CN_UINT8  | ?? Preset                                        | 0, 1                                                                                                             |
-| 35   | CN_UINT8  | ?? Temperature Profile                           | 1                                                                                                                |
-| 36   | CN_UINT8  | ?? STANDBY                                       |                                                                                                                  |
-| 37   | CN_UINT8  |                                                  | 0                                                                                                                |
-| 40   | CN_UINT8  | ?? MANUALMODE                                    |                                                                                                                  |
-| 42   | CN_UINT8  |                                                  | 0                                                                                                                |
-| 49   | CN_UINT8  | Operating mode                                   | 255=auto, 1=limited manual, 5=unlimited manual, 6=boost, 11=away                                                  |
-| 50   | CN_UINT8  | ?? Bypass                                        |                                                                                                                  |
-| 51   | CN_UINT8  | ?? Temperature Profile                           |                                                                                                                  |
-| 52   | CN_UINT8  | ?? STANDBY                                       |                                                                                                                  |
-| 53   | CN_UINT8  | ?? COMFOCOOLOFF                                  | 255, 0, 1                                                                                                         |
-| 54   | CN_UINT8  | Supply Fan Mode                                  | 255=balanced, 1=supply only                                                                                       |
-| 55   | CN_UINT8  | Exhaust Fan Mode                                 | 255=balanced, 1=exhaust only                                                                                      |
-| 56   | CN_UINT8  | Manual Mode                                      | 255=auto, 1=unlimited manual                                                                                      |
-| 57   | CN_UINT8  |                                                  | 255, 0                                                                                                            |
-| 58   | CN_UINT8  |                                                  | 255, 0                                                                                                            |
-| 65   | CN_UINT8  | Fans: Fan speed setting                          | 0=away, 1=low, 2=medium, 3=high                                                                                  |
-| 66   | CN_UINT8  | Bypass activation mode                           | 0=auto, 1=full, 2=none                                                                                           |
-| 67   | CN_UINT8  | Temperature Profile                              | 0=normal, 1=cold, 2=warm                                                                                         |
-| 68   | CN_UINT8  | ?? STANDBY                                       | 0                                                                                                                |
-| 69   |           | ?? COMFOCOOLOFF                                  | 0=auto, 1=off                                                                                                    |
-| 70   | CN_UINT8  | Supply Fan Mode                                  | 0=balanced, 1=supply only                                                                                        |
-| 71   | CN_UINT8  | Exhaust Fan Mode                                 | 0=balanced, 1=exhaust only                                                                                       |
-| 72   | CN_UINT8  | ?? MANUALMODE                                    |                                                                                                                  |
-| 73   | CN_UINT8  |                                                  | 0                                                                                                                |
-| 74   | CN_UINT8  |                                                  | 0                                                                                                                |
-| 81   | CN_UINT32 | Fan Speed Next Change                            | 4294967295=no change, else countdown in seconds                                                                          |
-| 82   | CN_UINT32 | Bypass Next Change                               | 4294967295=no change, else countdown in seconds                                                                          |
-| 85   | CN_UINT32 | ComfoCool Next Change                            | 4294967295=no change, else countdown in seconds                                                                          |
-| 86   | CN_UINT32 | Supply Fan Next Change                           | 4294967295=no change, else countdown in seconds                                                                          |
-| 87   | CN_UINT32 | Exhaust Fan Next Change                          | 4294967295=no change, else countdown in seconds                                                                          |
-| 88   | CN_UINT32 | ?? MANUALMODE                                    |                                                                                                                  |
-| 89   | CN_UINT32 |                                                  | 4294967295, 0                                                                                                            |
-| 90   | CN_UINT32 |                                                  | 4294967295, 0                                                                                                            |
+| 33   | CN_UINT8  | Preset: active schedule entry †                  | 0, 1                                                                                                             |
+| 35   | CN_UINT8  | Temperature profile: active schedule entry †     | 1                                                                                                                |
+| 36   | CN_UINT8  | Standby: active schedule entry †                 |                                                                                                                  |
+| 37   | CN_UINT8  | ComfoCool off: active schedule entry †           | 0                                                                                                                |
+| 40   | CN_UINT8  | Manual mode: active schedule entry †             |                                                                                                                  |
+| 42   | CN_UINT8  | Postheater: active schedule entry †              | 0                                                                                                                |
+| 49   | CN_UINT8  | Operating mode (preset: active timer)            | 255=auto, 1=limited manual, 5=unlimited manual, 6=boost, 11=away (the `SCHEDULE_PRESET` timer ids)                |
+| 50   | CN_UINT8  | Bypass: active timer †                           | 255=none, 1=timer                                                                                                |
+| 51   | CN_UINT8  | Temperature profile: active timer †              | 255=none, 1=timer                                                                                                |
+| 52   | CN_UINT8  | Standby: active timer †                          | 255=none, 1=timer                                                                                                |
+| 53   | CN_UINT8  | ComfoCool off: active timer †                    | 255=none, 1=timer (0 also seen)                                                                                   |
+| 54   | CN_UINT8  | Supply Fan Mode (exhaust fan off: active timer)  | 255=balanced, 1=supply only                                                                                       |
+| 55   | CN_UINT8  | Exhaust Fan Mode (supply fan off: active timer)  | 255=balanced, 1=exhaust only                                                                                      |
+| 56   | CN_UINT8  | Manual Mode (manual mode: active timer)          | 255=auto, 1=unlimited manual                                                                                      |
+| 57   | CN_UINT8  | Hood: active timer †                             | 255=none, 1=timer, 2=switch timer (0 also seen)                                                                   |
+| 58   | CN_UINT8  | Postheater: active timer †                       | 255=none, 1=timer (0 also seen)                                                                                   |
+| 65   | CN_UINT8  | Fans: Fan speed setting (preset: value)          | 0=away, 1=low, 2=medium, 3=high                                                                                  |
+| 66   | CN_UINT8  | Bypass activation mode (bypass: value)           | 0=auto, 1=full, 2=none                                                                                           |
+| 67   | CN_UINT8  | Temperature Profile (temperature profile: value) | 0=normal, 1=cold, 2=warm                                                                                         |
+| 68   | CN_UINT8  | Standby: value †                                 | 0=off, 1=on                                                                                                      |
+| 69   | CN_UINT8  | ComfoCool off: value †                           | 0=auto, 1=off                                                                                                    |
+| 70   | CN_UINT8  | Supply Fan Mode (exhaust fan off: value)         | 0=balanced, 1=supply only                                                                                        |
+| 71   | CN_UINT8  | Exhaust Fan Mode (supply fan off: value)         | 0=balanced, 1=exhaust only                                                                                       |
+| 72   | CN_UINT8  | Manual mode: value †                             | 0=off, 1=on                                                                                                      |
+| 73   | CN_UINT8  | Hood: value †                                    | 0=off, 1=on                                                                                                      |
+| 74   | CN_UINT8  | Postheater: value †                              | 0=off, 1=heat, 2=comfort                                                                                         |
+| 81   | CN_UINT32 | Fan Speed Next Change (preset: remaining)        | 4294967295=no change, else countdown in seconds                                                                          |
+| 82   | CN_UINT32 | Bypass Next Change (bypass: remaining)           | 4294967295=no change, else countdown in seconds                                                                          |
+| 85   | CN_UINT32 | ComfoCool Next Change (ComfoCool off: remaining) † | 4294967295=no change, else countdown in seconds                                                                          |
+| 86   | CN_UINT32 | Supply Fan Next Change (exhaust fan off: remaining) | 4294967295=no change, else countdown in seconds                                                                          |
+| 87   | CN_UINT32 | Exhaust Fan Next Change (supply fan off: remaining) | 4294967295=no change, else countdown in seconds                                                                          |
+| 88   | CN_UINT32 | Manual mode: remaining †                         | 4294967295=no end, else countdown in seconds                                                                     |
+| 89   | CN_UINT32 | Hood: remaining †                                | 4294967295=no end, else countdown in seconds                                                                             |
+| 90   | CN_UINT32 | Postheater: remaining †                          | 4294967295=no end, else countdown in seconds                                                                             |
 | 96   | CN_BOOL   |                                                  |                                                                                                                  |
 | 115  | CN_BOOL   | ?? EXHAUST_F12                                   |                                                                                                                  |
 | 116  | CN_BOOL   | ?? SUPPLY_F22                                    |                                                                                                                  |
@@ -113,18 +116,18 @@ decoded them as `-1`. Signed PDO types still preserve negative values.
 | 292  | CN_UINT8  | Humidity: Outdoor Air                            | value in % (67%)                                                                                                 |
 | 293  | CN_UINT8  | Humidity: Preheated Outdoor Air                  | value in % (67%)                                                                                                 |
 | 294  | CN_UINT8  | Humidity: Supply Air                             | value in % (35%)                                                                                                 |
-| 321  | CN_UINT16 |                                                  | 3                                                                                                                |
-| 325  | CN_UINT16 | ?? COMFOCOOLOFF                                  | 0, 1, 3                                                                                                          |
-| 328  | CN_UINT16 | ?? MANUALMODE                                    |                                                                                                                  |
-| 330  | CN_UINT16 |                                                  | 0, 1                                                                                                             |
-| 337  | CN_UINT32 | ?? PRESET                                        | 0, 2, 32, 34                                                                                                     |
-| 338  | CN_UINT32 | Bypass Override                                  | 0=auto, 2=overriden                                                                                              |
-| 341  | CN_UINT32 | ?? COMFOCOOLOFF                                  | 00000000, 02000000                                                                                               |
-| 342  | CN_UINT32 | Supply Fan Mode                                  | 0 = balanced, 2 = supply only                                                                                    |
-| 343  | CN_UINT32 | Exhaust Fan Mode                                 | 0 = balanced, 2 = exhaust only                                                                                   |
-| 344  | CN_UINT32 | ?? MANUAL MODE                                   |                                                                                                                  |
-| 345  | CN_UINT32 |                                                  | 0                                                                                                                |
-| 346  | CN_UINT32 |                                                  | 0                                                                                                                |
+| 321  | CN_UINT16 | Preset: enabled schedule entries (bit set) †     | 3 (bits 0 and 1)                                                                                                |
+| 325  | CN_UINT16 | ComfoCool off: enabled schedule entries (bit set) † | 0, 1, 3                                                                                                          |
+| 328  | CN_UINT16 | Manual mode: enabled schedule entries (bit set) † |                                                                                                                  |
+| 330  | CN_UINT16 | Postheater: enabled schedule entries (bit set) † | 0, 1                                                                                                             |
+| 337  | CN_UINT32 | Preset: running timers (bit set) †               | 0, 2 (timer 1), 32 (timer 5), 34 (timers 1 and 5)                                                                |
+| 338  | CN_UINT32 | Bypass Override (bypass: running timers)         | 0=auto, 2=overriden (timer 1)                                                                                    |
+| 341  | CN_UINT32 | ComfoCool off: running timers (bit set) †        | 0, 2 (timer 1)                                                                                                   |
+| 342  | CN_UINT32 | Supply Fan Mode (exhaust fan off: running timers) | 0 = balanced, 2 = supply only (timer 1)                                                                          |
+| 343  | CN_UINT32 | Exhaust Fan Mode (supply fan off: running timers) | 0 = balanced, 2 = exhaust only (timer 1)                                                                         |
+| 344  | CN_UINT32 | Manual mode: running timers (bit set) †          |                                                                                                                  |
+| 345  | CN_UINT32 | Hood: running timers (bit set) †                 | 0                                                                                                                |
+| 346  | CN_UINT32 | Postheater: running timers (bit set) †           | 0                                                                                                                |
 | 369  | CN_UINT8  | Analog Input 0-10V 1                             | 0                                                                                                                |
 | 370  | CN_UINT8  | Analog Input 0-10V 2                             | 0                                                                                                                |
 | 371  | CN_UINT8  | Analog Input 0-10V 3                             | 0                                                                                                                |
@@ -184,6 +187,62 @@ decoded them as `-1`. Signed PDO types still preserve negative values.
 | 1302 | CN_BOOL   |                                                  |                                                                                                                  |
 | 1303 | CN_BOOL   |                                                  |                                                                                                                  |
 | 1304 | CN_BOOL   |                                                  |                                                                                                                  |
+
+# Schedule PDOs
+
+The ventilation unit has a SCHEDULE unit with one instance per setting that can be overridden (see
+[Known schedules](PROTOCOL-RMI.md#known-schedules) in the RMI documentation). Each instance can be driven by a
+week schedule of entries and by timers, and the unit reports the state of every instance in the same six PDOs:
+
+`pdid = base + schedule instance`
+
+| base | type      | meaning                                                                                                    |
+|------|-----------|------------------------------------------------------------------------------------------------------------|
+| 32   | CN_UINT8  | Active schedule entry: the id of the week schedule entry that is active now.                               |
+| 48   | CN_UINT8  | Active timer: the id of the timer that is active now, `255` when no timer is active.                       |
+| 64   | CN_UINT8  | Active value: the value the instance has now, with the same values as the timer value in the RMI command.  |
+| 80   | CN_UINT32 | Remaining: the seconds left on the active timer, `4294967295` when it has no end or no timer is active.    |
+| 320  | CN_UINT16 | Enabled schedule entries: a bit set, bit `n` is set when schedule entry `n` is enabled.                    |
+| 336  | CN_UINT32 | Running timers: a bit set, bit `n` is set when timer `n` is running (so `2` is timer 1).                   |
+
+| instance | constant                       | setting                               | 32 | 48 | 64 | 80 | 320 | 336 |
+|----------|--------------------------------|---------------------------------------|----|----|----|----|-----|-----|
+| 1        | `SCHEDULE_PRESET`              | Preset: fan speed, boost and away     | 33 | 49 | 65 | 81 | 321 | 337 |
+| 2        | `SCHEDULE_BYPASS`              | Bypass                                | 34 | 50 | 66 | 82 | 322 | 338 |
+| 3        | `SCHEDULE_TEMPERATURE_PROFILE` | Temperature profile (comfort profile) | 35 | 51 | 67 | 83 | 323 | 339 |
+| 4        |                                | Standby                               | 36 | 52 | 68 | 84 | 324 | 340 |
+| 5        | `SCHEDULE_COMFOCOOL`           | ComfoCool off                         | 37 | 53 | 69 | 85 | 325 | 341 |
+| 6        | `SCHEDULE_SUPPLY_ONLY`         | Exhaust fan off, so supply only       | 38 | 54 | 70 | 86 | 326 | 342 |
+| 7        | `SCHEDULE_EXHAUST_ONLY`        | Supply fan off, so exhaust only       | 39 | 55 | 71 | 87 | 327 | 343 |
+| 8        | `SCHEDULE_MANUAL_MODE`         | Manual mode                           | 40 | 56 | 72 | 88 | 328 | 344 |
+| 9        |                                | Hood (cooker hood mode)               | 41 | 57 | 73 | 89 | 329 | 345 |
+| 10       |                                | Postheater                            | 42 | 58 | 74 | 90 | 330 | 346 |
+
+The timer ids are the ones from the RMI table: `TIMER_DEFAULT` (`1`) for every instance, and for the preset
+instance also `5` (manual mode), `TIMER_BOOST` (`6`) and `TIMER_AWAY` (`11`). That is why PDO 49 reads `6` during
+boost and `11` while away, and why PDO 81 then holds the time left of that boost or away timer. The hood also has a
+switch timer (`2`).
+
+The values of the active value PDOs (base 64):
+
+| instance            | values                               |
+|---------------------|--------------------------------------|
+| Preset              | 0=away, 1=low, 2=medium, 3=high      |
+| Bypass              | 0=auto, 1=full, 2=none               |
+| Temperature profile | 0=normal, 1=cool, 2=warm             |
+| Standby             | 0=off, 1=on †                        |
+| ComfoCool off       | 0=auto, 1=off                        |
+| Exhaust fan off     | 0=fan runs, 1=fan off (supply only)  |
+| Supply fan off      | 0=fan runs, 1=fan off (exhaust only) |
+| Manual mode         | 0=off, 1=on †                        |
+| Hood                | 0=off, 1=on †                        |
+| Postheater          | 0=off, 1=heat, 2=comfort †           |
+
+How certain this is: the pattern and the types come from the official app. The meanings of the pdids that the
+library has as sensors (49, 54, 55, 56, 65, 66, 67, 70, 71, 81, 82, 86, 87, 338, 342 and 343) match what was seen
+on a unit. The others are marked † in the overview: they are derived from the pattern and the app, and are not yet
+verified on a unit. The pdids 34, 38, 39, 41, 83, 84, 322-324, 326, 327, 329, 339 and 340 follow from the pattern,
+but have not been seen yet and are not in the overview.
 
 # ComfoClime sensors
 
