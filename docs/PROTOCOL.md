@@ -82,6 +82,9 @@ will start with the `length` of the message, excluding this `length`-field itsel
 
 Note that only `op` and `msg` is valid Protocol Buffers data. The other fields should not be parsed.
 
+A † marks information that comes from the official ComfoControl app, but that has not been checked against a
+bridge.
+
 ### Header
 
 The header then consist of a `src`, `dst` and `op_length`, followed by the `op` and the `msg`. The `src` seems to be
@@ -97,14 +100,32 @@ indicates the length of the `op` field, the rest of the data contains the `msg`.
 | op (variable length)  | `0x08342002`                         | Message with type `GatewayOperation`                  |
 | msg (variable length) | `...`                                | Message with type that is stated in `op.type`         |
 
+### Result codes
+
+Every confirm carries a `result` in the `GatewayOperation`. These are the values from the protobuf definition:
+
+| result | name           | meaning                                                                                  |
+|--------|----------------|------------------------------------------------------------------------------------------|
+| 0      | OK             | The request was successful                                                               |
+| 1      | BAD_REQUEST    | Something was wrong with the request                                                     |
+| 2      | INTERNAL_ERROR | The request was ok, but handling it failed                                               |
+| 3      | NOT_REACHABLE  | The backend cannot route the request                                                     |
+| 4      | OTHER_SESSION  | The bridge already has a session with another client                                     |
+| 5      | NOT_ALLOWED    | The request is not allowed (like a RegisterApp with a wrong PIN)                         |
+| 6      | NO_RESOURCES   | Not enough resources, e.g. memory, to complete the request                               |
+| 7      | NOT_EXIST      | The ComfoNet node or property does not exist                                             |
+| 8      | RMI_ERROR      | The RMI failed; `CnRmiResponse.result` holds the RMI error code                          |
+
+The official app treats a `NOT_ALLOWED` on any request during a session as "the session was closed by the bridge", and
+a `NOT_REACHABLE` that is not a reply to one of its requests as a lost connection †.
+
 ### Commands
 
 A message consists of a command block (`GatewayOperation`) and a message block (variable type). The command block
 contains a `type` and `reference` field. The `type` field indicates the type of the message block. The `reference` field
 will contain a incremental number that can be used to link a request with a reply.
 
-This is a list of the commands. A † marks information that comes from the official ComfoControl app, but that has not
-been checked against a bridge.
+This is a list of the commands.
 
 | Request                       | Confirm                       | Notification / Response | Description                                        |
 |-------------------------------|-------------------------------|-------------------------|----------------------------------------------------|
@@ -146,29 +167,6 @@ been checked against a bridge.
 | WiFiSettingsRequestType       | WiFiSettingsConfirmType       |                         | WiFi settings of a bridge with WiFi                |
 | WiFiNetworksRequestType       | WiFiNetworksConfirmType       |                         | The WiFi networks the bridge sees                  |
 | WiFiJoinNetworkRequestType    | WiFiJoinNetworkConfirmType    |                         | Join a WiFi network                                |
-
-Every confirm carries a `result` in the `GatewayOperation`. These are the values from the protobuf definition:
-
-| result | name           | meaning                                                                                  |
-|--------|----------------|------------------------------------------------------------------------------------------|
-| 0      | OK             | The request was successful                                                               |
-| 1      | BAD_REQUEST    | Something was wrong with the request                                                     |
-| 2      | INTERNAL_ERROR | The request was ok, but handling it failed                                               |
-| 3      | NOT_REACHABLE  | The backend cannot route the request                                                     |
-| 4      | OTHER_SESSION  | The bridge already has a session with another client                                     |
-| 5      | NOT_ALLOWED    | The request is not allowed (like a RegisterApp with a wrong PIN)                         |
-| 6      | NO_RESOURCES   | Not enough resources, e.g. memory, to complete the request                               |
-| 7      | NOT_EXIST      | The ComfoNet node or property does not exist                                             |
-| 8      | RMI_ERROR      | The RMI failed; `CnRmiResponse.result` holds the RMI error code                          |
-
-The official app treats a `NOT_ALLOWED` on any request during a session as "the session was closed by the bridge", and
-a `NOT_REACHABLE` that is not a reply to one of its requests as a lost connection †.
-
-#### Keeping the connection alive
-
-The official app never sends a `KeepAlive`. Instead, when it has sent nothing for 5 seconds and has no request
-waiting for a reply, it sends a `CnTimeRequest`. When it has received nothing at all for 10 seconds, it considers the
-connection lost and closes it †.
 
 #### RegisterApp (`RegisterAppRequestType` and `RegisterAppConfirmType`)
 
@@ -374,6 +372,17 @@ of the `CnRmiResponse` (see [Error codes](PROTOCOL-RMI.md#error-codes)). The off
 when the first one failed or got no answer, also after an `RMI_ERROR` †.
 
 For an overview about the known RMI Requests, check [PROTOCOL-RMI.md](PROTOCOL-RMI.md)
+
+### Keeping the connection alive
+
+The official app never sends a `KeepAlive`. Instead, when it has sent nothing for 5 seconds and has no request
+waiting for a reply, it sends a `CnTimeRequest`. When it has received nothing at all for 10 seconds, it considers the
+connection lost and closes it †.
+
+aiocomfoconnect uses a heartbeat: when it has received nothing for 30 seconds, it sends a `CnTimeRequest`, and
+when that isn't answered it closes the connection and reconnects. On an established session, it also closes the
+connection and starts a new session when a request is answered with `NOT_ALLOWED` or `OTHER_SESSION`, because the bridge
+then dropped the session without closing the connection.
 
 # ComfoControl CAN/RMI Protocol
 
