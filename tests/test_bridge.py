@@ -391,41 +391,6 @@ class TestBridge:
             await bridge._read_messages()
 
     @pytest.mark.asyncio
-    async def test_read_messages_disconnected(self, bridge):
-        """Test that _read_messages handles disconnection correctly."""
-        with patch.object(bridge, "_process_message", side_effect=AioComfoConnectNotConnected("Test disconnect")):
-            with pytest.raises(AioComfoConnectNotConnected):
-                await bridge._read_messages()
-
-    @pytest.mark.asyncio
-    async def test_process_message_incomplete_read(self, bridge):
-        """Test processing message when connection is closed during read."""
-        mock_reader = AsyncMock()
-        mock_reader.readexactly.side_effect = asyncio.IncompleteReadError(b"", 4)
-        mock_writer = MagicMock()
-        mock_writer.is_closing.return_value = False
-
-        bridge._reader = mock_reader
-        bridge._writer = mock_writer
-
-        with pytest.raises(AioComfoConnectNotConnected, match="connection was closed"):
-            await bridge._process_message()
-
-    @pytest.mark.asyncio
-    async def test_process_message_connection_error(self, bridge):
-        """Test processing message when there's a connection error."""
-        mock_reader = AsyncMock()
-        mock_reader.readexactly.side_effect = ConnectionError("Network error")
-        mock_writer = MagicMock()
-        mock_writer.is_closing.return_value = False
-
-        bridge._reader = mock_reader
-        bridge._writer = mock_writer
-
-        with pytest.raises(AioComfoConnectNotConnected, match="Connection error"):
-            await bridge._process_message()
-
-    @pytest.mark.asyncio
     async def test_callbacks(self, bridge):
         """Test that callbacks can be set."""
         sensor_callback = Mock()
@@ -621,8 +586,7 @@ class TestBridgeNodeDiscovery:
         msg.zoneId = 1
         msg.mode = zehnder_pb2.CnNodeNotification.NODE_NORMAL
 
-        with patch.object(bridge, "_read", AsyncMock(return_value=Message(cmd, msg, LOCAL_UUID, LOCAL_UUID))):
-            await bridge._process_message()
+        await _run_read_loop(bridge, Message(cmd, msg, LOCAL_UUID, LOCAL_UUID).encode())
 
         assert bridge.ventilation_node_id == 45
 
@@ -845,14 +809,16 @@ class TestMessage:
 
 
 class TestResultCodes:
-    """Test how the result code of a reply is turned into an exception."""
+    """Test how the result code of a reply is turned into an exception for the request that waits for it."""
 
     @staticmethod
-    async def read(bridge, frame):
-        """Feed one frame to the bridge and read it."""
-        bridge._reader = asyncio.StreamReader()
-        bridge._reader.feed_data(frame)
-        return await bridge._read()
+    async def reply(frame):
+        """Read a reply to the request with reference 42, and return the future of that request."""
+        bridge = Bridge("192.168.1.100", LOCAL_UUID)
+        future = asyncio.get_running_loop().create_future()
+        bridge._pending[42] = future
+        await _run_read_loop(bridge, frame)
+        return future
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -870,13 +836,12 @@ class TestResultCodes:
     )
     async def test_error_result_raises(self, result, exception):
         """Every error result raises its own exception, with the message attached."""
-        bridge = Bridge("192.168.1.100", LOCAL_UUID)
         cmd = zehnder_pb2.GatewayOperation(type=zehnder_pb2.GatewayOperation.CnRmiResponseType, reference=42)
         cmd.result = zehnder_pb2.GatewayOperation.GatewayResult.Value(result)
-        frame = Message(cmd, zehnder_pb2.CnRmiResponse(), LOCAL_UUID, LOCAL_UUID).encode()
+        future = await self.reply(Message(cmd, zehnder_pb2.CnRmiResponse(), LOCAL_UUID, LOCAL_UUID).encode())
 
         with pytest.raises(exception) as exc_info:
-            await self.read(bridge, frame)
+            future.result()
 
         assert type(exc_info.value) is exception
         assert exc_info.value.message.cmd.reference == 42
@@ -884,17 +849,16 @@ class TestResultCodes:
     @pytest.mark.asyncio
     async def test_ok_result_returns_the_message(self):
         """A reply with the OK result is returned."""
-        bridge = Bridge("192.168.1.100", LOCAL_UUID)
-        message = await self.read(bridge, _frame(zehnder_pb2.GatewayOperation.KeepAliveType))
-        assert message.cmd.type == zehnder_pb2.GatewayOperation.KeepAliveType
+        cmd = zehnder_pb2.GatewayOperation(type=zehnder_pb2.GatewayOperation.CnRmiResponseType, reference=42)
+        future = await self.reply(Message(cmd, zehnder_pb2.CnRmiResponse(message=b"\x01"), LOCAL_UUID, LOCAL_UUID).encode())
+        assert future.result().message == b"\x01"
 
     @pytest.mark.asyncio
     async def test_unknown_result_returns_the_message(self):
         """A result code that isn't in the enum is treated like OK."""
-        bridge = Bridge("192.168.1.100", LOCAL_UUID)
-        # Field 1 (type) with KeepAliveType (101) and field 2 (result) with 99, which isn't in the enum.
-        message = await self.read(bridge, _raw_frame(bytes([0x08, 0x65, 0x10, 0x63])))
-        assert message.cmd.type == zehnder_pb2.GatewayOperation.KeepAliveType
+        # Field 1 (type) with CnRmiResponseType (34), field 2 (result) with 99, which isn't in the enum, and field 4 (reference) with 42.
+        future = await self.reply(_raw_frame(bytes([0x08, 0x22, 0x10, 0x63, 0x20, 0x2A])))
+        assert isinstance(future.result(), zehnder_pb2.CnRmiResponse)
 
 
 def _frame(cmd_type, msg=None):
@@ -915,20 +879,59 @@ def _sensor_frame(pdid, value):
     return _frame(zehnder_pb2.GatewayOperation.CnRpdoNotificationType, zehnder_pb2.CnRpdoNotification(pdid=pdid, data=bytes([value])))
 
 
+async def _run_read_loop(bridge, *frames):
+    """Feed the frames to the bridge and run the read loop until the stream ends."""
+    bridge._reader = asyncio.StreamReader()
+    for frame in frames:
+        bridge._reader.feed_data(frame)
+    bridge._reader.feed_eof()
+
+    # The end of the stream is a transport error, the only way the loop may end.
+    with pytest.raises(AioComfoConnectNotConnected, match="connection was closed"):
+        await bridge._read_messages()
+
+
 class TestReadLoopResilience:
     """Bad messages and failing callbacks must not end the read loop, only transport errors may."""
 
-    @staticmethod
-    async def run_read_loop(bridge, *frames):
-        """Feed the frames to the bridge and run the read loop until the stream ends."""
-        bridge._reader = asyncio.StreamReader()
-        for frame in frames:
-            bridge._reader.feed_data(frame)
-        bridge._reader.feed_eof()
+    @pytest.mark.asyncio
+    async def test_invalid_protobuf_is_skipped(self, caplog):
+        """A packet whose command isn't valid protobuf is skipped with an error log."""
+        bridge = Bridge("192.168.1.100", LOCAL_UUID)
+        received = Mock()
+        bridge.set_sensor_callback(received)
 
-        # The end of the stream is a transport error, the only way the loop may end.
-        with pytest.raises(AioComfoConnectNotConnected, match="connection was closed"):
+        await _run_read_loop(bridge, _raw_frame(b"\xff\xff\xff"), _sensor_frame(276, 42))
+
+        received.assert_called_once_with(276, 42)
+        assert any(r.levelname == "ERROR" and "Failed to decode" in r.getMessage() for r in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_received_message_updates_last_received(self):
+        """Every message we read counts as a sign of life for the heartbeat."""
+        bridge = Bridge("192.168.1.100", LOCAL_UUID)
+        bridge._last_received = 0
+
+        await _run_read_loop(bridge, _sensor_frame(276, 42))
+
+        assert bridge._last_received > 0
+
+    @pytest.mark.asyncio
+    async def test_connection_error_ends_the_loop(self):
+        """A connection error ends the loop, closes the connection and fails the pending requests."""
+        bridge = Bridge("192.168.1.100", LOCAL_UUID)
+        bridge._reader = AsyncMock()
+        bridge._reader.readexactly.side_effect = ConnectionResetError("reset")
+        bridge._writer = MagicMock()
+        pending = asyncio.get_running_loop().create_future()
+        bridge._pending[1] = pending
+
+        with pytest.raises(AioComfoConnectNotConnected, match="Connection error"):
             await bridge._read_messages()
+
+        bridge._writer.close.assert_called_once()
+        with pytest.raises(AioComfoConnectNotConnected, match="Connection error"):
+            pending.result()
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -954,7 +957,7 @@ class TestReadLoopResilience:
             frame = _raw_frame(bytes([0x08, 0xC8, 0x01]))
 
         with caplog.at_level("DEBUG", logger="aiocomfoconnect.bridge"):
-            await self.run_read_loop(bridge, frame, _sensor_frame(276, 42))
+            await _run_read_loop(bridge, frame, _sensor_frame(276, 42))
 
         received.assert_called_once_with(276, 42)
         assert any(r.levelname == "DEBUG" and "unknown type" in r.getMessage() for r in caplog.records)
@@ -968,7 +971,7 @@ class TestReadLoopResilience:
         bridge.set_sensor_callback(received)
 
         short_frame = length.to_bytes(4, byteorder="big") + bytes(length)
-        await self.run_read_loop(bridge, short_frame, _sensor_frame(276, 42))
+        await _run_read_loop(bridge, short_frame, _sensor_frame(276, 42))
 
         received.assert_called_once_with(276, 42)
         assert any(r.levelname == "WARNING" and "shorter than" in r.getMessage() for r in caplog.records)
@@ -980,7 +983,7 @@ class TestReadLoopResilience:
         received = Mock(side_effect=[RuntimeError("boom"), None])
         bridge.set_sensor_callback(received)
 
-        await self.run_read_loop(bridge, _sensor_frame(276, 1), _sensor_frame(276, 2))
+        await _run_read_loop(bridge, _sensor_frame(276, 1), _sensor_frame(276, 2))
 
         assert received.call_args_list == [((276, 1),), ((276, 2),)]
         errors = [r for r in caplog.records if r.levelname == "ERROR" and r.exc_info]
@@ -996,7 +999,7 @@ class TestReadLoopResilience:
         bridge.set_sensor_callback(received)
 
         alarm = _frame(zehnder_pb2.GatewayOperation.CnAlarmNotificationType, zehnder_pb2.CnAlarmNotification(nodeId=1))
-        await self.run_read_loop(bridge, alarm, _sensor_frame(276, 42))
+        await _run_read_loop(bridge, alarm, _sensor_frame(276, 42))
 
         received.assert_called_once_with(276, 42)
         assert any(r.levelname == "ERROR" and isinstance(r.exc_info[1], RuntimeError) for r in caplog.records if r.exc_info)
@@ -1009,7 +1012,7 @@ class TestReadLoopResilience:
         comfoconnect._sensors[276] = create_sensor(sensor_id=276, value_fn=lambda value: 1 / 0)
         comfoconnect._sensors[277] = create_sensor(sensor_id=277)
 
-        await self.run_read_loop(comfoconnect, _sensor_frame(276, 1), _sensor_frame(277, 2))
+        await _run_read_loop(comfoconnect, _sensor_frame(276, 1), _sensor_frame(277, 2))
 
         received.assert_called_once_with(comfoconnect._sensors[277], 2)
         assert any(isinstance(r.exc_info[1], ZeroDivisionError) for r in caplog.records if r.exc_info)
@@ -1186,10 +1189,8 @@ class TestConnectionLifecycle:
         cmd.type = zehnder_pb2.GatewayOperation.CnRmiResponseType
         cmd.reference = 42
         cmd.result = zehnder_pb2.GatewayOperation.NOT_ALLOWED
-        bridge._reader = asyncio.StreamReader()
-        bridge._reader.feed_data(Message(cmd, zehnder_pb2.CnRmiResponse(), LOCAL_UUID, LOCAL_UUID).encode())
 
-        await bridge._process_message()
+        await _run_read_loop(bridge, Message(cmd, zehnder_pb2.CnRmiResponse(), LOCAL_UUID, LOCAL_UUID).encode())
 
         assert any(r.levelname == "WARNING" and "without a matching request" in r.getMessage() for r in caplog.records)
 

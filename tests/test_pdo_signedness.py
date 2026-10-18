@@ -8,10 +8,18 @@ import pytest
 from aiocomfoconnect.bridge import Bridge, Message
 from aiocomfoconnect.comfoconnect import ComfoConnect
 from aiocomfoconnect.const import PdoType
+from aiocomfoconnect.exceptions import AioComfoConnectNotConnected
 from aiocomfoconnect.protobuf import zehnder_pb2
 from aiocomfoconnect.sensors import SENSOR_AVOIDED_HEATING_TOTAL, SENSORS
 
 UUID = "00000000000000000000000000000001"
+
+
+async def read_messages(bridge):
+    """Run the read loop over what was fed to the bridge, until the stream ends."""
+    bridge._reader.feed_eof()
+    with pytest.raises(AioComfoConnectNotConnected):
+        await bridge._read_messages()
 
 
 def feed_notification(bridge, pdid, data):
@@ -53,10 +61,10 @@ async def test_notification_uses_registered_signedness_before_request_ack(pdo_ty
 
     async def send(*_args, **_kwargs):
         # The gateway may start sending data before acknowledging the subscription.
-        await bridge._process_message()
+        await read_messages(bridge)
 
     if pdo_type is None:
-        await bridge._process_message()
+        await read_messages(bridge)
     else:
         with patch.object(bridge, "_send", side_effect=send):
             await bridge.cmd_rpdo_request(215, pdo_type)
@@ -72,5 +80,5 @@ async def test_unsigned_energy_total_reaches_the_library_sensor_callback():
     with patch.object(bridge, "_send", new=AsyncMock()):
         await bridge.register_sensor(sensor)
     feed_notification(bridge, sensor.id, b"\x00\x80")
-    await bridge._process_message()
+    await read_messages(bridge)
     received.assert_called_once_with(sensor, 32768)

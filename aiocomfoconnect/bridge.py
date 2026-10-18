@@ -21,7 +21,6 @@ from .exceptions import (
     AioComfoConnectSessionClosed,
     AioComfoConnectTimeout,
     ComfoConnectBadRequest,
-    ComfoConnectError,
     ComfoConnectInternalError,
     ComfoConnectNoResources,
     ComfoConnectNotAllowed,
@@ -195,20 +194,26 @@ class Bridge:
         _LOGGER.debug("Connected to bridge %s", self.host)
 
     async def _read_messages(self):
-        """Read messages from the bridge until disconnected or cancelled.
+        """Read and handle the messages from the bridge until the connection ends or the task is cancelled.
 
-        However the loop ends, the connection is closed and all pending requests fail, so is_connected() turns False
-        and new requests fail right away.
+        A message that can't be decoded or handled is logged and skipped, see _process_packet. However the loop ends,
+        the connection is closed and all pending requests fail, so is_connected() turns False and new requests fail
+        right away.
         """
         reason = "Disconnected"
         try:
             while True:
-                await self._process_message()
-        except asyncio.CancelledError:
-            _LOGGER.debug("Message reading cancelled")
-            raise
+                try:
+                    length = int.from_bytes(await self._reader.readexactly(4), byteorder="big")
+                    packet = await self._reader.readexactly(length)
+                except asyncio.IncompleteReadError as exc:
+                    raise AioComfoConnectNotConnected("The connection was closed.") from exc
+                except (ConnectionError, OSError) as exc:
+                    raise AioComfoConnectNotConnected(f"Connection error: {exc}") from exc
+                self._last_received = time.monotonic()
+                self._process_packet(packet)
         except AioComfoConnectNotConnected as exc:
-            _LOGGER.info("Disconnected from bridge")
+            _LOGGER.info("Disconnected from bridge: %s", exc)
             reason = str(exc)
             raise
         except Exception as exc:
@@ -219,6 +224,39 @@ class Bridge:
             if self._writer is not None:
                 self._writer.close()
             self._fail_pending(AioComfoConnectNotConnected(reason))
+
+    def _process_packet(self, packet: bytes):
+        """Handle a packet from the bridge.
+
+        Only a CloseSessionRequest raises (AioComfoConnectSessionClosed), to end the read loop. A packet that can't be
+        decoded or handled, or an exception in a callback, is logged and skipped.
+        """
+        try:
+            message = Message.decode(packet)
+        except DecodeError as exc:
+            _LOGGER.error("Failed to decode message: %s", exc)
+            return
+        if message is None:
+            return
+
+        _LOGGER.debug("RX %s", message)
+
+        exception = RESULT_EXCEPTIONS.get(message.cmd.result)
+        if exception is not None:
+            error = exception(message)
+            if not self._resolve(message.cmd.reference, error):
+                _LOGGER.warning("Received an error reply without a matching request (reference %s): %r", message.cmd.reference, error)
+            return
+
+        # pylint: disable=no-member
+        if message.cmd.type == zehnder_pb2.GatewayOperation.CloseSessionRequestType:
+            _LOGGER.info("The Bridge has asked us to close the connection.")
+            raise AioComfoConnectSessionClosed("Bridge requested connection close")
+
+        try:
+            self._dispatch_message(message)
+        except Exception:  # pylint: disable=broad-exception-caught
+            _LOGGER.exception("Error while processing message of type %s", message.cmd.type)
 
     def _process_node_notification(self, msg: ProtobufMessage):
         """Keep track of the nodes that are available on the ComfoNet bus."""
@@ -340,9 +378,6 @@ class Bridge:
         if timeout is None:
             timeout = TIMEOUT
 
-        if not self.is_connected() or self._writer is None or self._reference is None:
-            raise AioComfoConnectNotConnected("Not connected to bridge")
-
         # Allocate reference atomically (thread-safe)
         reference = next(self._reference)
 
@@ -389,69 +424,6 @@ class Bridge:
         finally:
             # Whatever happened, nobody waits for this reply anymore.
             pending.pop(reference, None)
-
-    async def _read(self) -> Message | None:
-        """Read the next message from the bridge. Returns None for a message that we can't decode and should skip."""
-        # Read packet size
-        msg_len_buf = await self._reader.readexactly(4)
-
-        # Read rest of packet
-        msg_len = int.from_bytes(msg_len_buf, byteorder="big")
-        msg_buf = await self._reader.readexactly(msg_len)
-
-        # Decode message
-        message = Message.decode(msg_buf)
-        if message is None:
-            return None
-
-        _LOGGER.debug("RX %s", message)
-
-        exception = RESULT_EXCEPTIONS.get(message.cmd.result)
-        if exception is not None:
-            raise exception(message)
-
-        return message
-
-    async def _process_message(self):
-        """Process a message from the bridge.
-
-        Only transport errors end the read loop (by raising AioComfoConnectNotConnected). A message that can't be decoded
-        or handled, or an exception in a callback, is logged and skipped.
-        """
-        try:
-            message = await self._read()
-            self._last_received = time.monotonic()
-
-        except asyncio.IncompleteReadError as exc:
-            _LOGGER.info("The connection was closed.")
-            raise AioComfoConnectNotConnected("The connection was closed.") from exc
-
-        except (ConnectionError, OSError) as exc:
-            _LOGGER.info("Connection error: %s", exc)
-            raise AioComfoConnectNotConnected("Connection error") from exc
-
-        except ComfoConnectError as exc:
-            reference = exc.message.cmd.reference
-            if not self._resolve(reference, exc):
-                _LOGGER.warning("Received an error reply without a matching request (reference %s): %r", reference, exc)
-            return
-
-        except DecodeError as exc:
-            _LOGGER.error("Failed to decode message: %s", exc)
-            return
-
-        if message is None:
-            return
-
-        # pylint: disable=no-member
-        if message.cmd.type == zehnder_pb2.GatewayOperation.CloseSessionRequestType:
-            _LOGGER.info("The Bridge has asked us to close the connection.")
-            raise AioComfoConnectSessionClosed("Bridge requested connection close")
-
-        try:
-            self._dispatch_message(message)
-        except Exception:  # pylint: disable=broad-exception-caught
-            _LOGGER.exception("Error while processing message of type %s", message.cmd.type)
 
     def _resolve(self, reference: int, reply) -> bool:
         """Hand a reply, or the exception of an error reply, to the request that waits for it. Returns False when none does."""
