@@ -133,7 +133,7 @@ unit yet.
 | 328  | CN_UINT16 | Manual mode: enabled schedule entries (bit set) † | idle: 1 (bit 0)                                                                                                  |
 | 329  | CN_UINT16 | Hood: enabled schedule entries (bit set) †       | idle: 1 (bit 0)                                                                                                  |
 | 330  | CN_UINT16 | Postheater: enabled schedule entries (bit set) † | idle: 1 (bit 0); 0 also seen                                                                                     |
-| 337  | CN_UINT32 | Preset: running timers (bit set)                 | 0=none, 2=timer 1, 32=timer 5, 34=timers 1 and 5, 64=timer 6 (boost), 2048=timer 11 (away) †                     |
+| 337  | CN_UINT32 | Preset: running timers (bit set)                 | 0=none, 2=timer 1, 32=timer 5, 64=timer 6 (boost), 2048=timer 11 (away); bits add up, e.g. 34, 2052              |
 | 338  | CN_UINT32 | Bypass Override (bypass: running timers)         | 0=auto, 2=overriden (timer 1)                                                                                    |
 | 339  | CN_UINT32 | Temperature profile: running timers (bit set)    | 0=none, 2=timer 1                                                                                                |
 | 340  | CN_UINT32 | Standby: running timers (bit set)                | 0=none, 2=timer 1 †                                                                                              |
@@ -263,13 +263,14 @@ How certain this is: the pattern and the types come from the official app, and w
   80 means "no end", either because no timer is active or because the active timer runs until it is cancelled.
 - A boost of 60 seconds set 49 from `255` to `6`, 65 from `1` to `3` and 337 from `0` to `64`, and 81 counted down
   from `60` every second. Cancelling it brought 49, 65 and 337 back, and 81 to `4294967295`.
+- Away set 49 from `2` to `11` and 337 from `4` to `2052`: bit 11 (`2048`) for away, plus bit 2 of timer 2, which was
+  already running. Cancelling it brought back 49 = `2` and 337 = `4`. So 337 combines the bits of all running timers.
 
 Right after subscribing, the bridge first sends `0` for some of these pdids (seen on 49 and 81) before the real
 value, like for other sensors.
 
 What is marked † was not exercised: the meaning of the schedule entry ids and bit sets (bases 32 and 320), and the
-values of timers and states that were not active during the test, like the standby, hood and postheater states, or
-`2048` on 337 for away (timer 11, by the same rule as `64` for boost).
+values of timers and states that were not active during the test, like the standby, hood and postheater states.
 
 # ComfoClime sensors
 
