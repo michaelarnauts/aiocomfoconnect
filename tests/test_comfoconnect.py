@@ -397,3 +397,23 @@ async def test_get_timer():
     comfoconnect = ComfoConnect("127.0.0.1", LOCAL_UUID)
     with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=Mock(message=bytes.fromhex("01 00000000 58020000 56020000 03")))):
         assert await comfoconnect.get_timer(SCHEDULE_PRESET, TIMER_BOOST) == TimerEntry(active=True, delay=0, duration=600, remaining=598, value=3)
+
+
+@pytest.mark.parametrize("method", ["get_speed", "get_bypass", "get_temperature_profile"])
+async def test_timer_getters_reject_unknown_value(method):
+    """A timer getter raises a ValueError for a value it doesn't know."""
+    comfoconnect = ComfoConnect("127.0.0.1", LOCAL_UUID)
+    with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=Mock(message=bytes.fromhex("01 00000000 ffffffff ffffffff 04")))):
+        with pytest.raises(ValueError):
+            await getattr(comfoconnect, method)()
+
+
+@pytest.mark.parametrize("method", ["set_speed", "set_bypass", "set_temperature_profile"])
+async def test_timer_setters_reject_unknown_value(method):
+    """A timer setter raises a ValueError for a value it doesn't know, and sends nothing."""
+    comfoconnect = ComfoConnect("127.0.0.1", LOCAL_UUID)
+    with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock()) as mock_rmi:
+        with pytest.raises(ValueError):
+            await getattr(comfoconnect, method)("turbo")
+
+    mock_rmi.assert_not_called()
