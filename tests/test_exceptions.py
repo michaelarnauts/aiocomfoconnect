@@ -69,17 +69,17 @@ def test_comfoconnect_error_str_with_bridge_reply():
 
     exc = ComfoConnectRmiError(message)
 
-    assert str(exc) == "something failed"
+    assert str(exc) == "RMI_ERROR: something failed (reference 42)"
     assert exc.message is message
     assert exc.message.cmd.reference == 42
 
 
 def test_comfoconnect_error_str_without_description():
-    """Without a result description, the reference is used."""
+    """Without a result description, the result and the reference are used."""
     cmd = zehnder_pb2.GatewayOperation()
     cmd.type = zehnder_pb2.GatewayOperation.StartSessionRequestType
     cmd.reference = 1
     cmd.result = zehnder_pb2.GatewayOperation.NOT_ALLOWED
     message = Message(cmd, zehnder_pb2.StartSessionConfirm(), LOCAL_UUID, LOCAL_UUID)
 
-    assert str(ComfoConnectNotAllowed(message)) == "reference 1"
+    assert str(ComfoConnectNotAllowed(message)) == "NOT_ALLOWED (reference 1)"

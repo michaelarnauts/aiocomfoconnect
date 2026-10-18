@@ -280,6 +280,21 @@ class ComfoConnect(Bridge):
             raise AioComfoConnectNotConnected("Not connected to bridge")
         return super().cmd_rmi_request(message, node_id)
 
+    async def _send(self, request, request_type, params: dict = None, reply: bool = True, timeout: float = None) -> Message:
+        """Send a request, and close the connection when the bridge dropped our session.
+
+        The bridge can drop our session without closing the connection, e.g. when another app takes over a session with our
+        uuid. It then answers every request with NOT_ALLOWED (or OTHER_SESSION). Closing the connection lets the reconnect
+        loop start a new session. The request still raises its error.
+        """
+        try:
+            return await super()._send(request, request_type, params, reply, timeout)
+        except (ComfoConnectNotAllowed, ComfoConnectOtherSession):
+            if self._connection_state == ConnectionState.CONNECTED and self._writer is not None:
+                _LOGGER.warning("The bridge dropped our session, reconnecting")
+                self._writer.close()
+            raise
+
     async def disconnect(self):
         """Disconnect from the bridge and stop reconnecting. A connect() that is still busy fails."""
         _LOGGER.debug("Stopping reconnection and disconnecting")

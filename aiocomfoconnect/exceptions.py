@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .protobuf import zehnder_pb2
+
 
 class AioComfoConnectError(Exception):
     """Base class for all errors raised by aiocomfoconnect."""
@@ -12,7 +14,13 @@ class ComfoConnectError(AioComfoConnectError):
 
     def __init__(self, message):
         cmd = getattr(message, "cmd", None)
-        super().__init__((cmd.resultDescription or f"reference {cmd.reference}") if cmd else str(message))
+        if cmd is None:
+            text = str(message)
+        else:
+            result = zehnder_pb2.GatewayOperation.GatewayResult.Name(cmd.result)  # pylint: disable=no-member
+            description = f": {cmd.resultDescription}" if cmd.resultDescription else ""
+            text = f"{result}{description} (reference {cmd.reference})"
+        super().__init__(text)
         self.message = message
 
 
