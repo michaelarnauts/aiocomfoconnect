@@ -32,7 +32,7 @@ all we know: the description then follows that name.
 | pdid | type      | description                                      | examples                                                                                                         |
 |------|-----------|--------------------------------------------------|------------------------------------------------------------------------------------------------------------------|
 | 16   | CN_UINT8  | Device state                                     | 0=init, 1=normal, 2=filterwizard, 3=commissioning, 4=supplierfactory, 5=zehnderfactory, 6=standby, 7=away, 8=DFC |
-| 17   | CN_BOOL   | Alarm flag of the ventilation unit †             |                                                                                                                  |
+| 17   | CN_BOOL   | Alarm flag of the ventilation unit               | 1 while a filter alarm was active (seen on a unit)                                                               |
 | 18   | CN_UINT8  | Application mode (changing filters)              | 1=normal (seen as active), 2=filter wizard (seen while changing filters); 0=init, 3=commissioning wizard, 4=supplier factory, 5=Zehnder factory, 6=recovery, 7=service print, 8=component check † |
 | 33   | CN_UINT8  | Preset: active schedule entry †                  | idle: 1                                                                                                          |
 | 34   | CN_UINT8  | Bypass: active schedule entry †                  | idle: 0                                                                                                          |
@@ -75,8 +75,8 @@ all we know: the description then follows that name.
 | 89   | CN_UINT32 | Hood: remaining                                  | 4294967295=no timer or no end, else countdown in seconds †                                                       |
 | 90   | CN_UINT32 | Postheater: remaining                            | 4294967295=no timer or no end, else countdown in seconds †                                                       |
 | 96   | CN_BOOL   | Valves: standby and safe †                       |                                                                                                                  |
-| 97   | CN_UINT16 | Valve position: extract air valve (V11) †        | value in 0.1 % (1000 -> 100 %) †                                                                                 |
-| 98   | CN_UINT16 | Valve position: bypass/preheater valve (V21) †   | value in 0.1 % (1000 -> 100 %) †                                                                                 |
+| 97   | CN_UINT16 | Valve position: extract air valve (V11) †        | value in 0.1 % (1000 -> 100 %) †; 0 seen on a unit                                                               |
+| 98   | CN_UINT16 | Valve position: bypass/preheater valve (V21) †   | value in 0.1 % (1000 -> 100 %) †; 0 seen on a unit                                                               |
 | 115  | CN_BOOL   | Fans: exhaust fan (F12) enabled †                |                                                                                                                  |
 | 116  | CN_BOOL   | Fans: supply fan (F22) enabled †                 |                                                                                                                  |
 | 117  | CN_UINT8  | Fans: Exhaust fan duty                           | value in % (28%)                                                                                                 |
@@ -108,25 +108,25 @@ all we know: the description then follows that name.
 | 217  | CN_UINT16 | Avoided Cooling: Avoided year-to-date            | value in kWh (477 kWh)                                                                                           |
 | 218  | CN_UINT16 | Avoided Cooling: Avoided total                   | value in kWh (477 kWh)                                                                                           |
 | 219  | CN_UINT16 | Frost protection: preheater power †              | value in Watt; the app only shows it when a preheater is present † (0)                                           |
-| 220  | CN_INT16  | Temperature: Outdoor Air, as used by the unit †  | value in °C (75 -> 7.5 °C); the official app shows this one as the outdoor temperature †                         |
-| 221  | CN_INT16  | Temperature: Supply Air (after the postheater)   | value in °C (170 -> 17.0 °C); the official app shows this one as the supply temperature, and as the temperature after the postheater † |
+| 220  | CN_INT16  | Temperature: Outdoor Air, as used by the unit    | value in °C (99 -> 9.9 °C), seen equal to 276 and 277 with the preheater off; the official app shows this one as the outdoor temperature † |
+| 221  | CN_INT16  | Temperature: Supply Air (after the postheater)   | value in °C (203 -> 20.3 °C, seen as the supply temperature); the official app shows this one as the supply temperature, and as the temperature after the postheater † |
 | 222  | CN_BOOL   | ComfoCool: on request †                          |                                                                                                                  |
-| 224  | CN_UINT8  | Device Airflow Unit                              | 1=kg/h, 2=l/s, 3=m³/h                                                                                            |
+| 224  | CN_UINT8  | Device Airflow Unit                              | 1=kg/h, 2=l/s, 3=m³/h (3 seen on a unit)                                                                         |
 | 225  | CN_UINT8  | Sensor based ventilation mode                    | 0=disabled, 1=active, 2=overruling                                                                               |
 | 226  | CN_UINT16 | Fan Speed (modulated)                            | 0, 100, 200, 300 (0-300 when modulating and PDO 225=2); the app calls it the required preset †                   |
 | 227  | CN_UINT8  | Bypass state                                     | value in % (100% = fully open)                                                                                   |
 | 228  | CN_UINT8  | Frost protection unbalance                       | value in % † (0)                                                                                                 |
 | 229  | CN_BOOL   | Manual suppress flag †                           | 1; meaning unknown                                                                                               |
 | 230  | CN_INT64  | Ventilation Constraints Bitset                   | See [Ventilation constraints](#ventilation-constraints-pdo-230) and calculate_airflow_constraints()              |
-| 256  | CN_UINT8  | User level of the menu †                         | 0=basic, 1=advanced, 2=installer in the app †; this table used to say 1=basic, 2=advanced, 3=installer           |
+| 256  | CN_UINT8  | User level of the menu †                         | 0=basic, 1=advanced, 2=installer in the app †; this table used to say 1=basic, 2=advanced, 3=installer. A unit read 2, which doesn't settle it |
 | 257  | CN_UINT8  | Commissioning wizard step †                      | see [Commissioning wizard steps](#commissioning-wizard-steps-pdo-257)                                            |
-| 273  | CN_INT16  | Temperature: Room (T10) †                        | value in °C (215 -> 21.5 °C) †                                                                                   |
+| 273  | CN_INT16  | Temperature: Room (T10) †                        | value in °C (215 -> 21.5 °C) †; a unit without a room sensor reads -100 (-10.0 °C), so that means "no sensor"    |
 | 274  | CN_INT16  | Temperature: Extract Air                         | value in °C (171 -> 17.1 °C)                                                                                     |
 | 275  | CN_INT16  | Temperature: Exhaust Air                         | value in °C (86 -> 8.6 °C)                                                                                       |
 | 276  | CN_INT16  | Temperature: Outdoor Air                         | value in °C (60 -> 6.0 °C)                                                                                       |
 | 277  | CN_INT16  | Temperature: Outdoor Air after the preheater (T21) † | value in °C (60 -> 6.0 °C)                                                                                       |
 | 278  | CN_INT16  | Temperature: before the Postheater               | value in °C (184 -> 18.4 °C), the temperature after the postheater is 221                                        |
-| 289  | CN_UINT8  | Humidity: Room (H10) †                           | value in % †                                                                                                     |
+| 289  | CN_UINT8  | Humidity: Room (H10) †                           | value in % †; a unit without a room sensor reads 50                                                              |
 | 290  | CN_UINT8  | Humidity: Extract Air                            | value in % (49%)                                                                                                 |
 | 291  | CN_UINT8  | Humidity: Exhaust Air                            | value in % (87%)                                                                                                 |
 | 292  | CN_UINT8  | Humidity: Outdoor Air                            | value in % (67%)                                                                                                 |
