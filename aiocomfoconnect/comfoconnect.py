@@ -433,7 +433,8 @@ class ComfoConnect(Bridge):
 
         sensor = self._sensors.get(sensor_id)
         if sensor is None:
-            _LOGGER.error("Unknown sensor id: %s", sensor_id)
+            # After a quick reconnect, the bridge can still push the sensors of our previous session before we subscribe again.
+            _LOGGER.debug("Ignoring a value for sensor %s, that we are not subscribed to", sensor_id)
             return
 
         self._sensors_values[sensor_id] = sensor_value
