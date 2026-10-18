@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-from aiocomfoconnect.bridge import GATEWAY_TYPE_PRO, Bridge, EventBus, Message, Node
+from aiocomfoconnect.bridge import Bridge, EventBus, Message, Node
 from aiocomfoconnect.comfoconnect import ComfoConnect
 from aiocomfoconnect.const import GatewayType, ProductId
 from aiocomfoconnect.protobuf import zehnder_pb2
@@ -714,8 +714,8 @@ class TestBridgeRegister:
 
     @pytest.fixture
     def pro_bridge(self):
-        """A Bridge with bridge_type=GATEWAY_TYPE_PRO."""
-        return Bridge("192.168.1.100", LOCAL_UUID, bridge_type=GATEWAY_TYPE_PRO)
+        """A Bridge with bridge_type=GatewayType.PRO."""
+        return Bridge("192.168.1.100", LOCAL_UUID, bridge_type=GatewayType.PRO)
 
     @pytest.mark.asyncio
     async def test_lanc_already_registered(self, lanc_bridge):

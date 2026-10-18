@@ -14,10 +14,8 @@ from aiocomfoconnect.const import (
     ERRORS,
     ERRORS_140,
     NUMERIC_PROPERTY_TYPES,
-    SUBUNIT_01,
     UNIT_ERROR,
     UNIT_SCHEDULE,
-    UNIT_VENTILATIONCONFIG,
     ComfoCoolMode,
     ConnectionState,
     PdoType,
@@ -489,40 +487,6 @@ class ComfoConnect(Bridge):
 
         # A duration of 1 lets the unit pick its default, like the official app: until cancelled in manual mode, 2 hours in auto mode.
         await self.set_timer(SCHEDULE_PRESET, TIMER_DEFAULT, SPEEDS.index(speed), duration=1)
-
-    async def get_flow_for_speed(self, speed: Literal["away", "low", "medium", "high"]) -> int:
-        """Get the targeted airflow in m³/h for the given VentilationSpeed (away / low / medium / high)."""
-
-        match speed:
-            case VentilationSpeed.AWAY:
-                property_id = 3
-            case VentilationSpeed.LOW:
-                property_id = 4
-            case VentilationSpeed.MEDIUM:
-                property_id = 5
-            case VentilationSpeed.HIGH:
-                property_id = 6
-            case _:
-                raise ValueError(f"Invalid speed: {speed}")
-
-        return await self.get_single_property(UNIT_VENTILATIONCONFIG, SUBUNIT_01, property_id, PdoType.TYPE_CN_INT16)
-
-    async def set_flow_for_speed(self, speed: Literal["away", "low", "medium", "high"], desired_flow: int):
-        """Set the targeted airflow in m³/h for the given VentilationSpeed (away / low / medium / high)."""
-
-        match speed:
-            case VentilationSpeed.AWAY:
-                property_id = 3
-            case VentilationSpeed.LOW:
-                property_id = 4
-            case VentilationSpeed.MEDIUM:
-                property_id = 5
-            case VentilationSpeed.HIGH:
-                property_id = 6
-            case _:
-                raise ValueError(f"Invalid speed: {speed}")
-
-        await self.set_property(Property(UNIT_VENTILATIONCONFIG, SUBUNIT_01, property_id, PdoType.TYPE_CN_INT16), desired_flow)
 
     async def get_bypass(self):
         """Get the bypass mode (auto / on / off)."""

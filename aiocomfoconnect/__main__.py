@@ -217,18 +217,6 @@ async def run_list_nodes(args):
             print(f"* node {node.node_id}: product {node.product_id} ({product}), zone {node.zone_id}, mode {node.mode}")
 
 
-async def run_get_flow_for_speed(args):
-    """Get the configured airflow for the specified speed."""
-    async with connected(args) as comfoconnect:
-        print(await comfoconnect.get_flow_for_speed(args.speed))
-
-
-async def run_set_flow_for_speed(args):
-    """Set the configured airflow for the specified speed."""
-    async with connected(args) as comfoconnect:
-        await comfoconnect.set_flow_for_speed(args.speed, args.flow)
-
-
 def build_parser() -> argparse.ArgumentParser:
     """Build the argument parser."""
     parser = argparse.ArgumentParser()
@@ -300,15 +288,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_list_nodes = subparsers.add_parser("list-nodes", parents=[bridge], help="list the nodes on the ComfoNet bus")
     p_list_nodes.set_defaults(func=run_list_nodes)
-
-    p_get_flow_speed = subparsers.add_parser("get-flow-for-speed", parents=[bridge], help="Get m³/h for given speed")
-    p_get_flow_speed.add_argument("speed", help="Fan speed", choices=["low", "medium", "high", "away"])
-    p_get_flow_speed.set_defaults(func=run_get_flow_for_speed)
-
-    p_set_flow_speed = subparsers.add_parser("set-flow-for-speed", parents=[bridge], help="Set m³/h for given speed")
-    p_set_flow_speed.add_argument("speed", help="Fan speed", choices=["low", "medium", "high", "away"])
-    p_set_flow_speed.add_argument("flow", help="Desired airflow in m³/h", type=int)
-    p_set_flow_speed.set_defaults(func=run_set_flow_for_speed)
 
     return parser
 

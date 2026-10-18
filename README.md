@@ -39,6 +39,8 @@ $ python -m aiocomfoconnect show-sensor 276 --host 192.168.1.213
 $ python -m aiocomfoconnect show-sensor 276 --host 192.168.1.213 -f
 
 $ python -m aiocomfoconnect get-property --host 192.168.1.213 1 1 8 9  # Unit 0x01, SubUnit 0x01, Property 0x08, Type STRING. See PROTOCOL-RMI.md
+$ python -m aiocomfoconnect get-property --host 192.168.1.213 30 1 4 6  # The airflow of the low speed in m³/h (away=3, low=4, medium=5, high=6), Type INT16
+$ python -m aiocomfoconnect set-property --host 192.168.1.213 30 1 4 6 120  # Set the airflow of the low speed to 120 m³/h
 ```
 
 ## Available methods
@@ -65,6 +67,7 @@ $ python -m aiocomfoconnect get-property --host 192.168.1.213 1 1 8 9  # Unit 0x
 - `async set_temperature_profile(profile)`: Set the temperature profile. (warm / normal / cool)
 - `async get_property(prop, node_id=None)`: Get the value of a property, e.g. `PROPERTY_RMOT_HEATING_THRESHOLD`. It is read from the node the property lives on: the ventilation unit, or the ComfoClime for the `PROPERTY_CLIME_*` properties. Pass `node_id` to read it from another node. A `NodeNotFoundException` is raised when the node isn't on the bus.
 - `async set_property(prop, value, node_id=None)`: Set a property, on the same node as `get_property`.
+- The airflow in m³/h of each fan speed is a property: `PROPERTY_FLOW_AWAY`, `PROPERTY_FLOW_LOW`, `PROPERTY_FLOW_MEDIUM` and `PROPERTY_FLOW_HIGH`, e.g. `await comfoconnect.set_property(PROPERTY_FLOW_LOW, 120)`.
 - Properties that are an enum, like `PROPERTY_SENSOR_VENTILATION_TEMP_PASSIVE`, `PROPERTY_SENSOR_VENTILATION_HUMIDITY_COMFORT` and `PROPERTY_SENSOR_VENTILATION_HUMIDITY_PROTECTION` (off / auto / on), `PROPERTY_TEMPERATURE_PROFILE_MODE` (adaptive / fixed), `PROPERTY_CLIME_SEASON` and `PROPERTY_CLIME_TEMPERATURE_PROFILE`, have `options`: `get_property` returns the option and `set_property` takes it. `get_property_constraints` still uses the raw values.
 - `async get_property_constraints(prop, node_id=None)`: Get the raw value of a numeric property, together with the range and step size the unit accepts.
 - `bridge_type`: The type of the bridge (`GatewayType.LANC`, `SEASON` or `PRO`). Discovery reports it, and a ComfoConnect Pro is also recognised once a session has started.
