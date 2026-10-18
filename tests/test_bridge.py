@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-from aiocomfoconnect.bridge import Bridge, EventBus, Message, Node
+from aiocomfoconnect.bridge import Bridge, Message, Node
 from aiocomfoconnect.comfoconnect import ComfoConnect
 from aiocomfoconnect.const import GatewayType, ProductId
 from aiocomfoconnect.protobuf import zehnder_pb2
@@ -31,81 +31,6 @@ from aiocomfoconnect.exceptions import (
 )
 
 
-class TestEventBus:
-    """Test the EventBus class."""
-
-    @pytest.mark.asyncio
-    async def test_add_listener(self):
-        """Test adding a listener."""
-        bus = EventBus()
-        loop = asyncio.get_running_loop()
-        future = loop.create_future()
-        bus.add_listener("test_event", future)
-
-        assert "test_event" in bus.listeners
-        assert future in bus.listeners["test_event"]
-
-    @pytest.mark.asyncio
-    async def test_add_multiple_listeners(self):
-        """Test adding multiple listeners to the same event."""
-        bus = EventBus()
-        loop = asyncio.get_running_loop()
-        future1 = loop.create_future()
-        future2 = loop.create_future()
-
-        bus.add_listener("test_event", future1)
-        bus.add_listener("test_event", future2)
-
-        assert len(bus.listeners["test_event"]) == 2
-        assert future1 in bus.listeners["test_event"]
-        assert future2 in bus.listeners["test_event"]
-
-    @pytest.mark.asyncio
-    async def test_emit_result(self):
-        """Test emitting a result to listeners."""
-        bus = EventBus()
-        loop = asyncio.get_running_loop()
-        future = loop.create_future()
-        bus.add_listener("test_event", future)
-
-        bus.emit("test_event", "test_result")
-
-        assert future.done()
-        assert future.result() == "test_result"
-        assert "test_event" not in bus.listeners
-
-    @pytest.mark.asyncio
-    async def test_emit_exception(self):
-        """Test emitting an exception to listeners."""
-        bus = EventBus()
-        loop = asyncio.get_running_loop()
-        future = loop.create_future()
-        bus.add_listener("test_event", future)
-
-        test_exception = ValueError("test error")
-        bus.emit("test_event", test_exception)
-
-        assert future.done()
-        with pytest.raises(ValueError, match="test error"):
-            future.result()
-        assert "test_event" not in bus.listeners
-
-    @pytest.mark.asyncio
-    async def test_fail_all(self):
-        """Test failing all pending listeners."""
-        bus = EventBus()
-        loop = asyncio.get_running_loop()
-        future = loop.create_future()
-        bus.add_listener("test_event", future)
-
-        bus.fail_all(RuntimeError("boom"))
-
-        assert future.done()
-        with pytest.raises(RuntimeError, match="boom"):
-            future.result()
-        assert bus.listeners == {}
-
-
 class TestBridge:
     """Test the Bridge class."""
 
@@ -122,7 +47,7 @@ class TestBridge:
         assert bridge._reader is None
         assert bridge._writer is None
         assert bridge._reference is None
-        assert bridge._event_bus is None
+        assert bridge._pending == {}
         assert not bridge.is_connected()
 
     @pytest.mark.asyncio
@@ -144,7 +69,7 @@ class TestBridge:
         assert bridge.is_connected()
         assert bridge._local_uuid == LOCAL_UUID
         assert bridge._reference is not None
-        assert bridge._event_bus is not None
+        assert bridge._pending == {}
         assert bridge._read_task is not None
 
         # Clean up
@@ -443,11 +368,9 @@ class TestBridge:
             with patch.object(bridge, "_read_messages", side_effect=mock_read_messages):
                 await bridge.connect(LOCAL_UUID)
 
-        assert bridge._event_bus is not None
         assert bridge._reference is not None
         pending_future = asyncio.get_running_loop().create_future()
-        test_reference = next(bridge._reference)
-        bridge._event_bus.add_listener(test_reference, pending_future)
+        bridge._pending[next(bridge._reference)] = pending_future
 
         await bridge.disconnect()
 
@@ -1131,7 +1054,7 @@ class TestConnectionLifecycle:
 
         await _wait_for_read_task(bridge)
         assert not bridge.is_connected()
-        assert bridge._event_bus.listeners == {}
+        assert bridge._pending == {}
         with pytest.raises(AioComfoConnectNotConnected):
             await bridge.cmd_version_request()
 
@@ -1160,7 +1083,7 @@ class TestConnectionLifecycle:
 
         assert bridge._read_task is None
         assert bridge._writer is None
-        assert bridge._event_bus is None
+        assert bridge._pending == {}
         assert read_task.done()
         del read_task
         gc.collect()
@@ -1190,7 +1113,7 @@ class TestConnectionLifecycle:
         await bridge.disconnect()
 
         assert bridge._writer is None
-        assert bridge._event_bus is None
+        assert bridge._pending == {}
 
     @pytest.fixture
     def bridge_with_writer(self):
@@ -1201,45 +1124,44 @@ class TestConnectionLifecycle:
         bridge._writer.drain = AsyncMock()
         bridge._writer.wait_closed = AsyncMock()
         bridge._reference = iter(range(1, 100))
-        bridge._event_bus = EventBus()
         bridge._local_uuid = LOCAL_UUID
         return bridge
 
     @pytest.mark.asyncio
-    async def test_reply_removes_listener(self, bridge_with_writer):
-        """A request that gets its reply leaves nothing behind in the listener table."""
+    async def test_reply_removes_pending(self, bridge_with_writer):
+        """A request that gets its reply leaves nothing behind in the pending table."""
         bridge = bridge_with_writer
         task = asyncio.create_task(bridge.cmd_version_request())
         await asyncio.sleep(0)
-        assert list(bridge._event_bus.listeners) == [1]
+        assert list(bridge._pending) == [1]
 
-        bridge._event_bus.emit(1, zehnder_pb2.VersionConfirm())
+        assert bridge._resolve(1, zehnder_pb2.VersionConfirm())
         await task
 
-        assert bridge._event_bus.listeners == {}
+        assert bridge._pending == {}
 
     @pytest.mark.asyncio
-    async def test_timeout_removes_listener(self, bridge_with_writer):
-        """A request that times out leaves nothing behind in the listener table."""
+    async def test_timeout_removes_pending(self, bridge_with_writer):
+        """A request that times out leaves nothing behind in the pending table."""
         bridge = bridge_with_writer
         with pytest.raises(AioComfoConnectTimeout):
             await bridge._send(zehnder_pb2.VersionRequest, zehnder_pb2.GatewayOperation.VersionRequestType, timeout=0.01)
 
-        assert bridge._event_bus.listeners == {}
+        assert bridge._pending == {}
 
     @pytest.mark.asyncio
-    async def test_cancel_removes_listener(self, bridge_with_writer):
-        """A request that is cancelled leaves nothing behind in the listener table."""
+    async def test_cancel_removes_pending(self, bridge_with_writer):
+        """A request that is cancelled leaves nothing behind in the pending table."""
         bridge = bridge_with_writer
         task = asyncio.create_task(bridge.cmd_version_request())
         await asyncio.sleep(0)
-        assert bridge._event_bus.listeners != {}
+        assert bridge._pending != {}
 
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
 
-        assert bridge._event_bus.listeners == {}
+        assert bridge._pending == {}
 
     @pytest.mark.asyncio
     async def test_send_failure(self, bridge_with_writer):
@@ -1247,13 +1169,12 @@ class TestConnectionLifecycle:
         bridge = bridge_with_writer
         bridge._writer.drain = AsyncMock(side_effect=ConnectionResetError("reset"))
         futures = []
-        add_listener = bridge._event_bus.add_listener
-        bridge._event_bus.add_listener = lambda reference, fut: (futures.append(fut), add_listener(reference, fut))
+        bridge._writer.write = lambda _data: futures.extend(bridge._pending.values())
 
         with pytest.raises(AioComfoConnectNotConnected, match="while sending"):
             await bridge.cmd_version_request()
 
-        assert bridge._event_bus.listeners == {}
+        assert bridge._pending == {}
         # An exception on it would be logged as "Future exception was never retrieved"
         assert len(futures) == 1 and not futures[0].done()
 
@@ -1261,7 +1182,6 @@ class TestConnectionLifecycle:
     async def test_unmatched_error_reply_is_logged(self, caplog):
         """An error reply for a request that nobody waits for anymore is logged."""
         bridge = Bridge("192.168.1.100", LOCAL_UUID)
-        bridge._event_bus = EventBus()
         cmd = zehnder_pb2.GatewayOperation()
         cmd.type = zehnder_pb2.GatewayOperation.CnRmiResponseType
         cmd.reference = 42
@@ -1272,3 +1192,74 @@ class TestConnectionLifecycle:
         await bridge._process_message()
 
         assert any(r.levelname == "WARNING" and "without a matching request" in r.getMessage() for r in caplog.records)
+
+
+class TestPendingRequests:
+    """Every request waits for the reply with its own reference, until the connection ends."""
+
+    @pytest.mark.asyncio
+    async def test_concurrent_requests_get_their_own_reply(self, fake_bridge):
+        """Replies are matched to their request by reference, also when they arrive in another order."""
+        fake_bridge.rmi_responses = {b"\x01": b"\x0a", b"\x02": b"\x0b"}
+        fake_bridge.withhold = {zehnder_pb2.GatewayOperation.CnRmiRequestType}
+        bridge = Bridge("127.0.0.1", LOCAL_UUID)
+        await bridge.connect(LOCAL_UUID)
+
+        first = asyncio.create_task(bridge.cmd_rmi_request(b"\x01", node_id=1))
+        second = asyncio.create_task(bridge.cmd_rmi_request(b"\x02", node_id=1))
+        await fake_bridge.wait_for(lambda: len(fake_bridge.rmi_requests) == 2)
+        fake_bridge._pending.reverse()
+        fake_bridge.answer_pending()
+
+        assert (await first).message == b"\x0a"
+        assert (await second).message == b"\x0b"
+        await bridge.disconnect()
+
+    @pytest.mark.asyncio
+    async def test_disconnect_fails_pending_request(self, fake_bridge):
+        """disconnect() fails a request that is still waiting for its reply."""
+        unretrieved = _collect_loop_errors()
+        bridge = Bridge("127.0.0.1", LOCAL_UUID)
+        await bridge.connect(LOCAL_UUID)
+
+        # The fake bridge doesn't answer a VersionRequest.
+        pending = asyncio.create_task(bridge.cmd_version_request())
+        await fake_bridge.wait_for(lambda: fake_bridge.received(zehnder_pb2.GatewayOperation.VersionRequestType))
+        await bridge.disconnect()
+
+        with pytest.raises(AioComfoConnectNotConnected, match="Disconnected"):
+            await pending
+        assert unretrieved == []
+
+    @pytest.mark.asyncio
+    async def test_late_reply_is_ignored(self, fake_bridge):
+        """A reply that arrives after its request timed out is dropped, and the connection keeps working."""
+        fake_bridge.withhold = {zehnder_pb2.GatewayOperation.CnTimeRequestType}
+        bridge = Bridge("127.0.0.1", LOCAL_UUID)
+        await bridge.connect(LOCAL_UUID)
+
+        with pytest.raises(AioComfoConnectTimeout):
+            await bridge._send(zehnder_pb2.CnTimeRequest, zehnder_pb2.GatewayOperation.CnTimeRequestType, timeout=0.01)
+        fake_bridge.withhold = set()
+        fake_bridge.answer_pending()
+
+        assert (await bridge.cmd_time_request()).currentTime == 1
+        assert bridge.is_connected()
+        await bridge.disconnect()
+
+    @pytest.mark.asyncio
+    async def test_late_error_reply_is_logged(self, fake_bridge, caplog):
+        """An error reply that arrives after its request timed out is logged, and the connection keeps working."""
+        fake_bridge.rmi_responses = {b"\x01": zehnder_pb2.GatewayOperation.RMI_ERROR}
+        fake_bridge.withhold = {zehnder_pb2.GatewayOperation.CnRmiRequestType}
+        bridge = Bridge("127.0.0.1", LOCAL_UUID)
+        await bridge.connect(LOCAL_UUID)
+
+        with pytest.raises(AioComfoConnectTimeout):
+            await bridge._send(zehnder_pb2.CnRmiRequest, zehnder_pb2.GatewayOperation.CnRmiRequestType, {"nodeId": 1, "message": b"\x01"}, timeout=0.01)
+        fake_bridge.withhold = set()
+        fake_bridge.answer_pending()
+
+        assert (await bridge.cmd_time_request()).currentTime == 1
+        assert any(r.levelname == "WARNING" and "without a matching request" in r.getMessage() for r in caplog.records)
+        await bridge.disconnect()
