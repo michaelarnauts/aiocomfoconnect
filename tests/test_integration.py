@@ -1,6 +1,7 @@
 """Tests of the connection, the reconnects and the sensors against a fake bridge that speaks the real protocol."""
 
 import asyncio
+import socket
 
 import pytest
 
@@ -8,15 +9,28 @@ from aiocomfoconnect.bridge import Bridge
 from aiocomfoconnect.const import ERRORS, ProductId
 from aiocomfoconnect.exceptions import (
     AioComfoConnectNotConnected,
+    AioComfoConnectNotReachable,
     AioComfoConnectTimeout,
     ComfoConnectBadRequest,
     ComfoConnectNotAllowed,
     ComfoConnectRmiError,
+    VentilationUnitNotFoundException,
 )
 from tests.conftest import create_sensor
 from tests.fake_bridge import BRIDGE_UUID, GO, LOCAL_UUID
 
 GET_SPEED = bytes([0x83, 0x15, 0x01, 0x01])
+
+
+async def assert_stays_disconnected(fake_bridge, client):
+    """Check that the client is disconnected, and doesn't connect again by itself."""
+    assert not client.is_connected()
+    assert client._reconnect_task is None
+    connections = fake_bridge.connections
+    # Give a reconnect the time to happen. The back-off is 10 ms in tests.
+    await asyncio.sleep(0.05)
+    assert fake_bridge.connections == connections
+    assert not client.is_connected()
 
 
 async def roundtrip(client):
@@ -81,15 +95,15 @@ class TestConnect:
         assert fake_bridge.received(GO.CnRmiRequestType)[0].nodeId == 45
 
     async def test_connect_without_ventilation_unit(self, fake_bridge, make_client):
-        """The session isn't ready when the bridge doesn't announce a ventilation unit, so connect() keeps retrying and times out."""
+        """connect() fails when the bridge doesn't announce a ventilation unit, and doesn't retry."""
         fake_bridge.nodes = [(48, ProductId.ZEHNDERGATEWAY, 255)]
-        client = make_client(connect_timeout=0.15)
+        client = make_client()
 
-        with pytest.raises(AioComfoConnectTimeout):
+        with pytest.raises(VentilationUnitNotFoundException):
             await client.connect(LOCAL_UUID)
 
-        assert fake_bridge.connections >= 2
         assert client.ventilation_node_id is None
+        await assert_stays_disconnected(fake_bridge, client)
 
     async def test_connect_timeout(self, fake_bridge, make_client):
         """connect() gives up after connect_timeout when the bridge doesn't answer, and stops retrying."""
@@ -99,20 +113,75 @@ class TestConnect:
         with pytest.raises(AioComfoConnectTimeout, match="Failed to connect within 0.1 seconds"):
             await client.connect(LOCAL_UUID)
 
-        assert client._is_stopping
-        assert client._reconnect_task is None
-        assert not client.is_connected()
+        await assert_stays_disconnected(fake_bridge, client)
 
-    async def test_connect_not_allowed(self, fake_bridge, make_client):
-        """An app that isn't registered gets an error right away, without retrying."""
-        fake_bridge.session_result = GO.NOT_ALLOWED
+    @pytest.mark.parametrize(
+        ("session_result", "error"),
+        [(GO.NOT_ALLOWED, ComfoConnectNotAllowed), (GO.BAD_REQUEST, ComfoConnectBadRequest)],
+    )
+    async def test_connect_error(self, fake_bridge, make_client, session_result, error):
+        """connect() raises the error of the bridge right away, without retrying."""
+        fake_bridge.session_result = session_result
         client = make_client()
 
-        with pytest.raises(ComfoConnectNotAllowed):
+        with pytest.raises(error):
             await client.connect(LOCAL_UUID)
 
+        await assert_stays_disconnected(fake_bridge, client)
+
+    async def test_connect_not_reachable(self, fake_bridge, make_client, monkeypatch):
+        """connect() raises right away when nothing listens on the port, without retrying."""
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            monkeypatch.setattr(Bridge, "PORT", sock.getsockname()[1])
+        client = make_client()
+
+        with pytest.raises(AioComfoConnectNotReachable):
+            await client.connect(LOCAL_UUID)
+
+        assert client._reconnect_task is None
+
+    async def test_connect_cancelled(self, fake_bridge, make_client):
+        """A cancelled connect() closes the connection and doesn't reconnect later."""
+        fake_bridge.withhold = {GO.StartSessionRequestType}
+        client = make_client()
+        connect_task = asyncio.create_task(client.connect(LOCAL_UUID))
+        await fake_bridge.wait_for(lambda: fake_bridge.received(GO.StartSessionRequestType))
+
+        connect_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await connect_task
+
+        await assert_stays_disconnected(fake_bridge, client)
+
+    async def test_disconnect_during_connect(self, fake_bridge, make_client):
+        """disconnect() makes a connect() that is still busy fail right away, and nothing reconnects."""
+        fake_bridge.withhold = {GO.StartSessionRequestType}
+        client = make_client(connect_timeout=5)
+        connect_task = asyncio.create_task(client.connect(LOCAL_UUID))
+        await fake_bridge.wait_for(lambda: fake_bridge.received(GO.StartSessionRequestType))
+
+        async with asyncio.timeout(1):
+            await client.disconnect()
+            with pytest.raises(AioComfoConnectNotConnected):
+                await connect_task
+
+        await assert_stays_disconnected(fake_bridge, client)
+
+    async def test_concurrent_connect(self, fake_bridge, make_client):
+        """A second connect() while the first is busy waits until the session is ready, and doesn't connect again."""
+        fake_bridge.withhold = {GO.StartSessionRequestType}
+        client = make_client()
+        first = asyncio.create_task(client.connect(LOCAL_UUID))
+        await fake_bridge.wait_for(lambda: fake_bridge.received(GO.StartSessionRequestType))
+        second = asyncio.create_task(client.connect(LOCAL_UUID))
+        await asyncio.sleep(0.01)
+        assert not second.done()
+
+        fake_bridge.answer_pending()
+        await asyncio.gather(first, second)
+        assert client.is_connected()
         assert fake_bridge.connections == 1
-        assert not client.is_connected()
 
 
 class TestReconnect:
@@ -134,6 +203,19 @@ class TestReconnect:
         fake_bridge.rmi_responses[GET_SPEED] = bytes.fromhex("0100000000ffffffffffffffff01")
         assert await client.get_speed() == "low"
 
+    async def test_reconnect_retries(self, fake_bridge, make_client):
+        """The client keeps trying when reconnecting fails."""
+        client = make_client()
+        await client.connect(LOCAL_UUID)
+
+        fake_bridge.session_result = GO.BAD_REQUEST
+        fake_bridge.drop()
+        await fake_bridge.wait_for(lambda: fake_bridge.connections >= 3)
+        fake_bridge.session_result = GO.OK
+        await fake_bridge.wait_for(lambda: fake_bridge.received(GO.CnNodeRequestType, fake_bridge.connections))
+        await fake_bridge.wait_for(client.is_connected)
+        await roundtrip(client)
+
     async def test_disconnect(self, fake_bridge, make_client):
         """disconnect() closes the connection and stops reconnecting."""
         client = make_client()
@@ -141,12 +223,7 @@ class TestReconnect:
 
         await client.disconnect()
 
-        assert not client.is_connected()
-        assert client._is_stopping
-        assert client._reconnect_task is None
-        # Give a reconnect the time to happen. The back-off is 10 ms in tests.
-        await asyncio.sleep(0.05)
-        assert fake_bridge.connections == 1
+        await assert_stays_disconnected(fake_bridge, client)
 
         with pytest.raises(AioComfoConnectNotConnected):
             await client.get_speed()
@@ -155,7 +232,22 @@ class TestReconnect:
         """disconnect() without a connection doesn't raise."""
         client = make_client()
         await client.disconnect()
-        assert client._is_stopping
+        assert not client.is_connected()
+
+    async def test_cancelled_disconnect(self, fake_bridge, make_client):
+        """A cancelled disconnect() raises CancelledError, and the connection is still closed."""
+        client = make_client()
+        await client.connect(LOCAL_UUID)
+
+        disconnect_task = asyncio.create_task(client.disconnect())
+        await asyncio.sleep(0)
+        disconnect_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await disconnect_task
+
+        await fake_bridge.wait_for(lambda: not client.is_connected())
+        await asyncio.sleep(0.05)
+        assert fake_bridge.connections == 1
 
     async def test_sensors_resubscribed_after_reconnect(self, fake_bridge, make_client):
         """The sensors are subscribed again on the new session."""
