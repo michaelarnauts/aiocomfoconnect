@@ -406,15 +406,6 @@ class TestComfoConnect:
 
         mock_rmi.assert_not_called()
 
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize("raw, option", [(0, "off"), (1, "auto"), (2, "on")])
-    async def test_sensor_ventmode_getters(self, comfoconnect, raw, option):
-        """The sensor based ventilation mode getters return the option."""
-        node_notification(comfoconnect, node_id=1, product_id=ProductId.COMFOAIRQ)
-
-        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=Mock(message=bytes([raw])))):
-            assert await comfoconnect.get_sensor_ventmode_humidity_comfort() == option
-
     def test_property_products(self):
         """The ComfoClime properties live on the ComfoClime, the others on the ventilation unit."""
         clime = {name for name in dir(properties) if name.startswith("PROPERTY_CLIME_")}
@@ -466,23 +457,24 @@ class TestComfoConnect:
         ("set_temperature_profile", ("normal",), ["84 15 03 01 00000000 ffffffff 00"]),
         ("set_temperature_profile", ("cool",), ["84 15 03 01 00000000 ffffffff 01"]),
         ("set_temperature_profile", ("warm", 3600), ["84 15 03 01 00000000 100e0000 02"]),
-        ("get_sensor_ventmode_temperature_passive", (), ["01 1d 01 10 04"]),
-        ("set_sensor_ventmode_temperature_passive", ("auto",), ["03 1d 01 04 01"]),
-        ("set_sensor_ventmode_temperature_passive", ("on",), ["03 1d 01 04 02"]),
-        ("set_sensor_ventmode_temperature_passive", ("off",), ["03 1d 01 04 00"]),
-        ("get_sensor_ventmode_humidity_comfort", (), ["01 1d 01 10 06"]),
-        ("set_sensor_ventmode_humidity_comfort", ("auto",), ["03 1d 01 06 01"]),
-        ("set_sensor_ventmode_humidity_comfort", ("on",), ["03 1d 01 06 02"]),
-        ("set_sensor_ventmode_humidity_comfort", ("off",), ["03 1d 01 06 00"]),
-        ("get_sensor_ventmode_humidity_protection", (), ["01 1d 01 10 07"]),
-        ("set_sensor_ventmode_humidity_protection", ("auto",), ["03 1d 01 07 01"]),
-        ("set_sensor_ventmode_humidity_protection", ("on",), ["03 1d 01 07 02"]),
-        ("set_sensor_ventmode_humidity_protection", ("off",), ["03 1d 01 07 00"]),
+        ("get_property", (PROPERTY_SENSOR_VENTILATION_TEMP_PASSIVE,), ["01 1d 01 10 04"]),
+        ("set_property", (PROPERTY_SENSOR_VENTILATION_TEMP_PASSIVE, "auto"), ["03 1d 01 04 01"]),
+        ("set_property", (PROPERTY_SENSOR_VENTILATION_TEMP_PASSIVE, "on"), ["03 1d 01 04 02"]),
+        ("set_property", (PROPERTY_SENSOR_VENTILATION_TEMP_PASSIVE, "off"), ["03 1d 01 04 00"]),
+        ("get_property", (PROPERTY_SENSOR_VENTILATION_HUMIDITY_COMFORT,), ["01 1d 01 10 06"]),
+        ("set_property", (PROPERTY_SENSOR_VENTILATION_HUMIDITY_COMFORT, "auto"), ["03 1d 01 06 01"]),
+        ("set_property", (PROPERTY_SENSOR_VENTILATION_HUMIDITY_COMFORT, "on"), ["03 1d 01 06 02"]),
+        ("set_property", (PROPERTY_SENSOR_VENTILATION_HUMIDITY_COMFORT, "off"), ["03 1d 01 06 00"]),
+        ("get_property", (PROPERTY_SENSOR_VENTILATION_HUMIDITY_PROTECTION,), ["01 1d 01 10 07"]),
+        ("set_property", (PROPERTY_SENSOR_VENTILATION_HUMIDITY_PROTECTION, "auto"), ["03 1d 01 07 01"]),
+        ("set_property", (PROPERTY_SENSOR_VENTILATION_HUMIDITY_PROTECTION, "on"), ["03 1d 01 07 02"]),
+        ("set_property", (PROPERTY_SENSOR_VENTILATION_HUMIDITY_PROTECTION, "off"), ["03 1d 01 07 00"]),
         ("clear_errors", (), ["82 03 01"]),
+        ("get_flow_for_speed", ("low",), ["01 1e 01 10 04"]),
+        ("set_flow_for_speed", ("high", 300), ["03 1e 01 06 2c01"]),
         ("get_property", (PROPERTY_TEMPERATURE_PROFILE_MODE,), ["01 1d 01 10 08"]),
         ("set_property", (PROPERTY_TEMPERATURE_PROFILE_MODE, "fixed"), ["03 1d 01 08 01"]),
         ("set_property", (PROPERTY_RMOT_HEATING_THRESHOLD, -15), ["03 1d 01 02 f1ff"]),
-        ("set_property_typed", (0x1D, 0x01, 0x02, -15, PdoType.TYPE_CN_INT16), ["03 1d 01 02 f1ff"]),
         ("get_timer", (0x02, 0x01), ["83 15 02 01"]),
         ("set_timer", (0x02, 0x01, 0x01), ["84 15 02 01 00000000 ffffffff 01"]),
         ("set_timer", (0x01, 0x06, 0x03, 600), ["84 15 01 06 00000000 58020000 03"]),

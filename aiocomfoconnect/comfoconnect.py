@@ -48,13 +48,7 @@ from aiocomfoconnect.exceptions import (
     ComfoConnectOtherSession,
     NodeNotFoundException,
 )
-from aiocomfoconnect.properties import (
-    PROPERTY_SENSOR_VENTILATION_HUMIDITY_COMFORT,
-    PROPERTY_SENSOR_VENTILATION_HUMIDITY_PROTECTION,
-    PROPERTY_SENSOR_VENTILATION_TEMP_PASSIVE,
-    Property,
-    PropertyConstraints,
-)
+from aiocomfoconnect.properties import Property, PropertyConstraints
 from aiocomfoconnect.sensors import Sensor
 from aiocomfoconnect.util import bytearray_to_bits, bytestring, encode_pdo_value
 
@@ -400,10 +394,6 @@ class ComfoConnect(Bridge):
 
         return result.message
 
-    async def set_property_typed(self, unit: int, subunit: int, property_id: int, value: int, pdo_type: PdoType, node_id: Optional[int] = None) -> Any:
-        """Set a typed property. Deprecated: use set_property with a Property."""
-        return await self.set_property(Property(unit, subunit, property_id, pdo_type), value, node_id=node_id)
-
     def _sensor_callback(self, sensor_id, sensor_value):
         """Callback function for sensor updates."""
         if self._sensor_callback_fn is None:
@@ -533,7 +523,7 @@ class ComfoConnect(Bridge):
             case _:
                 raise ValueError(f"Invalid speed: {speed}")
 
-        await self.set_property_typed(UNIT_VENTILATIONCONFIG, SUBUNIT_01, property_id, desired_flow, PdoType.TYPE_CN_INT16)
+        await self.set_property(Property(UNIT_VENTILATIONCONFIG, SUBUNIT_01, property_id, PdoType.TYPE_CN_INT16), desired_flow)
 
     async def get_bypass(self):
         """Get the bypass mode (auto / on / off)."""
@@ -633,30 +623,6 @@ class ComfoConnect(Bridge):
             raise ValueError(f"Invalid profile: {profile}")
 
         await self.set_timer(SCHEDULE_TEMPERATURE_PROFILE, TIMER_DEFAULT, TEMPERATURE_PROFILES.index(profile), timeout)
-
-    async def get_sensor_ventmode_temperature_passive(self):
-        """Get sensor based ventilation mode - temperature passive (auto / on / off). Deprecated: use get_property(PROPERTY_SENSOR_VENTILATION_TEMP_PASSIVE)."""
-        return await self.get_property(PROPERTY_SENSOR_VENTILATION_TEMP_PASSIVE)
-
-    async def set_sensor_ventmode_temperature_passive(self, mode: Literal["auto", "on", "off"]):
-        """Configure sensor based ventilation mode - temperature passive (auto / on / off). Deprecated: use set_property(PROPERTY_SENSOR_VENTILATION_TEMP_PASSIVE, mode)."""
-        await self.set_property(PROPERTY_SENSOR_VENTILATION_TEMP_PASSIVE, mode)
-
-    async def get_sensor_ventmode_humidity_comfort(self):
-        """Get sensor based ventilation mode - humidity comfort (auto / on / off). Deprecated: use get_property(PROPERTY_SENSOR_VENTILATION_HUMIDITY_COMFORT)."""
-        return await self.get_property(PROPERTY_SENSOR_VENTILATION_HUMIDITY_COMFORT)
-
-    async def set_sensor_ventmode_humidity_comfort(self, mode: Literal["auto", "on", "off"]):
-        """Configure sensor based ventilation mode - humidity comfort (auto / on / off). Deprecated: use set_property(PROPERTY_SENSOR_VENTILATION_HUMIDITY_COMFORT, mode)."""
-        await self.set_property(PROPERTY_SENSOR_VENTILATION_HUMIDITY_COMFORT, mode)
-
-    async def get_sensor_ventmode_humidity_protection(self):
-        """Get sensor based ventilation mode - humidity protection (auto / on / off). Deprecated: use get_property(PROPERTY_SENSOR_VENTILATION_HUMIDITY_PROTECTION)."""
-        return await self.get_property(PROPERTY_SENSOR_VENTILATION_HUMIDITY_PROTECTION)
-
-    async def set_sensor_ventmode_humidity_protection(self, mode: Literal["auto", "on", "off"]):
-        """Configure sensor based ventilation mode - humidity protection (auto / on / off). Deprecated: use set_property(PROPERTY_SENSOR_VENTILATION_HUMIDITY_PROTECTION, mode)."""
-        await self.set_property(PROPERTY_SENSOR_VENTILATION_HUMIDITY_PROTECTION, mode)
 
     async def clear_errors(self):
         """Clear the errors."""
