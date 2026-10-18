@@ -44,6 +44,10 @@ from aiocomfoconnect.util import bytearray_to_bits, bytestring, encode_pdo_value
 
 _LOGGER = logging.getLogger(__name__)
 
+# How long the reconnect loop waits before it connects again after the connection was lost, and after a failed attempt.
+RECONNECT_DELAY = 1
+RECONNECT_RETRY_DELAY = 5
+
 # The size in bytes and the signedness of the numeric property types.
 NUMERIC_PROPERTY_TYPES = {
     PdoType.TYPE_CN_UINT8: (1, False),
@@ -194,24 +198,24 @@ class ComfoConnect(Bridge):
                 break
 
             except AioComfoConnectTimeout:
-                _LOGGER.warning("Connection timeout, retrying in 5 seconds...")
-                await asyncio.sleep(5)
+                _LOGGER.warning("Connection timeout, retrying in %s seconds...", RECONNECT_RETRY_DELAY)
+                await asyncio.sleep(RECONNECT_RETRY_DELAY)
 
             except AioComfoConnectNotReachable as exc:
-                _LOGGER.warning("%s. Retrying in 5 seconds...", exc)
-                await asyncio.sleep(5)
+                _LOGGER.warning("%s. Retrying in %s seconds...", exc, RECONNECT_RETRY_DELAY)
+                await asyncio.sleep(RECONNECT_RETRY_DELAY)
 
             except VentilationUnitNotFoundException as exc:
-                _LOGGER.warning("%s, retrying in 5 seconds...", exc)
-                await asyncio.sleep(5)
+                _LOGGER.warning("%s, retrying in %s seconds...", exc, RECONNECT_RETRY_DELAY)
+                await asyncio.sleep(RECONNECT_RETRY_DELAY)
 
             except AioComfoConnectNotConnected:
                 _LOGGER.info("Disconnected from bridge, reconnecting...")
-                await asyncio.sleep(1)
+                await asyncio.sleep(RECONNECT_DELAY)
 
             except Exception as exc:  # pylint: disable=broad-exception-caught
                 _LOGGER.error("Unexpected error in reconnect loop: %s", exc, exc_info=True)
-                await asyncio.sleep(5)
+                await asyncio.sleep(RECONNECT_RETRY_DELAY)
 
             finally:
                 # Clean up the connection before reconnecting, also when it already ended by itself.

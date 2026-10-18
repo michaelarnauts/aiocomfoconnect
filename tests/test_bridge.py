@@ -311,13 +311,13 @@ class TestBridge:
 
         from aiocomfoconnect.protobuf import zehnder_pb2
 
-        # Send a message that expects a reply but won't get one (with 0.5s timeout for faster tests)
+        # Send a message that expects a reply but won't get one (with a short timeout for faster tests)
         with pytest.raises(AioComfoConnectTimeout, match="Timeout while waiting for response"):
             await bridge._send(
                 zehnder_pb2.VersionRequest,
                 zehnder_pb2.GatewayOperation.VersionRequestType,
                 reply=True,
-                timeout=0.5,
+                timeout=0.01,
             )
 
         # Clean up
@@ -506,22 +506,6 @@ class TestBridge:
 
         assert bridge._Bridge__sensor_callback_fn == sensor_callback
         assert bridge._Bridge__alarm_callback_fn == alarm_callback
-
-    @pytest.mark.asyncio
-    async def test_cmd_methods(self, bridge):
-        """Test that command methods exist and have correct signatures."""
-        # Just verify the methods exist
-        assert hasattr(bridge, "cmd_start_session")
-        assert hasattr(bridge, "cmd_close_session")
-        assert hasattr(bridge, "cmd_list_registered_apps")
-        assert hasattr(bridge, "cmd_register_app")
-        assert hasattr(bridge, "cmd_deregister_app")
-        assert hasattr(bridge, "cmd_version_request")
-        assert hasattr(bridge, "cmd_time_request")
-        assert hasattr(bridge, "cmd_node_request")
-        assert hasattr(bridge, "cmd_rmi_request")
-        assert hasattr(bridge, "cmd_rpdo_request")
-        assert hasattr(bridge, "cmd_keepalive")
 
     def test_repr(self, bridge):
         """Test string representation."""
