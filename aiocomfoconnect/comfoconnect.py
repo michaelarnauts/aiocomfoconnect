@@ -599,9 +599,9 @@ class ComfoConnect(Bridge):
     async def set_boost(self, mode: bool, timeout=3600):
         """Activate boost mode."""
         if mode:
-            await self.cmd_rmi_request(bytestring([0x84, UNIT_SCHEDULE, SUBUNIT_01, 0x06, 0x00, 0x00, 0x00, 0x00, timeout.to_bytes(4, "little", signed=True), 0x03]))
+            await self.set_timer(SCHEDULE_PRESET, TIMER_BOOST, 0x03, timeout)
         else:
-            await self.cmd_rmi_request(bytes([0x85, UNIT_SCHEDULE, SUBUNIT_01, 0x06]))
+            await self.cancel_timer(SCHEDULE_PRESET, TIMER_BOOST)
 
     async def get_away(self):
         """Get away mode."""
@@ -610,9 +610,9 @@ class ComfoConnect(Bridge):
     async def set_away(self, mode: bool, timeout=3600):
         """Activate away mode."""
         if mode:
-            await self.cmd_rmi_request(bytestring([0x84, UNIT_SCHEDULE, SUBUNIT_01, 0x0B, 0x00, 0x00, 0x00, 0x00, timeout.to_bytes(4, "little", signed=True), 0x00]))
+            await self.set_timer(SCHEDULE_PRESET, TIMER_AWAY, 0x00, timeout)
         else:
-            await self.cmd_rmi_request(bytes([0x85, UNIT_SCHEDULE, SUBUNIT_01, 0x0B]))
+            await self.cancel_timer(SCHEDULE_PRESET, TIMER_AWAY)
 
     async def get_comfocool_mode(self):
         """Get the current comfocool mode."""
