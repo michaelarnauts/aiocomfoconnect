@@ -173,14 +173,14 @@ unit yet.
 | 801  | CN_INT16  | ?? T10ROOMTEMPERATURE                            | 0.0                                                                                                              |
 | 802  | CN_INT16  | ComfoCool Condensor Temperature                  | 0.0                                                                                                              |
 | 803  | CN_INT16  | ?? T23SUPPLYAIRTEMPERATURE                       | 0.0                                                                                                              |
-| 1024 | CN_UINT16 |                                                  |                                                                                                                  |
-| 1025 | CN_UINT16 |                                                  |                                                                                                                  |
-| 1026 | CN_UINT16 |                                                  |                                                                                                                  |
-| 1027 | CN_UINT16 |                                                  |                                                                                                                  |
-| 1028 | CN_UINT16 |                                                  |                                                                                                                  |
-| 1029 | CN_UINT16 |                                                  |                                                                                                                  |
-| 1030 | CN_UINT16 |                                                  |                                                                                                                  |
-| 1031 | CN_UINT16 |                                                  |                                                                                                                  |
+| 1024 | CN_UINT16 | CO2 Sensor 1: CO2 level                          | value in ppm, of the 1st CO2 sensor (productId `0x0A`) in zone 1 by node id, seen on a unit                      |
+| 1025 | CN_UINT16 | CO2 Sensor 2: CO2 level                          | value in ppm, of the 2nd CO2 sensor (productId `0x0A`) in zone 1 by node id, seen on a unit                      |
+| 1026 | CN_UINT16 | CO2 Sensor 3: CO2 level                          | value in ppm, of the 3rd CO2 sensor (productId `0x0A`) in zone 1 by node id, from the app                        |
+| 1027 | CN_UINT16 | CO2 Sensor 4: CO2 level                          | value in ppm, of the 4th CO2 sensor (productId `0x0A`) in zone 1 by node id, from the app                        |
+| 1028 | CN_UINT16 | CO2 Sensor 5: CO2 level                          | value in ppm, of the 5th CO2 sensor (productId `0x0A`) in zone 1 by node id, from the app                        |
+| 1029 | CN_UINT16 | CO2 Sensor 6: CO2 level                          | value in ppm, of the 6th CO2 sensor (productId `0x0A`) in zone 1 by node id, from the app                        |
+| 1030 | CN_UINT16 | CO2 Sensor 7: CO2 level                          | value in ppm, of the 7th CO2 sensor (productId `0x0A`) in zone 1 by node id, from the app                        |
+| 1031 | CN_UINT16 | CO2 Sensor 8: CO2 level                          | value in ppm, of the 8th CO2 sensor (productId `0x0A`) in zone 1 by node id, from the app                        |
 | 1056 | CN_INT16  |                                                  |                                                                                                                  |
 | 1124 | CN_INT16  |                                                  |                                                                                                                  |
 | 1125 | CN_INT16  |                                                  |                                                                                                                  |
