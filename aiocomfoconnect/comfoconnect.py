@@ -59,6 +59,8 @@ RECONNECT_RETRY_DELAY = 5
 # How long it waits when the bridge closed our session, or when another app has the only session that old firmware
 # allows. We never take the session over, so this is how often we check whether the other app is gone.
 RECONNECT_SESSION_CLOSED_DELAY = 60
+# How many seconds the connection may be idle before we check that the bridge still answers.
+HEARTBEAT_INTERVAL = 30
 
 # The settings of the speed, bypass and temperature profile timers. The index is the value of the timer.
 SPEEDS = (VentilationSpeed.AWAY, VentilationSpeed.LOW, VentilationSpeed.MEDIUM, VentilationSpeed.HIGH)
@@ -89,13 +91,13 @@ class ComfoConnect(Bridge):
         sensor_delay=5,
         connect_timeout=30,
         bridge_type: int = 0,
-        heartbeat_interval: Optional[float] = None,
+        heartbeat_interval: Optional[float] = HEARTBEAT_INTERVAL,
         connection_state_callback: Optional[Callable[[str], None]] = None,
     ):
         """Initialize the ComfoConnect class.
 
-        With a heartbeat_interval, we ask the bridge for its time when we received nothing for that many seconds, and
-        reconnect when it doesn't answer. This detects a bridge that stopped answering without closing the connection.
+        When we received nothing for heartbeat_interval seconds, we ask the bridge for its time, and reconnect when it
+        doesn't answer. This detects a bridge that stopped answering without closing the connection. None disables it.
 
         The connection_state_callback is called with a ConnectionState when the state of the session changes.
         """
