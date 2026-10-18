@@ -39,10 +39,12 @@ from aiocomfoconnect.const import (
 )
 from aiocomfoconnect.exceptions import (
     AioComfoConnectNotConnected,
+    AioComfoConnectSessionClosed,
     AioComfoConnectTimeout,
     ComfoClimeNotFoundException,
     ComfoConnectError,
     ComfoConnectNotAllowed,
+    ComfoConnectOtherSession,
 )
 from aiocomfoconnect.properties import Property, PropertyConstraints
 from aiocomfoconnect.sensors import Sensor
@@ -53,6 +55,9 @@ _LOGGER = logging.getLogger(__name__)
 # How long the reconnect loop waits before it connects again after the connection was lost, and after a failed attempt.
 RECONNECT_DELAY = 1
 RECONNECT_RETRY_DELAY = 5
+# How long it waits when the bridge closed our session, or when another app has the only session that old firmware
+# allows. We never take the session over, so this is how often we check whether the other app is gone.
+RECONNECT_SESSION_CLOSED_DELAY = 60
 
 # The size in bytes and the signedness of the numeric property types.
 NUMERIC_PROPERTY_TYPES = {
@@ -176,7 +181,9 @@ class ComfoConnect(Bridge):
         await super().connect(uuid)
         _LOGGER.info("Connected to bridge %s", self.host)
 
-        await self.cmd_start_session(True)
+        # Don't take over the session of another app. Bridges allow several sessions; old firmware that allows only one
+        # refuses ours with OTHER_SESSION while the other app has it, and we try again later.
+        await self.cmd_start_session()
 
         # The bridge announces its nodes right after the session starts, but ask again
         # so we don't depend on that. Wait for the ventilation unit before we allow any
@@ -205,6 +212,10 @@ class ComfoConnect(Bridge):
                 _LOGGER.info("Disconnected from bridge, reconnecting...")
                 self._set_connection_state(ConnectionState.DISCONNECTED)
                 delay = RECONNECT_DELAY
+                read_task = self._read_task
+                if read_task.done() and not read_task.cancelled() and isinstance(read_task.exception(), AioComfoConnectSessionClosed):
+                    _LOGGER.info("The bridge closed our session. Reconnecting in %s seconds...", RECONNECT_SESSION_CLOSED_DELAY)
+                    delay = RECONNECT_SESSION_CLOSED_DELAY
                 while True:
                     # Clean up the connection before reconnecting, also when it already ended by itself.
                     await super().disconnect()
@@ -217,6 +228,9 @@ class ComfoConnect(Bridge):
                         _LOGGER.error("Not allowed to connect (not registered?): %s", exc)
                         self._set_connection_state(ConnectionState.NOT_ALLOWED)
                         return
+                    except ComfoConnectOtherSession:
+                        _LOGGER.info("Another app has the session. Retrying in %s seconds...", RECONNECT_SESSION_CLOSED_DELAY)
+                        delay = RECONNECT_SESSION_CLOSED_DELAY
                     except Exception as exc:  # pylint: disable=broad-exception-caught
                         _LOGGER.warning("Could not reconnect: %r. Retrying in %s seconds...", exc, RECONNECT_RETRY_DELAY)
                         delay = RECONNECT_RETRY_DELAY

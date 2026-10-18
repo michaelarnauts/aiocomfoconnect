@@ -5,14 +5,17 @@ import socket
 
 import pytest
 
+from aiocomfoconnect import comfoconnect as comfoconnect_module
 from aiocomfoconnect.bridge import Bridge
 from aiocomfoconnect.const import ERRORS, ConnectionState, ProductId
 from aiocomfoconnect.exceptions import (
     AioComfoConnectNotConnected,
     AioComfoConnectNotReachable,
+    AioComfoConnectSessionClosed,
     AioComfoConnectTimeout,
     ComfoConnectBadRequest,
     ComfoConnectNotAllowed,
+    ComfoConnectOtherSession,
     ComfoConnectRmiError,
     VentilationUnitNotFoundException,
 )
@@ -61,7 +64,7 @@ class TestConnect:
 
         assert client.is_connected()
         assert client.ventilation_node_id == 1
-        assert [msg.takeover for msg in fake_bridge.received(GO.StartSessionRequestType)] == [True]
+        assert [msg.takeover for msg in fake_bridge.received(GO.StartSessionRequestType)] == [False]
         assert len(fake_bridge.received(GO.CnNodeRequestType)) == 1
         assert not client._reconnect_task.done()
 
@@ -117,7 +120,7 @@ class TestConnect:
 
     @pytest.mark.parametrize(
         ("session_result", "error"),
-        [(GO.NOT_ALLOWED, ComfoConnectNotAllowed), (GO.BAD_REQUEST, ComfoConnectBadRequest)],
+        [(GO.NOT_ALLOWED, ComfoConnectNotAllowed), (GO.BAD_REQUEST, ComfoConnectBadRequest), (GO.OTHER_SESSION, ComfoConnectOtherSession)],
     )
     async def test_connect_error(self, fake_bridge, make_client, session_result, error):
         """connect() raises the error of the bridge right away, without retrying."""
@@ -327,6 +330,43 @@ class TestReconnect:
         assert set(client._sensors) == {276, 277}
         assert client.is_connected()
         assert fake_bridge.connections == 2
+
+
+class TestOtherApps:
+    """Sharing the bridge with another app, like the official app."""
+
+    async def test_session_closed_by_bridge(self, fake_bridge, make_client, monkeypatch):
+        """When the bridge closes the session (another app took it over), the client waits longer before it reconnects."""
+        monkeypatch.setattr(comfoconnect_module, "RECONNECT_SESSION_CLOSED_DELAY", 0.2)
+        client = make_client()
+        await client.connect(LOCAL_UUID)
+        read_task = client._read_task
+
+        fake_bridge.close_session()
+        await asyncio.wait([read_task], timeout=1)
+        assert isinstance(read_task.exception(), AioComfoConnectSessionClosed)
+        await asyncio.sleep(0.1)
+        assert fake_bridge.connections == 1
+
+        await fake_bridge.wait_for(lambda: fake_bridge.received(GO.CnNodeRequestType, 2))
+        await fake_bridge.wait_for(client.is_connected)
+
+    async def test_other_session(self, fake_bridge, make_client, monkeypatch):
+        """While another app has the only session (old firmware), the client waits longer between attempts."""
+        monkeypatch.setattr(comfoconnect_module, "RECONNECT_SESSION_CLOSED_DELAY", 0.2)
+        client = make_client()
+        await client.connect(LOCAL_UUID)
+
+        fake_bridge.session_result = GO.OTHER_SESSION
+        fake_bridge.drop()
+        await fake_bridge.wait_for(lambda: fake_bridge.received(GO.StartSessionRequestType, 2))
+        await asyncio.sleep(0.1)
+        assert fake_bridge.connections == 2
+
+        fake_bridge.session_result = GO.OK
+        await fake_bridge.wait_for(lambda: fake_bridge.received(GO.CnNodeRequestType, 3))
+        await fake_bridge.wait_for(client.is_connected)
+        assert [msg.takeover for msg in fake_bridge.received(GO.StartSessionRequestType)] == [False, False, False]
 
 
 class TestConnectionState:

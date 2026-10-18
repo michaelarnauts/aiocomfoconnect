@@ -46,6 +46,10 @@ class AioComfoConnectNotConnected(Exception):
     """An error occurred because the bridge is not connected."""
 
 
+class AioComfoConnectSessionClosed(AioComfoConnectNotConnected):
+    """The bridge closed the session, for example because another app took it over."""
+
+
 class AioComfoConnectTimeout(Exception):
     """An error occurred because the bridge didn't reply in time."""
 
