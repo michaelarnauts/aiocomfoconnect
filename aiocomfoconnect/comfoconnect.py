@@ -93,7 +93,6 @@ class ComfoConnect(Bridge):
         self,
         host: str,
         uuid: str,
-        loop=None,
         sensor_callback=None,
         alarm_callback=None,
         sensor_delay=5,
@@ -109,7 +108,7 @@ class ComfoConnect(Bridge):
 
         The connection_state_callback is called with a ConnectionState when the state of the session changes.
         """
-        super().__init__(host, uuid, loop, bridge_type)
+        super().__init__(host, uuid, bridge_type)
 
         self.set_sensor_callback(self._sensor_callback)  # Set the callback to our _sensor_callback method, so we can proces the callbacks.
         self.set_alarm_callback(self._alarm_callback)  # Set the callback to our _alarm_callback method, so we can proces the callbacks.
@@ -130,7 +129,7 @@ class ComfoConnect(Bridge):
 
     def _hold_sensor(self, sensor_id: int):
         """Hold a sensor, so we don't emit the invalid values that the bridge sends when we subscribe to it."""
-        if not self.sensor_delay or self._loop is None:
+        if not self.sensor_delay:
             return
 
         # Restart the hold if the sensor is already held.
@@ -140,7 +139,7 @@ class ComfoConnect(Bridge):
 
         _LOGGER.debug("Holding sensor %s for %s second(s)", sensor_id, self.sensor_delay)
         self._sensors_values[sensor_id] = None
-        self._sensor_holds[sensor_id] = self._loop.call_later(self.sensor_delay, self._unhold_sensor, sensor_id)
+        self._sensor_holds[sensor_id] = asyncio.get_running_loop().call_later(self.sensor_delay, self._unhold_sensor, sensor_id)
 
     def _unhold_sensor(self, sensor_id: int):
         """Unhold a sensor."""

@@ -445,7 +445,7 @@ class TestBridge:
 
         assert bridge._event_bus is not None
         assert bridge._reference is not None
-        pending_future = bridge._loop.create_future()
+        pending_future = asyncio.get_running_loop().create_future()
         test_reference = next(bridge._reference)
         bridge._event_bus.add_listener(test_reference, pending_future)
 
