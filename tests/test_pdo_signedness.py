@@ -37,6 +37,10 @@ def feed_notification(bridge, pdid, data):
         (PdoType.TYPE_CN_INT8, b"\x80", -128),
         (PdoType.TYPE_CN_INT16, b"\xec\xff", -20),
         (PdoType.TYPE_CN_INT64, b"\xff" * 8, -1),
+        (PdoType.TYPE_CN_BOOL, b"\xff", -1),
+        (PdoType.TYPE_CN_STRING, b"\xff\xff", -1),
+        (PdoType.TYPE_CN_TIME, b"\x00\x00\x00\x80", -2147483648),
+        (PdoType.TYPE_CN_VERSION, b"\xff\xff\xff\xff", -1),
         (None, b"\x80", -128),
     ],
 )

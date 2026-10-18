@@ -13,6 +13,7 @@ from aiocomfoconnect import Bridge
 from aiocomfoconnect.const import (
     ERRORS,
     ERRORS_140,
+    NUMERIC_PROPERTY_TYPES,
     SUBUNIT_01,
     UNIT_ERROR,
     UNIT_SCHEDULE,
@@ -58,16 +59,6 @@ RECONNECT_RETRY_DELAY = 5
 # How long it waits when the bridge closed our session, or when another app has the only session that old firmware
 # allows. We never take the session over, so this is how often we check whether the other app is gone.
 RECONNECT_SESSION_CLOSED_DELAY = 60
-
-# The size in bytes and the signedness of the numeric property types.
-NUMERIC_PROPERTY_TYPES = {
-    PdoType.TYPE_CN_UINT8: (1, False),
-    PdoType.TYPE_CN_UINT16: (2, False),
-    PdoType.TYPE_CN_UINT32: (4, False),
-    PdoType.TYPE_CN_INT8: (1, True),
-    PdoType.TYPE_CN_INT16: (2, True),
-    PdoType.TYPE_CN_INT64: (8, True),
-}
 
 # The settings of the speed, bypass and temperature profile timers. The index is the value of the timer.
 SPEEDS = (VentilationSpeed.AWAY, VentilationSpeed.LOW, VentilationSpeed.MEDIUM, VentilationSpeed.HIGH)
@@ -342,10 +333,9 @@ class ComfoConnect(Bridge):
 
         if property_type == PdoType.TYPE_CN_STRING:
             return result.message.decode("utf-8").rstrip("\x00")
-        if property_type in [PdoType.TYPE_CN_INT8, PdoType.TYPE_CN_INT16, PdoType.TYPE_CN_INT64]:
-            return int.from_bytes(result.message, byteorder="little", signed=True)
-        if property_type in [PdoType.TYPE_CN_UINT8, PdoType.TYPE_CN_UINT16, PdoType.TYPE_CN_UINT32]:
-            return int.from_bytes(result.message, byteorder="little", signed=False)
+        if property_type in NUMERIC_PROPERTY_TYPES:
+            _, signed = NUMERIC_PROPERTY_TYPES[property_type]
+            return int.from_bytes(result.message, byteorder="little", signed=signed)
         if property_type == PdoType.TYPE_CN_BOOL:
             return bool(result.message[0])
 

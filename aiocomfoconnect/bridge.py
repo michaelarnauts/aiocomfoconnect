@@ -14,7 +14,7 @@ from typing import Awaitable, Callable, Dict, Iterator, Optional, Set
 from google.protobuf.message import DecodeError
 from google.protobuf.message import Message as ProtobufMessage
 
-from .const import VENTILATION_UNIT_PRODUCT_IDS, GatewayType, ProductId, PdoType
+from .const import NUMERIC_PROPERTY_TYPES, VENTILATION_UNIT_PRODUCT_IDS, GatewayType, ProductId
 from .exceptions import (
     AioComfoConnectNotConnected,
     AioComfoConnectNotReachable,
@@ -529,7 +529,8 @@ class Bridge:
         if message.cmd.type == zehnder_pb2.GatewayOperation.CnRpdoNotificationType:
             if self.__sensor_callback_fn:
                 pdo_type = self._sensor_pdo_types.get(message.msg.pdid)
-                signed = pdo_type not in (PdoType.TYPE_CN_UINT8, PdoType.TYPE_CN_UINT16, PdoType.TYPE_CN_UINT32)
+                # A PDO without a known numeric type is decoded as signed.
+                signed = pdo_type not in NUMERIC_PROPERTY_TYPES or NUMERIC_PROPERTY_TYPES[pdo_type][1]
                 self.__sensor_callback_fn(message.msg.pdid, int.from_bytes(message.msg.data, byteorder="little", signed=signed))
             else:
                 _LOGGER.info("Unhandled CnRpdoNotificationType since no callback is registered.")

@@ -63,6 +63,16 @@ class PdoType:
     TYPE_CN_VERSION = 0x11
 
 
+# The size in bytes and the signedness of the numeric PDO and property types.
+NUMERIC_PROPERTY_TYPES = {
+    PdoType.TYPE_CN_UINT8: (1, False),
+    PdoType.TYPE_CN_UINT16: (2, False),
+    PdoType.TYPE_CN_UINT32: (4, False),
+    PdoType.TYPE_CN_INT8: (1, True),
+    PdoType.TYPE_CN_INT16: (2, True),
+    PdoType.TYPE_CN_INT64: (8, True),
+}
+
 # ComfoConnect Units
 UNIT_NODE = 0x01
 UNIT_COMFOBUS = 0x02
