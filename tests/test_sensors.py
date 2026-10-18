@@ -11,10 +11,10 @@ SENSOR_SNAPSHOT = [
     (18, "Changing filters", None, PdoType.TYPE_CN_UINT8, (0, 1, 75)),
     (33, "sensor_33", None, PdoType.TYPE_CN_UINT8, (0, 1, 75)),
     (37, "sensor_37", None, PdoType.TYPE_CN_UINT8, (0, 1, 75)),
-    (49, "Operating Mode", None, PdoType.TYPE_CN_UINT8, (0, 1, 75)),
+    (49, "Operating Mode (preset timer)", None, PdoType.TYPE_CN_UINT8, (0, 1, 75)),
     (53, "sensor_53", None, PdoType.TYPE_CN_UINT8, (0, 1, 75)),
-    (54, "Supply Fan Mode", None, PdoType.TYPE_CN_UINT8, (0, 1, 75)),
-    (55, "Exhaust Fan Mode", None, PdoType.TYPE_CN_UINT8, (0, 1, 75)),
+    (54, "Supply Fan Mode (active timer)", None, PdoType.TYPE_CN_UINT8, (0, 1, 75)),
+    (55, "Exhaust Fan Mode (active timer)", None, PdoType.TYPE_CN_UINT8, (0, 1, 75)),
     (56, "Operating Mode", None, PdoType.TYPE_CN_UINT8, (0, 1, 75)),
     (65, "Fan Speed", None, PdoType.TYPE_CN_UINT8, (0, 1, 75)),
     (66, "Bypass Activation State", None, PdoType.TYPE_CN_UINT8, (0, 1, 75)),
@@ -52,7 +52,7 @@ SENSOR_SNAPSHOT = [
     (217, "Avoided Cooling Power Usage (year)", "kWh", PdoType.TYPE_CN_UINT16, (0, 1, 75)),
     (218, "Avoided Cooling Power Usage (total)", "kWh", PdoType.TYPE_CN_UINT16, (0, 1, 75)),
     (219, "sensor_219", None, PdoType.TYPE_CN_UINT16, (0, 1, 75)),
-    (220, "Outdoor Air Temperature (?)", None, PdoType.TYPE_CN_INT16, (0.0, 0.1, 7.5)),
+    (220, "Preheated Outdoor Air Temperature (?)", "°C", PdoType.TYPE_CN_INT16, (0.0, 0.1, 7.5)),
     (221, "Supply Air Temperature", "°C", PdoType.TYPE_CN_INT16, (0.0, 0.1, 7.5)),
     (224, "Device Airflow Unit", None, PdoType.TYPE_CN_UINT8, (0, "kgph", 75)),
     (225, "Sensor based ventilation mode", None, PdoType.TYPE_CN_UINT8, (0, 1, 75)),
@@ -75,8 +75,8 @@ SENSOR_SNAPSHOT = [
     (337, "sensor_337", None, PdoType.TYPE_CN_UINT32, (0, 1, 75)),
     (338, "Bypass Override", None, PdoType.TYPE_CN_UINT32, (0, 1, 75)),
     (341, "sensor_341", None, PdoType.TYPE_CN_UINT32, (0, 1, 75)),
-    (342, "Supply Fan Mode", None, PdoType.TYPE_CN_UINT32, (0, 1, 75)),
-    (343, "Exhaust Fan Mode", None, PdoType.TYPE_CN_UINT32, (0, 1, 75)),
+    (342, "Supply Fan Mode (running timers)", None, PdoType.TYPE_CN_UINT32, (0, 1, 75)),
+    (343, "Exhaust Fan Mode (running timers)", None, PdoType.TYPE_CN_UINT32, (0, 1, 75)),
     (369, "Analog Input 1", "V", PdoType.TYPE_CN_UINT8, (0.0, 0.1, 7.5)),
     (370, "Analog Input 2", "V", PdoType.TYPE_CN_UINT8, (0.0, 0.1, 7.5)),
     (371, "Analog Input 3", "V", PdoType.TYPE_CN_UINT8, (0.0, 0.1, 7.5)),
@@ -86,13 +86,13 @@ SENSOR_SNAPSHOT = [
     (400, "sensor_400", None, PdoType.TYPE_CN_INT16, (0.0, 0.1, 7.5)),
     (401, "Postheater State", "%", PdoType.TYPE_CN_UINT8, (0, 1, 75)),
     (402, "Postheater Present", None, PdoType.TYPE_CN_BOOL, (False, True, True)),
-    (416, "ComfoFond Outdoor Air Temperature", None, PdoType.TYPE_CN_INT16, (0.0, 0.1, 7.5)),
-    (417, "ComfoFond Ground Temperature", None, PdoType.TYPE_CN_INT16, (0.0, 0.1, 7.5)),
-    (418, "ComfoFond GHE State Percentage", None, PdoType.TYPE_CN_UINT8, (0, 1, 75)),
+    (416, "ComfoFond Outdoor Air Temperature", "°C", PdoType.TYPE_CN_INT16, (0.0, 0.1, 7.5)),
+    (417, "ComfoFond Ground Temperature", "°C", PdoType.TYPE_CN_INT16, (0.0, 0.1, 7.5)),
+    (418, "ComfoFond GHE State Percentage", "%", PdoType.TYPE_CN_UINT8, (0, 1, 75)),
     (419, "ComfoFond GHE Present", None, PdoType.TYPE_CN_BOOL, (False, True, True)),
     (784, "ComfoCool State", None, PdoType.TYPE_CN_UINT8, (0, 1, 75)),
-    (785, "sensor_785", None, PdoType.TYPE_CN_BOOL, (0, 1, 75)),
-    (802, "ComfoCool Condensor Temperature", None, PdoType.TYPE_CN_INT16, (0.0, 0.1, 7.5)),
+    (785, "sensor_785", None, PdoType.TYPE_CN_BOOL, (False, True, True)),
+    (802, "ComfoCool Condensor Temperature", "°C", PdoType.TYPE_CN_INT16, (0.0, 0.1, 7.5)),
     (4145, "ComfoClime TPMA Temperature", "°C", PdoType.TYPE_CN_INT16, (0.0, 0.1, 7.5)),
     (4148, "ComfoClime Target Temperature", "°C", PdoType.TYPE_CN_INT16, (0.0, 0.1, 7.5)),
     (4149, "ComfoClime Device Mode", None, PdoType.TYPE_CN_UINT8, (0, 1, 75)),
@@ -127,3 +127,21 @@ def test_sensors_snapshot():
 def test_sensor_id_is_its_key(sensor_id):
     """Each sensor is stored under its own id."""
     assert SENSORS[sensor_id].id == sensor_id
+
+
+def test_sensor_names_are_unique():
+    """No two sensors share a name."""
+    names = [sensor.name for sensor in SENSORS.values()]
+    assert len(names) == len(set(names))
+
+
+@pytest.mark.parametrize("sensor", [sensor for sensor in SENSORS.values() if sensor.type == PdoType.TYPE_CN_BOOL], ids=lambda sensor: str(sensor.id))
+def test_bool_sensors_return_a_bool(sensor):
+    """A BOOL sensor returns True or False."""
+    assert sensor.value_fn(1) is True
+
+
+@pytest.mark.parametrize("sensor", [sensor for sensor in SENSORS.values() if sensor.value_fn and sensor.value_fn(75) == 7.5], ids=lambda sensor: str(sensor.id))
+def test_scaled_sensors_have_a_unit(sensor):
+    """A sensor that is scaled by 10 has a unit, unless we don't know what it measures."""
+    assert sensor.unit is not None or sensor.name.startswith("sensor_")
