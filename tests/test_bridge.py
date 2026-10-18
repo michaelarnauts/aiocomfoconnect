@@ -723,7 +723,7 @@ class TestBridgeRegister:
 
         assert result is False
         mock_open.assert_called_once_with(LOCAL_UUID)
-        mock_session.assert_called_once_with(True)
+        mock_session.assert_called_once_with()
         mock_register.assert_not_called()
 
     @pytest.mark.asyncio
@@ -759,7 +759,7 @@ class TestBridgeRegister:
             with pytest.raises(ComfoConnectNotAllowed):
                 await lanc_bridge.register(LOCAL_UUID, "test-app", 9999)
 
-        mock_session.assert_called_once_with(True)  # checked once, not retried after failed register
+        mock_session.assert_called_once_with()  # checked once, not retried after failed register
         mock_register.assert_called_once_with(LOCAL_UUID, "test-app", 9999)
 
     @pytest.mark.asyncio
@@ -784,7 +784,7 @@ class TestBridgeRegister:
         assert result is True
         mock_open.assert_called_once_with(LOCAL_UUID)
         mock_register.assert_called_once_with(LOCAL_UUID, "test-app", 1234)
-        mock_session.assert_called_once_with(True)
+        mock_session.assert_called_once_with()
         assert call_order == ["register", "session"]
 
     @pytest.mark.asyncio

@@ -18,6 +18,7 @@ from .const import VENTILATION_UNIT_PRODUCT_IDS, GatewayType, ProductId, PdoType
 from .exceptions import (
     AioComfoConnectNotConnected,
     AioComfoConnectNotReachable,
+    AioComfoConnectSessionClosed,
     AioComfoConnectTimeout,
     ComfoConnectBadRequest,
     ComfoConnectError,
@@ -193,12 +194,12 @@ class Bridge:
         if self.bridge_type != GATEWAY_TYPE_PRO:
             # LAN C: check whether we are already registered by starting a session.
             try:
-                await self.cmd_start_session(True)
+                await self.cmd_start_session()
                 return False  # Already registered; session is now active.
             except ComfoConnectNotAllowed:
                 pass  # Not registered yet; fall through to register below.
         await self.cmd_register_app(uuid, name, pin)
-        await self.cmd_start_session(True)
+        await self.cmd_start_session()
         return True
 
     async def _open_connection(self, uuid: str):
@@ -515,7 +516,7 @@ class Bridge:
         # pylint: disable=no-member
         if message.cmd.type == zehnder_pb2.GatewayOperation.CloseSessionRequestType:
             _LOGGER.info("The Bridge has asked us to close the connection.")
-            raise AioComfoConnectNotConnected("Bridge requested connection close")
+            raise AioComfoConnectSessionClosed("Bridge requested connection close")
 
         try:
             self._dispatch_message(message)

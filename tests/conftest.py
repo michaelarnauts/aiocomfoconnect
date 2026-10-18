@@ -18,6 +18,7 @@ def short_delays(monkeypatch):
     monkeypatch.setattr(bridge_module, "NODE_DISCOVERY_TIMEOUT", 0.05)
     monkeypatch.setattr(comfoconnect_module, "RECONNECT_DELAY", 0.01)
     monkeypatch.setattr(comfoconnect_module, "RECONNECT_RETRY_DELAY", 0.01)
+    monkeypatch.setattr(comfoconnect_module, "RECONNECT_SESSION_CLOSED_DELAY", 0.01)
 
 
 @pytest.fixture
