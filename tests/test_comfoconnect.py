@@ -18,11 +18,14 @@ from aiocomfoconnect.properties import (
     PROPERTY_CLIME_AUTO_SEASON,
     PROPERTY_CLIME_HEATPUMP_STANDBY,
     PROPERTY_CLIME_SEASON,
+    PROPERTY_FIRMWARE_VERSION,
     PROPERTY_CLIME_TEMPERATURE_PROFILE,
     PROPERTY_FLOW_AWAY,
     PROPERTY_FLOW_HIGH,
     PROPERTY_FLOW_LOW,
     PROPERTY_FLOW_MEDIUM,
+    PROPERTY_PROFILE_TEMPERATURE_NORMAL,
+    PROPERTY_PROFILE_TEMPERATURE_WARM,
     PROPERTY_RMOT_HEATING_THRESHOLD,
     PROPERTY_SENSOR_VENTILATION_HUMIDITY_COMFORT,
     PROPERTY_SENSOR_VENTILATION_HUMIDITY_PROTECTION,
@@ -30,6 +33,7 @@ from aiocomfoconnect.properties import (
     PROPERTY_SERIAL_NUMBER,
     PROPERTY_TEMPERATURE_PROFILE_MODE,
     Property,
+    PropertyConstraints,
 )
 from aiocomfoconnect.protobuf import zehnder_pb2
 from tests.conftest import create_sensor, node_notification
@@ -189,7 +193,8 @@ class TestComfoConnect:
             (PdoType.TYPE_CN_INT64, b"\xff" * 8, -1),
             (PdoType.TYPE_CN_STRING, b"ComfoAir Q\x00\x00", "ComfoAir Q"),
             (PdoType.TYPE_CN_TIME, b"\x01\x02", b"\x01\x02"),
-            (PdoType.TYPE_CN_VERSION, b"\x01\x02", b"\x01\x02"),
+            (PdoType.TYPE_CN_VERSION, bytes.fromhex("001010c0"), "R1.4.0"),
+            (PdoType.TYPE_CN_VERSION, bytes.fromhex("01300040"), "D0.12.1"),
             (None, b"\x01\x02", b"\x01\x02"),
         ],
     )
@@ -223,7 +228,7 @@ class TestComfoConnect:
         with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=mock_response)) as mock_rmi:
             constraints = await comfoconnect.get_property_constraints(PROPERTY_RMOT_COOLING_THRESHOLD)
 
-            assert constraints == PropertyConstraints(value=160, minimum=150, maximum=400, step=10)
+            assert constraints == PropertyConstraints(value=16.0, minimum=15.0, maximum=40.0, step=1.0)
             mock_rmi.assert_called_once_with(bytes([0x01, 0x1D, 0x01, 0x70, 0x03]), node_id=None)
 
     @pytest.mark.asyncio
@@ -301,7 +306,7 @@ class TestComfoConnect:
         node_notification(comfoconnect, node_id=2, product_id=ProductId.COMFOCLIME)
 
         with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=Mock(message=b"\xd7\x00"))) as mock_rmi:
-            assert await comfoconnect.get_property(PROPERTY_CLIME_HEATING_COMFORT_TEMP) == 215
+            assert await comfoconnect.get_property(PROPERTY_CLIME_HEATING_COMFORT_TEMP) == 21.5
 
             mock_rmi.assert_called_once_with(bytes([0x01, 0x16, 0x01, 0x10, 0x09]), node_id=2)
 
@@ -312,7 +317,7 @@ class TestComfoConnect:
         node_notification(comfoconnect, node_id=2, product_id=ProductId.COMFOCLIME)
 
         with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock()) as mock_rmi:
-            await comfoconnect.set_property(PROPERTY_CLIME_HEATING_COMFORT_TEMP, 215)
+            await comfoconnect.set_property(PROPERTY_CLIME_HEATING_COMFORT_TEMP, 21.5)
 
             mock_rmi.assert_called_once_with(bytes([0x03, 0x16, 0x01, 0x09, 0xD7, 0x00]), node_id=2)
 
@@ -399,6 +404,65 @@ class TestComfoConnect:
 
         mock_rmi.assert_not_called()
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "message, expected",
+        [
+            # Read from a ComfoAir Q: the min and max aren't multiples of the step.
+            ("e600e6002101 0a00", PropertyConstraints(value=23.0, minimum=23.0, maximum=28.9, step=1.0)),
+            ("d200bd00e900 0a00", PropertyConstraints(value=21.0, minimum=18.9, maximum=23.3, step=1.0)),
+            ("be00b200be00 0a00", PropertyConstraints(value=19.0, minimum=17.8, maximum=19.0, step=1.0)),
+        ],
+    )
+    async def test_get_property_constraints_scaled(self, comfoconnect, message, expected):
+        """The constraints of a scaled property are scaled too, without float noise."""
+        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=Mock(message=bytes.fromhex(message)))):
+            assert await comfoconnect.get_property_constraints(PROPERTY_PROFILE_TEMPERATURE_WARM) == expected
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("raw, value", [(215, 21.5), (189, 18.9), (-15, -1.5), (0, 0.0), (233, 23.3)])
+    async def test_scaled_property(self, comfoconnect, raw, value):
+        """A scaled property is read as raw * scale, and written as round(value / scale)."""
+        node_notification(comfoconnect, node_id=1, product_id=ProductId.COMFOAIRQ)
+
+        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=Mock(message=raw.to_bytes(2, "little", signed=True)))) as mock_rmi:
+            assert await comfoconnect.get_property(PROPERTY_PROFILE_TEMPERATURE_NORMAL) == value
+            await comfoconnect.set_property(PROPERTY_PROFILE_TEMPERATURE_NORMAL, value)
+
+        assert mock_rmi.await_args_list[1].args == (bytes([0x03, 0x1D, 0x01, 0x0B]) + raw.to_bytes(2, "little", signed=True),)
+
+    def test_property_scales(self):
+        """Only the temperatures in tenths of a degree are scaled."""
+        scaled = {name for name in dir(properties) if name.startswith("PROPERTY_") and getattr(properties, name).scale is not None}
+
+        assert scaled == {
+            "PROPERTY_RMOT_HEATING_THRESHOLD",
+            "PROPERTY_RMOT_COOLING_THRESHOLD",
+            "PROPERTY_PROFILE_TEMPERATURE_WARM",
+            "PROPERTY_PROFILE_TEMPERATURE_NORMAL",
+            "PROPERTY_PROFILE_TEMPERATURE_COOL",
+            "PROPERTY_CLIME_HEATING_KNEE_POINT",
+            "PROPERTY_CLIME_COOLING_KNEE_POINT",
+            "PROPERTY_CLIME_HEATING_COMFORT_TEMP",
+            "PROPERTY_CLIME_COOLING_COMFORT_TEMP",
+            "PROPERTY_CLIME_COOLING_TEMP_LIMIT",
+            "PROPERTY_CLIME_HEATING_DELTA",
+            "PROPERTY_CLIME_MANUAL_TARGET_TEMP",
+            "PROPERTY_CLIME_HEATPUMP_MAX_TEMP",
+            "PROPERTY_CLIME_HEATPUMP_MIN_TEMP",
+        }
+        assert all(getattr(properties, name).scale == 0.1 for name in scaled)
+
+    @pytest.mark.asyncio
+    async def test_get_firmware_version(self, comfoconnect):
+        """The firmware version is decoded to a version string."""
+        node_notification(comfoconnect, node_id=1, product_id=ProductId.COMFOAIRQ)
+
+        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=Mock(message=bytes.fromhex("001010c0")))) as mock_rmi:
+            assert await comfoconnect.get_property(PROPERTY_FIRMWARE_VERSION) == "R1.4.0"
+
+        mock_rmi.assert_called_once_with(bytes([0x01, 0x01, 0x01, 0x10, 0x06]), node_id=None)
+
     def test_property_products(self):
         """The ComfoClime properties live on the ComfoClime, the others on the ventilation unit."""
         clime = {name for name in dir(properties) if name.startswith("PROPERTY_CLIME_")}
@@ -473,7 +537,8 @@ class TestComfoConnect:
         ("set_property", (PROPERTY_FLOW_HIGH, 300), ["03 1e 01 06 2c01"]),
         ("get_property", (PROPERTY_TEMPERATURE_PROFILE_MODE,), ["01 1d 01 10 08"]),
         ("set_property", (PROPERTY_TEMPERATURE_PROFILE_MODE, "fixed"), ["03 1d 01 08 01"]),
-        ("set_property", (PROPERTY_RMOT_HEATING_THRESHOLD, -15), ["03 1d 01 02 f1ff"]),
+        ("set_property", (PROPERTY_RMOT_HEATING_THRESHOLD, -1.5), ["03 1d 01 02 f1ff"]),
+        ("set_property", (PROPERTY_PROFILE_TEMPERATURE_NORMAL, 21.5), ["03 1d 01 0b d700"]),
         ("get_timer", (0x02, 0x01), ["83 15 02 01"]),
         ("set_timer", (0x02, 0x01, 0x01), ["84 15 02 01 00000000 ffffffff 01"]),
         ("set_timer", (0x01, 0x06, 0x03, 600), ["84 15 01 06 00000000 58020000 03"]),
