@@ -216,6 +216,37 @@ class TestReconnect:
         await fake_bridge.wait_for(client.is_connected)
         await roundtrip(client)
 
+    async def test_heartbeat(self, fake_bridge, make_client):
+        """With a heartbeat, the client asks the time while the connection is idle, and keeps the connection."""
+        client = make_client(heartbeat_interval=0.02)
+        await client.connect(LOCAL_UUID)
+
+        await fake_bridge.wait_for(lambda: len(fake_bridge.received(GO.CnTimeRequestType)) >= 3)
+        assert fake_bridge.connections == 1
+        assert client.is_connected()
+
+    async def test_heartbeat_reconnects_silent_bridge(self, fake_bridge, make_client):
+        """When the bridge stops answering without closing the connection, the heartbeat closes it and the client reconnects."""
+        client = make_client(heartbeat_interval=0.02)
+        await client.connect(LOCAL_UUID)
+
+        fake_bridge.silent = True
+        await fake_bridge.wait_for(lambda: fake_bridge.received(GO.CnTimeRequestType, 1))
+        fake_bridge.silent = False
+
+        await fake_bridge.wait_for(lambda: fake_bridge.received(GO.CnNodeRequestType, 2))
+        await fake_bridge.wait_for(client.is_connected)
+        await roundtrip(client)
+        assert fake_bridge.connections == 2
+
+    async def test_no_heartbeat_by_default(self, fake_bridge, make_client):
+        """Without a heartbeat, the client doesn't send anything while the connection is idle."""
+        client = make_client()
+        await client.connect(LOCAL_UUID)
+
+        await asyncio.sleep(0.05)
+        assert not fake_bridge.received(GO.CnTimeRequestType)
+
     async def test_disconnect(self, fake_bridge, make_client):
         """disconnect() closes the connection and stops reconnecting."""
         client = make_client()

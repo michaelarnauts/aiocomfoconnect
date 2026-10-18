@@ -6,6 +6,7 @@ import asyncio
 import itertools
 import logging
 import struct
+import time
 from asyncio import StreamReader, StreamWriter
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Dict, Iterator, Optional, Set
@@ -160,6 +161,8 @@ class Bridge:
 
         self._loop: Optional[asyncio.AbstractEventLoop] = loop
         self._read_task = None
+        # The time.monotonic() of the last message we received from the bridge.
+        self._last_received: float = 0
 
     def __repr__(self):
         return f"<Bridge {self.host}, UID={self.uuid}>"
@@ -225,6 +228,7 @@ class Bridge:
 
         self._reference = itertools.count(1)
         self._local_uuid = uuid
+        self._last_received = time.monotonic()
         self._event_bus = EventBus()
 
         # The bridge announces its nodes at the start of every session, so forget what we knew.
@@ -485,6 +489,7 @@ class Bridge:
         """
         try:
             message = await self._read()
+            self._last_received = time.monotonic()
 
         except asyncio.IncompleteReadError as exc:
             _LOGGER.info("The connection was closed.")
