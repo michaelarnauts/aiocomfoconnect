@@ -17,11 +17,11 @@ from aiocomfoconnect.const import (
     SUBUNIT_01,
     UNIT_ERROR,
     UNIT_SCHEDULE,
-    UNIT_TEMPHUMCONTROL,
     UNIT_VENTILATIONCONFIG,
     ComfoCoolMode,
     ConnectionState,
     PdoType,
+    ProductId,
     SCHEDULE_BYPASS,
     SCHEDULE_COMFOCOOL,
     SCHEDULE_EXHAUST_ONLY,
@@ -46,8 +46,15 @@ from aiocomfoconnect.exceptions import (
     ComfoConnectError,
     ComfoConnectNotAllowed,
     ComfoConnectOtherSession,
+    NodeNotFoundException,
 )
-from aiocomfoconnect.properties import Property, PropertyConstraints
+from aiocomfoconnect.properties import (
+    PROPERTY_SENSOR_VENTILATION_HUMIDITY_COMFORT,
+    PROPERTY_SENSOR_VENTILATION_HUMIDITY_PROTECTION,
+    PROPERTY_SENSOR_VENTILATION_TEMP_PASSIVE,
+    Property,
+    PropertyConstraints,
+)
 from aiocomfoconnect.sensors import Sensor
 from aiocomfoconnect.util import bytearray_to_bits, bytestring, encode_pdo_value
 
@@ -64,6 +71,8 @@ RECONNECT_SESSION_CLOSED_DELAY = 60
 SPEEDS = (VentilationSpeed.AWAY, VentilationSpeed.LOW, VentilationSpeed.MEDIUM, VentilationSpeed.HIGH)
 BYPASS_MODES = (VentilationSetting.AUTO, VentilationSetting.ON, VentilationSetting.OFF)
 TEMPERATURE_PROFILES = (VentilationTemperatureProfile.NORMAL, VentilationTemperatureProfile.COOL, VentilationTemperatureProfile.WARM)
+# The settings of the sensor based ventilation mode properties. The index is the value of the property.
+SENSOR_VENTMODES = (VentilationSetting.OFF, VentilationSetting.AUTO, VentilationSetting.ON)
 
 
 @dataclass
@@ -323,9 +332,23 @@ class ComfoConnect(Bridge):
 
         await self.cmd_rpdo_request(sensor.id, sensor.type, timeout=0)
 
+    def _node_id_for(self, prop: Property, node_id: Optional[int] = None) -> Optional[int]:
+        """Return the node id to send a request for the property to: node_id when given, else the first node of its product.
+
+        None means the ventilation unit, that cmd_rmi_request resolves itself.
+        """
+        if node_id is not None or prop.product is None:
+            return node_id
+        if prop.product == ProductId.COMFOCLIME:
+            return self._require_comfoclime_node_id()
+        node_ids = [node.node_id for node in self.nodes.values() if node.product_id == prop.product]
+        if not node_ids:
+            raise NodeNotFoundException(f"The bridge has not announced a node with product id {prop.product}")
+        return min(node_ids)
+
     async def get_property(self, prop: Property, node_id: Optional[int] = None) -> Any:
-        """Get a property and convert to the right type."""
-        return await self.get_single_property(prop.unit, prop.subunit, prop.property_id, prop.property_type, node_id=node_id)
+        """Get a property from the node it lives on (or node_id), and convert it to the right type."""
+        return await self.get_single_property(prop.unit, prop.subunit, prop.property_id, prop.property_type, node_id=self._node_id_for(prop, node_id))
 
     async def get_single_property(self, unit: int, subunit: int, property_id: int, property_type: int = None, node_id: Optional[int] = None) -> Any:
         """Get a property and convert to the right type."""
@@ -348,7 +371,7 @@ class ComfoConnect(Bridge):
         size, signed = NUMERIC_PROPERTY_TYPES[prop.property_type]
 
         # Request the actual value (0x10), the range (0x20) and the step size (0x40) at once.
-        result = await self.cmd_rmi_request(bytes([0x01, prop.unit, prop.subunit, 0x70, prop.property_id]), node_id=node_id)
+        result = await self.cmd_rmi_request(bytes([0x01, prop.unit, prop.subunit, 0x70, prop.property_id]), node_id=self._node_id_for(prop, node_id))
 
         message = bytes(result.message)
         if len(message) != 4 * size:
@@ -362,20 +385,26 @@ class ComfoConnect(Bridge):
 
         return result.message
 
-    async def set_property(self, unit: int, subunit: int, property_id: int, value: int, node_id: Optional[int] = None) -> Any:
-        """Set a property."""
-        result = await self.cmd_rmi_request(bytes([0x03, unit, subunit, property_id, value]), node_id=node_id)
+    async def set_property(self, prop: Property, value: int, *args, node_id: Optional[int] = None) -> Any:
+        """Set a property on the node it lives on (or node_id), encoded for its type.
+
+        Deprecated: the old form set_property(unit, subunit, property_id, value, node_id=None), that writes a single byte,
+        still works.
+        """
+        if not isinstance(prop, Property):
+            unit, subunit, (property_id, value, *args) = prop, value, args
+            prop = Property(unit, subunit, property_id, PdoType.TYPE_CN_UINT8)
+        if args:
+            (node_id,) = args
+
+        message = bytes([0x03, prop.unit, prop.subunit, prop.property_id]) + encode_pdo_value(value, prop.property_type)
+        result = await self.cmd_rmi_request(message, node_id=self._node_id_for(prop, node_id))
 
         return result.message
 
     async def set_property_typed(self, unit: int, subunit: int, property_id: int, value: int, pdo_type: PdoType, node_id: Optional[int] = None) -> Any:
-        """Set a typed property."""
-        value_bytes = encode_pdo_value(value, pdo_type)
-        message_bytes = bytes([0x03, unit, subunit, property_id]) + value_bytes
-
-        result = await self.cmd_rmi_request(message_bytes, node_id=node_id)
-
-        return result.message
+        """Set a typed property. Deprecated: use set_property with a Property."""
+        return await self.set_property(Property(unit, subunit, property_id, pdo_type), value, node_id=node_id)
 
     def _require_comfoclime_node_id(self) -> int:
         """Return the node id of the ComfoClime, or raise when it isn't on the bus."""
@@ -385,19 +414,12 @@ class ComfoConnect(Bridge):
         return node_id
 
     async def get_comfoclime_property(self, prop: Property) -> Any:
-        """Get a property from the ComfoClime node."""
+        """Get a property from the ComfoClime node. Deprecated: use get_property, the ComfoClime properties know their node."""
         return await self.get_property(prop, node_id=self._require_comfoclime_node_id())
 
     async def set_comfoclime_property(self, prop: Property, value: int) -> Any:
-        """Set a property on the ComfoClime node."""
-        return await self.set_property_typed(
-            prop.unit,
-            prop.subunit,
-            prop.property_id,
-            value,
-            prop.property_type,
-            node_id=self._require_comfoclime_node_id(),
-        )
+        """Set a property on the ComfoClime node. Deprecated: use set_property, the ComfoClime properties know their node."""
+        return await self.set_property(prop, value, node_id=self._require_comfoclime_node_id())
 
     def _sensor_callback(self, sensor_id, sensor_value):
         """Callback function for sensor updates."""
@@ -629,89 +651,60 @@ class ComfoConnect(Bridge):
 
         await self.set_timer(SCHEDULE_TEMPERATURE_PROFILE, TIMER_DEFAULT, TEMPERATURE_PROFILES.index(profile), timeout)
 
+    async def _get_sensor_ventmode(self, prop: Property):
+        """Get a sensor based ventilation mode property as a setting."""
+        mode = await self.get_property(prop)
+        if mode not in range(len(SENSOR_VENTMODES)):
+            raise ValueError(f"Invalid mode: {mode}")
+        return SENSOR_VENTMODES[mode]
+
+    async def _set_sensor_ventmode(self, prop: Property, mode: Literal["auto", "on", "off"]):
+        """Set a sensor based ventilation mode property from a setting."""
+        if mode not in SENSOR_VENTMODES:
+            raise ValueError(f"Invalid mode: {mode}")
+        await self.set_property(prop, SENSOR_VENTMODES.index(mode))
+
     async def get_sensor_ventmode_temperature_passive(self):
-        """Get sensor based ventilation mode - temperature passive (auto / on / off)."""
-        result = await self.cmd_rmi_request(bytes([0x01, UNIT_TEMPHUMCONTROL, SUBUNIT_01, 0x10, 0x04]))
-        # 00 = off
-        # 01 = auto
-        # 02 = on
-        mode = int.from_bytes(result.message, "little")
+        """Get sensor based ventilation mode - temperature passive (auto / on / off).
 
-        if mode == 1:
-            return VentilationSetting.AUTO
-        if mode == 2:
-            return VentilationSetting.ON
-        if mode == 0:
-            return VentilationSetting.OFF
-
-        raise ValueError(f"Invalid mode: {mode}")
+        Deprecated: use get_property(PROPERTY_SENSOR_VENTILATION_TEMP_PASSIVE), that returns the raw value (0=off, 1=auto, 2=on).
+        """
+        return await self._get_sensor_ventmode(PROPERTY_SENSOR_VENTILATION_TEMP_PASSIVE)
 
     async def set_sensor_ventmode_temperature_passive(self, mode: Literal["auto", "on", "off"]):
-        """Configure sensor based ventilation mode - temperature passive (auto / on / off)."""
-        if mode == VentilationSetting.AUTO:
-            await self.cmd_rmi_request(bytes([0x03, UNIT_TEMPHUMCONTROL, SUBUNIT_01, 0x04, 0x01]))
-        elif mode == VentilationSetting.ON:
-            await self.cmd_rmi_request(bytes([0x03, UNIT_TEMPHUMCONTROL, SUBUNIT_01, 0x04, 0x02]))
-        elif mode == VentilationSetting.OFF:
-            await self.cmd_rmi_request(bytes([0x03, UNIT_TEMPHUMCONTROL, SUBUNIT_01, 0x04, 0x00]))
-        else:
-            raise ValueError(f"Invalid mode: {mode}")
+        """Configure sensor based ventilation mode - temperature passive (auto / on / off).
+
+        Deprecated: use set_property(PROPERTY_SENSOR_VENTILATION_TEMP_PASSIVE, value) with the raw value (0=off, 1=auto, 2=on).
+        """
+        await self._set_sensor_ventmode(PROPERTY_SENSOR_VENTILATION_TEMP_PASSIVE, mode)
 
     async def get_sensor_ventmode_humidity_comfort(self):
-        """Get sensor based ventilation mode - humidity comfort (auto / on / off)."""
-        result = await self.cmd_rmi_request(bytes([0x01, UNIT_TEMPHUMCONTROL, SUBUNIT_01, 0x10, 0x06]))
-        # 00 = off
-        # 01 = auto
-        # 02 = on
-        mode = int.from_bytes(result.message, "little")
+        """Get sensor based ventilation mode - humidity comfort (auto / on / off).
 
-        if mode == 1:
-            return VentilationSetting.AUTO
-        if mode == 2:
-            return VentilationSetting.ON
-        if mode == 0:
-            return VentilationSetting.OFF
-
-        raise ValueError(f"Invalid mode: {mode}")
+        Deprecated: use get_property(PROPERTY_SENSOR_VENTILATION_HUMIDITY_COMFORT), that returns the raw value (0=off, 1=auto, 2=on).
+        """
+        return await self._get_sensor_ventmode(PROPERTY_SENSOR_VENTILATION_HUMIDITY_COMFORT)
 
     async def set_sensor_ventmode_humidity_comfort(self, mode: Literal["auto", "on", "off"]):
-        """Configure sensor based ventilation mode - humidity comfort (auto / on / off)."""
-        if mode == VentilationSetting.AUTO:
-            await self.cmd_rmi_request(bytes([0x03, UNIT_TEMPHUMCONTROL, SUBUNIT_01, 0x06, 0x01]))
-        elif mode == VentilationSetting.ON:
-            await self.cmd_rmi_request(bytes([0x03, UNIT_TEMPHUMCONTROL, SUBUNIT_01, 0x06, 0x02]))
-        elif mode == VentilationSetting.OFF:
-            await self.cmd_rmi_request(bytes([0x03, UNIT_TEMPHUMCONTROL, SUBUNIT_01, 0x06, 0x00]))
-        else:
-            raise ValueError(f"Invalid mode: {mode}")
+        """Configure sensor based ventilation mode - humidity comfort (auto / on / off).
+
+        Deprecated: use set_property(PROPERTY_SENSOR_VENTILATION_HUMIDITY_COMFORT, value) with the raw value (0=off, 1=auto, 2=on).
+        """
+        await self._set_sensor_ventmode(PROPERTY_SENSOR_VENTILATION_HUMIDITY_COMFORT, mode)
 
     async def get_sensor_ventmode_humidity_protection(self):
-        """Get sensor based ventilation mode - humidity protection (auto / on / off)."""
-        result = await self.cmd_rmi_request(bytes([0x01, UNIT_TEMPHUMCONTROL, SUBUNIT_01, 0x10, 0x07]))
-        # 00 = off
-        # 01 = auto
-        # 02 = on
-        mode = int.from_bytes(result.message, "little")
+        """Get sensor based ventilation mode - humidity protection (auto / on / off).
 
-        if mode == 1:
-            return VentilationSetting.AUTO
-        if mode == 2:
-            return VentilationSetting.ON
-        if mode == 0:
-            return VentilationSetting.OFF
-
-        raise ValueError(f"Invalid mode: {mode}")
+        Deprecated: use get_property(PROPERTY_SENSOR_VENTILATION_HUMIDITY_PROTECTION), that returns the raw value (0=off, 1=auto, 2=on).
+        """
+        return await self._get_sensor_ventmode(PROPERTY_SENSOR_VENTILATION_HUMIDITY_PROTECTION)
 
     async def set_sensor_ventmode_humidity_protection(self, mode: Literal["auto", "on", "off"]):
-        """Configure sensor based ventilation mode - humidity protection (auto / on / off)."""
-        if mode == VentilationSetting.AUTO:
-            await self.cmd_rmi_request(bytes([0x03, UNIT_TEMPHUMCONTROL, SUBUNIT_01, 0x07, 0x01]))
-        elif mode == VentilationSetting.ON:
-            await self.cmd_rmi_request(bytes([0x03, UNIT_TEMPHUMCONTROL, SUBUNIT_01, 0x07, 0x02]))
-        elif mode == VentilationSetting.OFF:
-            await self.cmd_rmi_request(bytes([0x03, UNIT_TEMPHUMCONTROL, SUBUNIT_01, 0x07, 0x00]))
-        else:
-            raise ValueError(f"Invalid mode: {mode}")
+        """Configure sensor based ventilation mode - humidity protection (auto / on / off).
+
+        Deprecated: use set_property(PROPERTY_SENSOR_VENTILATION_HUMIDITY_PROTECTION, value) with the raw value (0=off, 1=auto, 2=on).
+        """
+        await self._set_sensor_ventmode(PROPERTY_SENSOR_VENTILATION_HUMIDITY_PROTECTION, mode)
 
     async def clear_errors(self):
         """Clear the errors."""

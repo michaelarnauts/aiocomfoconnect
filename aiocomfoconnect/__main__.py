@@ -199,8 +199,9 @@ async def run_get_property(args):
 async def run_set_property(args):
     """Set a property and print the value that is read back."""
     async with connected(args) as comfoconnect:
-        await comfoconnect.set_property_typed(args.unit, args.subunit, args.property_id, args.value, args.property_type, node_id=args.node_id)
-        print(await comfoconnect.get_property(Property(args.unit, args.subunit, args.property_id, args.property_type), args.node_id))
+        prop = Property(args.unit, args.subunit, args.property_id, args.property_type)
+        await comfoconnect.set_property(prop, args.value, node_id=args.node_id)
+        print(await comfoconnect.get_property(prop, args.node_id))
 
 
 async def run_list_nodes(args):

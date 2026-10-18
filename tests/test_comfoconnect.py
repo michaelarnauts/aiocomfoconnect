@@ -6,12 +6,22 @@ import pytest
 
 from aiocomfoconnect.comfoconnect import ComfoConnect, TimerEntry
 from aiocomfoconnect.const import ERRORS_BASE, SCHEDULE_PRESET, TIMER_BOOST, PdoType, ProductId
+from aiocomfoconnect import properties
 from aiocomfoconnect.exceptions import (
     AioComfoConnectNotConnected,
     ComfoClimeNotFoundException,
+    NodeNotFoundException,
     VentilationUnitNotFoundException,
 )
-from aiocomfoconnect.properties import PROPERTY_CLIME_HEATPUMP_STANDBY, PROPERTY_CLIME_HEATING_COMFORT_TEMP
+from aiocomfoconnect.properties import (
+    PROPERTY_CLIME_HEATING_COMFORT_TEMP,
+    PROPERTY_CLIME_HEATPUMP_STANDBY,
+    PROPERTY_CLIME_SEASON,
+    PROPERTY_RMOT_HEATING_THRESHOLD,
+    PROPERTY_SERIAL_NUMBER,
+    PROPERTY_TEMPERATURE_PROFILE_MODE,
+    Property,
+)
 from aiocomfoconnect.protobuf import zehnder_pb2
 from tests.conftest import create_sensor, node_notification
 
@@ -319,6 +329,79 @@ class TestComfoConnect:
 
             mock_rmi.assert_called_once_with(bytes([0x03, 0x16, 0x01, 0x15, 0x01]), node_id=11)
 
+    @pytest.mark.asyncio
+    async def test_get_property_on_comfoclime(self, comfoconnect):
+        """A ComfoClime property is read from the ComfoClime node, without passing its node id."""
+        node_notification(comfoconnect, node_id=1, product_id=ProductId.COMFOAIRQ)
+        node_notification(comfoconnect, node_id=2, product_id=ProductId.COMFOCLIME)
+
+        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=Mock(message=b"\xd7\x00"))) as mock_rmi:
+            assert await comfoconnect.get_property(PROPERTY_CLIME_HEATING_COMFORT_TEMP) == 215
+
+            mock_rmi.assert_called_once_with(bytes([0x01, 0x16, 0x01, 0x10, 0x09]), node_id=2)
+
+    @pytest.mark.asyncio
+    async def test_set_property_on_comfoclime(self, comfoconnect):
+        """A ComfoClime property is written to the ComfoClime node, without passing its node id."""
+        node_notification(comfoconnect, node_id=1, product_id=ProductId.COMFOAIRQ)
+        node_notification(comfoconnect, node_id=2, product_id=ProductId.COMFOCLIME)
+
+        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock()) as mock_rmi:
+            await comfoconnect.set_property(PROPERTY_CLIME_HEATING_COMFORT_TEMP, 215)
+
+            mock_rmi.assert_called_once_with(bytes([0x03, 0x16, 0x01, 0x09, 0xD7, 0x00]), node_id=2)
+
+    @pytest.mark.asyncio
+    async def test_property_node_id_overrides_product(self, comfoconnect):
+        """An explicit node id wins over the node of the property, e.g. to read the serial number of the ComfoClime."""
+        node_notification(comfoconnect, node_id=1, product_id=ProductId.COMFOAIRQ)
+        node_notification(comfoconnect, node_id=2, product_id=ProductId.COMFOCLIME)
+
+        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=Mock(message=b"\x01"))) as mock_rmi:
+            await comfoconnect.get_property(PROPERTY_SERIAL_NUMBER, node_id=2)
+            await comfoconnect.set_property(PROPERTY_TEMPERATURE_PROFILE_MODE, 1, node_id=5)
+            await comfoconnect.set_property(PROPERTY_TEMPERATURE_PROFILE_MODE, 1, 6)
+
+        assert [rmi_call.kwargs for rmi_call in mock_rmi.await_args_list] == [{"node_id": 2}, {"node_id": 5}, {"node_id": 6}]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "call",
+        [
+            lambda ccb: ccb.get_property(PROPERTY_CLIME_SEASON),
+            lambda ccb: ccb.set_property(PROPERTY_CLIME_SEASON, 1),
+            lambda ccb: ccb.get_property_constraints(PROPERTY_CLIME_HEATING_COMFORT_TEMP),
+        ],
+    )
+    async def test_property_on_missing_comfoclime(self, comfoconnect, call):
+        """Addressing a ComfoClime property without a ComfoClime on the bus raises, and sends nothing."""
+        node_notification(comfoconnect, node_id=1, product_id=ProductId.COMFOAIRQ)
+
+        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock()) as mock_rmi:
+            with pytest.raises(ComfoClimeNotFoundException):
+                await call(comfoconnect)
+            with pytest.raises(NodeNotFoundException):
+                await call(comfoconnect)
+
+            mock_rmi.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_property_on_missing_node(self, comfoconnect):
+        """A property of another product that isn't on the bus raises a NodeNotFoundException."""
+        node_notification(comfoconnect, node_id=1, product_id=ProductId.COMFOAIRQ)
+
+        with pytest.raises(NodeNotFoundException):
+            await comfoconnect.get_property(Property(0x01, 0x01, 0x04, PdoType.TYPE_CN_STRING, product=ProductId.COMFOSENSE))
+
+    def test_property_products(self):
+        """The ComfoClime properties live on the ComfoClime, the others on the ventilation unit."""
+        clime = {name for name in dir(properties) if name.startswith("PROPERTY_CLIME_")}
+        others = {name for name in dir(properties) if name.startswith("PROPERTY_") and name not in clime}
+
+        assert clime and others
+        assert all(getattr(properties, name).product == ProductId.COMFOCLIME for name in clime)
+        assert all(getattr(properties, name).product is None for name in others)
+
 
 # The RMI requests that the high-level commands send. A schedule request (0x84) is the command, the unit, the subunit, the
 # schedule item, four zero bytes, a signed 32-bit little-endian field with the timeout in seconds for the commands that take
@@ -374,6 +457,11 @@ class TestComfoConnect:
         ("set_sensor_ventmode_humidity_protection", ("on",), ["03 1d 01 07 02"]),
         ("set_sensor_ventmode_humidity_protection", ("off",), ["03 1d 01 07 00"]),
         ("clear_errors", (), ["82 03 01"]),
+        ("get_property", (PROPERTY_TEMPERATURE_PROFILE_MODE,), ["01 1d 01 10 08"]),
+        ("set_property", (PROPERTY_TEMPERATURE_PROFILE_MODE, 1), ["03 1d 01 08 01"]),
+        ("set_property", (PROPERTY_RMOT_HEATING_THRESHOLD, -15), ["03 1d 01 02 f1ff"]),
+        ("set_property", (0x1D, 0x01, 0x08, 0x01), ["03 1d 01 08 01"]),  # The old form, that writes a single byte.
+        ("set_property_typed", (0x1D, 0x01, 0x02, -15, PdoType.TYPE_CN_INT16), ["03 1d 01 02 f1ff"]),
         ("get_timer", (0x02, 0x01), ["83 15 02 01"]),
         ("set_timer", (0x02, 0x01, 0x01), ["84 15 02 01 00000000 ffffffff 01"]),
         ("set_timer", (0x01, 0x06, 0x03, 600), ["84 15 01 06 00000000 58020000 03"]),
@@ -384,7 +472,7 @@ async def test_command_rmi_bytes(method, args, expected):
     """Every high-level command sends exactly these RMI requests."""
     comfoconnect = ComfoConnect("127.0.0.1", LOCAL_UUID)
 
-    def reply(request):
+    def reply(request, node_id=None):  # pylint: disable=unused-argument
         # An active timer for the schedule "get timer" requests, a single byte for the rest.
         return Mock(message=bytes.fromhex("01 00000000 ffffffff ffffffff 01") if request[0] == 0x83 else b"\x01")
 
