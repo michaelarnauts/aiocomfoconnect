@@ -385,18 +385,8 @@ class ComfoConnect(Bridge):
 
         return result.message
 
-    async def set_property(self, prop: Property, value: int, *args, node_id: Optional[int] = None) -> Any:
-        """Set a property on the node it lives on (or node_id), encoded for its type.
-
-        Deprecated: the old form set_property(unit, subunit, property_id, value, node_id=None), that writes a single byte,
-        still works.
-        """
-        if not isinstance(prop, Property):
-            unit, subunit, (property_id, value, *args) = prop, value, args
-            prop = Property(unit, subunit, property_id, PdoType.TYPE_CN_UINT8)
-        if args:
-            (node_id,) = args
-
+    async def set_property(self, prop: Property, value: int, node_id: Optional[int] = None) -> Any:
+        """Set a property on the node it lives on (or node_id), encoded for its type."""
         message = bytes([0x03, prop.unit, prop.subunit, prop.property_id]) + encode_pdo_value(value, prop.property_type)
         result = await self.cmd_rmi_request(message, node_id=self._node_id_for(prop, node_id))
 

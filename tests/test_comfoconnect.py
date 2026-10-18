@@ -460,7 +460,6 @@ class TestComfoConnect:
         ("get_property", (PROPERTY_TEMPERATURE_PROFILE_MODE,), ["01 1d 01 10 08"]),
         ("set_property", (PROPERTY_TEMPERATURE_PROFILE_MODE, 1), ["03 1d 01 08 01"]),
         ("set_property", (PROPERTY_RMOT_HEATING_THRESHOLD, -15), ["03 1d 01 02 f1ff"]),
-        ("set_property", (0x1D, 0x01, 0x08, 0x01), ["03 1d 01 08 01"]),  # The old form, that writes a single byte.
         ("set_property_typed", (0x1D, 0x01, 0x02, -15, PdoType.TYPE_CN_INT16), ["03 1d 01 02 f1ff"]),
         ("get_timer", (0x02, 0x01), ["83 15 02 01"]),
         ("set_timer", (0x02, 0x01, 0x01), ["84 15 02 01 00000000 ffffffff 01"]),
