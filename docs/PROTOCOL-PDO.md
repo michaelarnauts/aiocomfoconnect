@@ -25,14 +25,15 @@ decoded them as `-1`. Signed PDO types still preserve negative values.
 # Overview of known sensors
 
 Most pdids from 33 to 90 and from 321 to 346 belong to a schedule; see [Schedule PDOs](#schedule-pdos).
-A † marks a meaning or a value that is derived from that pattern and the official app, but has not been seen on a
-unit yet.
+A † marks a meaning, a type or a value that comes from the official ComfoControl app (or from the schedule pattern),
+but has not been seen on a unit yet. Many of these pdids are only defined in the app and never shown, so their name is
+all we know: the description then follows that name.
 
 | pdid | type      | description                                      | examples                                                                                                         |
 |------|-----------|--------------------------------------------------|------------------------------------------------------------------------------------------------------------------|
 | 16   | CN_UINT8  | Device state                                     | 0=init, 1=normal, 2=filterwizard, 3=commissioning, 4=supplierfactory, 5=zehnderfactory, 6=standby, 7=away, 8=DFC |
-| 17   | CN_UINT8  | ?? ROOM_T10                                      |                                                                                                                  |
-| 18   | CN_UINT8  | Changing filters                                 | 1=active, 2=changing filter                                                                                      |
+| 17   | CN_BOOL   | Alarm flag of the ventilation unit               | 1 while a filter alarm was active (seen on a unit)                                                               |
+| 18   | CN_UINT8  | Application mode (changing filters)              | 1=normal (seen as active), 2=filter wizard (seen while changing filters); 0=init, 3=commissioning wizard, 4=supplier factory, 5=Zehnder factory, 6=recovery, 7=service print, 8=component check † |
 | 33   | CN_UINT8  | Preset: active schedule entry †                  | idle: 1                                                                                                          |
 | 34   | CN_UINT8  | Bypass: active schedule entry †                  | idle: 0                                                                                                          |
 | 35   | CN_UINT8  | Temperature profile: active schedule entry †     | idle: 0                                                                                                          |
@@ -73,13 +74,15 @@ unit yet.
 | 88   | CN_UINT32 | Manual mode: remaining                           | 4294967295=no timer or no end, else countdown in seconds †                                                       |
 | 89   | CN_UINT32 | Hood: remaining                                  | 4294967295=no timer or no end, else countdown in seconds †                                                       |
 | 90   | CN_UINT32 | Postheater: remaining                            | 4294967295=no timer or no end, else countdown in seconds †                                                       |
-| 96   | CN_BOOL   |                                                  |                                                                                                                  |
-| 115  | CN_BOOL   | ?? EXHAUST_F12                                   |                                                                                                                  |
-| 116  | CN_BOOL   | ?? SUPPLY_F22                                    |                                                                                                                  |
+| 96   | CN_BOOL   | Valves: standby and safe †                       |                                                                                                                  |
+| 97   | CN_UINT16 | Valve position: extract air valve (V11) †        | value in 0.1 % (1000 -> 100 %) †; 0 seen on a unit                                                               |
+| 98   | CN_UINT16 | Valve position: bypass/preheater valve (V21) †   | value in 0.1 % (1000 -> 100 %) †; 0 seen on a unit                                                               |
+| 115  | CN_BOOL   | Fans: exhaust fan (F12) enabled †                |                                                                                                                  |
+| 116  | CN_BOOL   | Fans: supply fan (F22) enabled †                 |                                                                                                                  |
 | 117  | CN_UINT8  | Fans: Exhaust fan duty                           | value in % (28%)                                                                                                 |
 | 118  | CN_UINT8  | Fans: Supply fan duty                            | value in % (29%)                                                                                                 |
-| 119  | CN_UINT16 | Fans: Exhaust fan flow                           | value in m³/h (110 m³/h)                                                                                         |
-| 120  | CN_UINT16 | Fans: Supply fan flow                            | value in m³/h (105 m³/h                                                                                          |
+| 119  | CN_UINT16 | Fans: Exhaust fan flow                           | value in m³/h (110 m³/h); the app shows it in the airflow unit of PDO 224 without converting it †                |
+| 120  | CN_UINT16 | Fans: Supply fan flow                            | value in m³/h (105 m³/h); the app shows it in the airflow unit of PDO 224 without converting it †                |
 | 121  | CN_UINT16 | Fans: Exhaust fan speed                          | value in rpm (1069 rpm)                                                                                          |
 | 122  | CN_UINT16 | Fans: Supply fan speed                           | value in rpm (1113 rpm)                                                                                          |
 | 128  | CN_UINT16 | Power Consumption: Current Ventilation           | value in Watt (15 W)                                                                                             |
@@ -88,6 +91,9 @@ unit yet.
 | 144  | CN_UINT16 | Preheater Power Consumption: Total year-to-date  | value in kWh (23 kWh)                                                                                            |
 | 145  | CN_UINT16 | Preheater Power Consumption: Total from start    | value in kWh (23 kWh)                                                                                            |
 | 146  | CN_UINT16 | Preheater Power Consumption: Current Ventilation | value in Watt (15 W)                                                                                             |
+| 160  | CN_BOOL   | Display: LCD operational †                       |                                                                                                                  |
+| 161  | CN_UINT8  | Display: button states †                         |                                                                                                                  |
+| 162  | CN_UINT8  | Display: door state †                            |                                                                                                                  |
 | 176  | CN_UINT8  | RF Pairing Mode                                  | 0=not running, 1=running, 2=done, 3=failed, 4=aborted                                                            |
 | 192  | CN_UINT16 | Days left before filters must be replaced        | value in days (130 days)                                                                                         |
 | 208  | CN_UINT8  | Device Temperature Unit                          | 0=celsius, 1=farenheit                                                                                           |
@@ -101,28 +107,33 @@ unit yet.
 | 216  | CN_UINT16 | Avoided Cooling: Avoided actual                  | value in Watt                                                                                                    |
 | 217  | CN_UINT16 | Avoided Cooling: Avoided year-to-date            | value in kWh (477 kWh)                                                                                           |
 | 218  | CN_UINT16 | Avoided Cooling: Avoided total                   | value in kWh (477 kWh)                                                                                           |
-| 219  | CN_UINT16 |                                                  | 0                                                                                                                |
-| 220  | CN_INT16  | ?? Outdoor Air Temperature (Preheated)           | value in °C (75 -> 7.5 °C)                                                                                       |
-| 221  | CN_INT16  | ?? Temperature: Supply Air (PostHeated)          | value in °C (170 -> 17.0 °C)                                                                                     |
-| 224  | CN_UINT8  | Device Airflow Unit                              | 1=kg/h, 2=l/s, 3=m³/h                                                                                            |
+| 219  | CN_UINT16 | Frost protection: preheater power †              | value in Watt; the app only shows it when a preheater is present † (0)                                           |
+| 220  | CN_INT16  | Temperature: Outdoor Air, as used by the unit    | value in °C (99 -> 9.9 °C), seen equal to 276 and 277 with the preheater off; the official app shows this one as the outdoor temperature † |
+| 221  | CN_INT16  | Temperature: Supply Air (after the postheater)   | value in °C (203 -> 20.3 °C, seen as the supply temperature); the official app shows this one as the supply temperature, and as the temperature after the postheater † |
+| 222  | CN_BOOL   | ComfoCool: on request †                          |                                                                                                                  |
+| 224  | CN_UINT8  | Device Airflow Unit                              | 1=kg/h, 2=l/s, 3=m³/h (3 seen on a unit)                                                                         |
 | 225  | CN_UINT8  | Sensor based ventilation mode                    | 0=disabled, 1=active, 2=overruling                                                                               |
-| 226  | CN_UINT16 | Fan Speed (modulated)                            | 0, 100, 200, 300 (0-300 when modulating and PDO 225=2)                                                           |
+| 226  | CN_UINT16 | Fan Speed (modulated)                            | 0, 100, 200, 300 (0-300 when modulating and PDO 225=2); the app calls it the required preset †                   |
 | 227  | CN_UINT8  | Bypass state                                     | value in % (100% = fully open)                                                                                   |
-| 228  | CN_UINT8  | ?? FrostProtectionUnbalance                      | 0                                                                                                                |
-| 229  | CN_BOOL   |                                                  | 1                                                                                                                |
-| 230  | CN_INT64  | Ventilation Constraints Bitset                   | See calculate_airflow_constraints()                                                                              |
-| 256  | CN_UINT8  |                                                  | 1=basic, 2=advanced, 3=installer                                                                                 |
-| 257  | CN_UINT8  |                                                  |                                                                                                                  |
+| 228  | CN_UINT8  | Frost protection unbalance                       | value in % † (0)                                                                                                 |
+| 229  | CN_BOOL   | Manual suppress flag †                           | 1; meaning unknown                                                                                               |
+| 230  | CN_INT64  | Ventilation Constraints Bitset                   | See [Ventilation constraints](#ventilation-constraints-pdo-230) and calculate_airflow_constraints()              |
+| 256  | CN_UINT8  | User level of the menu †                         | 0=basic, 1=advanced, 2=installer in the app †; this table used to say 1=basic, 2=advanced, 3=installer. A unit read 2, which doesn't settle it |
+| 257  | CN_UINT8  | Commissioning wizard step †                      | see [Commissioning wizard steps](#commissioning-wizard-steps-pdo-257)                                            |
+| 273  | CN_INT16  | Temperature: Room (T10) †                        | value in °C (215 -> 21.5 °C) †; a unit without a room sensor reads -100 (-10.0 °C), so that means "no sensor"    |
 | 274  | CN_INT16  | Temperature: Extract Air                         | value in °C (171 -> 17.1 °C)                                                                                     |
 | 275  | CN_INT16  | Temperature: Exhaust Air                         | value in °C (86 -> 8.6 °C)                                                                                       |
 | 276  | CN_INT16  | Temperature: Outdoor Air                         | value in °C (60 -> 6.0 °C)                                                                                       |
-| 277  | CN_INT16  | ?? Temperature: Outdoor Air (Preheated?)         | value in °C (60 -> 6.0 °C)                                                                                       |
+| 277  | CN_INT16  | Temperature: Outdoor Air after the preheater (T21) † | value in °C (60 -> 6.0 °C)                                                                                       |
 | 278  | CN_INT16  | Temperature: before the Postheater               | value in °C (184 -> 18.4 °C), the temperature after the postheater is 221                                        |
+| 289  | CN_UINT8  | Humidity: Room (H10) †                           | value in % †; a unit without a room sensor reads 50                                                              |
 | 290  | CN_UINT8  | Humidity: Extract Air                            | value in % (49%)                                                                                                 |
 | 291  | CN_UINT8  | Humidity: Exhaust Air                            | value in % (87%)                                                                                                 |
 | 292  | CN_UINT8  | Humidity: Outdoor Air                            | value in % (67%)                                                                                                 |
 | 293  | CN_UINT8  | Humidity: Preheated Outdoor Air                  | value in % (67%)                                                                                                 |
 | 294  | CN_UINT8  | Humidity: Supply Air                             | value in % (35%)                                                                                                 |
+| 305  | CN_UINT16 | Exhaust pressure sensor (P12): mass flow †       |                                                                                                                  |
+| 306  | CN_UINT16 | Supply pressure sensor (P22): mass flow †        |                                                                                                                  |
 | 321  | CN_UINT16 | Preset: enabled schedule entries (bit set) †     | idle: 3 (bits 0 and 1)                                                                                           |
 | 322  | CN_UINT16 | Bypass: enabled schedule entries (bit set) †     | idle: 1 (bit 0)                                                                                                  |
 | 323  | CN_UINT16 | Temperature profile: enabled schedule entries (bit set) † | idle: 1 (bit 0)                                                                                                  |
@@ -147,32 +158,33 @@ unit yet.
 | 370  | CN_UINT8  | Analog Input 0-10V 2                             | 0                                                                                                                |
 | 371  | CN_UINT8  | Analog Input 0-10V 3                             | 0                                                                                                                |
 | 372  | CN_UINT8  | Analog Input 0-10V 4                             | 0                                                                                                                |
-| 384  | CN_INT16  |                                                  | 0.0                                                                                                              |
-| 386  | CN_BOOL   |                                                  | 0                                                                                                                |
-| 400  | CN_INT16  | ?? Temperature: after the Postheater             | value in °C, the same as 221 in every sample on a unit with a postheater                                         |
+| 384  | CN_INT16  | ComfoHood: temperature †                         | value in °C † (0.0)                                                                                              |
+| 385  | CN_UINT16 | ComfoHood: valve position †                      | value in 0.1 % †                                                                                                 |
+| 386  | CN_BOOL   | ComfoHood present †                              | 0=absent, 1=present † (0)                                                                                        |
+| 400  | CN_INT16  | Postheater: temperature of the postheater        | value in °C, the same as 221 in every sample on a unit with a postheater                                         |
 | 401  | CN_UINT8  | Postheater State                                 | value in % (0-100)                                                                                               |
 | 402  | CN_BOOL   | Postheater Present                               | 0=absent, 1=present                                                                                              |
 | 416  | CN_INT16  | ComfoFond Outdoor Air Temperature                | -40.0                                                                                                            |
 | 417  | CN_INT16  | ComfoFond Ground Temperature                     | 10.0                                                                                                             |
 | 418  | CN_UINT8  | ComfoFond GHE State Percentage                   | 0                                                                                                                |
 | 419  | CN_BOOL   | ComfoFond GHE Present                            | 0=absent, 1=present                                                                                              |
-| 513  | CN_UINT16 |                                                  |                                                                                                                  |
-| 514  | CN_UINT16 |                                                  |                                                                                                                  |
-| 515  | CN_UINT16 |                                                  |                                                                                                                  |
-| 516  | CN_UINT16 |                                                  |                                                                                                                  |
-| 517  | CN_UINT8  |                                                  |                                                                                                                  |
-| 518  | CN_UINT8  |                                                  |                                                                                                                  |
-| 519  | CN_UINT8  |                                                  |                                                                                                                  |
-| 520  | CN_UINT8  |                                                  |                                                                                                                  |
-| 521  | CN_INT16  |                                                  |                                                                                                                  |
-| 522  | CN_INT16  |                                                  |                                                                                                                  |
-| 523  | CN_INT16  |                                                  |                                                                                                                  |
-| 524  | CN_UINT8  |                                                  |                                                                                                                  |
-| 784  | CN_UINT8  | ComfoCool State                                  | 0=off, 1=on (0)                                                                                                  |
-| 785  | CN_BOOL   | ?? ComfoCoolCompressor State                     | 0                                                                                                                |
-| 801  | CN_INT16  | ?? T10ROOMTEMPERATURE                            | 0.0                                                                                                              |
-| 802  | CN_INT16  | ComfoCool Condensor Temperature                  | 0.0                                                                                                              |
-| 803  | CN_INT16  | ?? T23SUPPLYAIRTEMPERATURE                       | 0.0                                                                                                              |
+| 513  | CN_UINT16 | Option Box / connection board: raw analog input 1 † |                                                                                                                  |
+| 514  | CN_UINT16 | Option Box: raw analog input 2 †                 |                                                                                                                  |
+| 515  | CN_UINT16 | Option Box: raw analog input 3 †                 |                                                                                                                  |
+| 516  | CN_UINT16 | Option Box: raw analog input 4 †                 |                                                                                                                  |
+| 517  | CN_UINT8  | Boost switch †                                   | 0=off, 1=on †                                                                                                    |
+| 518  | CN_UINT8  | Standby switch †                                 | 0=off, 1=on †                                                                                                    |
+| 519  | CN_UINT8  | External filter switch †                         | 0=off, 1=on †                                                                                                    |
+| 520  | CN_UINT8  | ComfoHood switch †                               | 0=off, 1=on †                                                                                                    |
+| 521  | CN_INT16  | ComfoHood: raw temperature †                     |                                                                                                                  |
+| 522  | CN_INT16  | ComfoFond: raw outdoor temperature †             |                                                                                                                  |
+| 523  | CN_INT16  | Postheater: raw temperature †                    |                                                                                                                  |
+| 524  | CN_UINT8  | Fire alarm switch (connection board) †           | 0=off, 1=on †                                                                                                    |
+| 784  | CN_UINT8  | ComfoCool State (compressor)                     | 0=off, 1=on (0)                                                                                                  |
+| 785  | CN_UINT8  | ComfoCool: flow request †                        | value in % † (0)                                                                                                 |
+| 801  | CN_INT16  | ComfoCool: room temperature (T10) †              | value in °C † (0.0)                                                                                              |
+| 802  | CN_INT16  | ComfoCool Condensor Temperature (T13)            | value in °C † (0.0)                                                                                              |
+| 803  | CN_INT16  | ComfoCool: supply air temperature (T23) †        | value in °C † (0.0)                                                                                              |
 | 1024 | CN_UINT16 | CO2 Sensor 1: CO2 level                          | value in ppm, of the 1st CO2 sensor (productId `0x0A`) in zone 1 by node id, seen on a unit                      |
 | 1025 | CN_UINT16 | CO2 Sensor 2: CO2 level                          | value in ppm, of the 2nd CO2 sensor (productId `0x0A`) in zone 1 by node id, seen on a unit                      |
 | 1026 | CN_UINT16 | CO2 Sensor 3: CO2 level                          | value in ppm, of the 3rd CO2 sensor (productId `0x0A`) in zone 1 by node id, from the app                        |
@@ -181,27 +193,87 @@ unit yet.
 | 1029 | CN_UINT16 | CO2 Sensor 6: CO2 level                          | value in ppm, of the 6th CO2 sensor (productId `0x0A`) in zone 1 by node id, from the app                        |
 | 1030 | CN_UINT16 | CO2 Sensor 7: CO2 level                          | value in ppm, of the 7th CO2 sensor (productId `0x0A`) in zone 1 by node id, from the app                        |
 | 1031 | CN_UINT16 | CO2 Sensor 8: CO2 level                          | value in ppm, of the 8th CO2 sensor (productId `0x0A`) in zone 1 by node id, from the app                        |
-| 1056 | CN_INT16  |                                                  |                                                                                                                  |
-| 1124 | CN_INT16  |                                                  |                                                                                                                  |
-| 1125 | CN_INT16  |                                                  |                                                                                                                  |
-| 1126 | CN_INT16  |                                                  |                                                                                                                  |
-| 1127 | CN_INT16  |                                                  |                                                                                                                  |
-| 1281 | CN_UINT16 |                                                  |                                                                                                                  |
-| 1282 | CN_UINT16 |                                                  |                                                                                                                  |
-| 1283 | CN_UINT16 |                                                  |                                                                                                                  |
-| 1284 | CN_UINT16 |                                                  |                                                                                                                  |
-| 1285 | CN_UINT16 |                                                  |                                                                                                                  |
-| 1286 | CN_UINT16 |                                                  |                                                                                                                  |
-| 1287 | CN_UINT16 |                                                  |                                                                                                                  |
-| 1288 | CN_UINT16 |                                                  |                                                                                                                  |
-| 1297 | CN_BOOL   |                                                  |                                                                                                                  |
-| 1298 | CN_BOOL   |                                                  |                                                                                                                  |
-| 1299 | CN_BOOL   |                                                  |                                                                                                                  |
-| 1300 | CN_BOOL   |                                                  |                                                                                                                  |
-| 1301 | CN_BOOL   |                                                  |                                                                                                                  |
-| 1302 | CN_BOOL   |                                                  |                                                                                                                  |
-| 1303 | CN_BOOL   |                                                  |                                                                                                                  |
-| 1304 | CN_BOOL   |                                                  |                                                                                                                  |
+| 1056 | CN_INT16  | CO2 Sensor 1: temperature †                      | not used by the app, scaling unknown                                                                             |
+| 1057 | CN_INT16  | CO2 Sensor 2: temperature †                      | not used by the app, scaling unknown                                                                             |
+| 1058 | CN_INT16  | CO2 Sensor 3: temperature †                      | not used by the app, scaling unknown                                                                             |
+| 1059 | CN_INT16  | CO2 Sensor 4: temperature †                      | not used by the app, scaling unknown                                                                             |
+| 1060 | CN_INT16  | CO2 Sensor 5: temperature †                      | not used by the app, scaling unknown                                                                             |
+| 1061 | CN_INT16  | CO2 Sensor 6: temperature †                      | not used by the app, scaling unknown                                                                             |
+| 1062 | CN_INT16  | CO2 Sensor 7: temperature †                      | not used by the app, scaling unknown                                                                             |
+| 1063 | CN_INT16  | CO2 Sensor 8: temperature †                      | not used by the app, scaling unknown                                                                             |
+| 1088 | CN_UINT16 | CO2 Sensor 1: humidity †                         | not used by the app, scaling unknown                                                                             |
+| 1089 | CN_UINT16 | CO2 Sensor 2: humidity †                         | not used by the app, scaling unknown                                                                             |
+| 1090 | CN_UINT16 | CO2 Sensor 3: humidity †                         | not used by the app, scaling unknown                                                                             |
+| 1091 | CN_UINT16 | CO2 Sensor 4: humidity †                         | not used by the app, scaling unknown                                                                             |
+| 1092 | CN_UINT16 | CO2 Sensor 5: humidity †                         | not used by the app, scaling unknown                                                                             |
+| 1093 | CN_UINT16 | CO2 Sensor 6: humidity †                         | not used by the app, scaling unknown                                                                             |
+| 1094 | CN_UINT16 | CO2 Sensor 7: humidity †                         | not used by the app, scaling unknown                                                                             |
+| 1095 | CN_UINT16 | CO2 Sensor 8: humidity †                         | not used by the app, scaling unknown                                                                             |
+| 1120 | CN_INT16  | CO2 Sensor 1: ambient pressure †                 | not used by the app, scaling unknown                                                                             |
+| 1121 | CN_INT16  | CO2 Sensor 2: ambient pressure †                 | not used by the app, scaling unknown                                                                             |
+| 1122 | CN_INT16  | CO2 Sensor 3: ambient pressure †                 | not used by the app, scaling unknown                                                                             |
+| 1123 | CN_INT16  | CO2 Sensor 4: ambient pressure †                 | not used by the app, scaling unknown                                                                             |
+| 1124 | CN_INT16  | CO2 Sensor 5: ambient pressure †                 | not used by the app, scaling unknown                                                                             |
+| 1125 | CN_INT16  | CO2 Sensor 6: ambient pressure †                 | not used by the app, scaling unknown                                                                             |
+| 1126 | CN_INT16  | CO2 Sensor 7: ambient pressure †                 | not used by the app, scaling unknown                                                                             |
+| 1127 | CN_INT16  | CO2 Sensor 8: ambient pressure †                 | not used by the app, scaling unknown                                                                             |
+| 1281 | CN_UINT16 | CO2 control of zone 1: input †                   | not used by the app                                                                                              |
+| 1282 | CN_UINT16 | CO2 control of zone 2: input †                   | not used by the app                                                                                              |
+| 1283 | CN_UINT16 | CO2 control of zone 3: input †                   | not used by the app                                                                                              |
+| 1284 | CN_UINT16 | CO2 control of zone 4: input †                   | not used by the app                                                                                              |
+| 1285 | CN_UINT16 | CO2 control of zone 5: input †                   | not used by the app                                                                                              |
+| 1286 | CN_UINT16 | CO2 control of zone 6: input †                   | not used by the app                                                                                              |
+| 1287 | CN_UINT16 | CO2 control of zone 7: input †                   | not used by the app                                                                                              |
+| 1288 | CN_UINT16 | CO2 control of zone 8: input †                   | not used by the app                                                                                              |
+| 1297 | CN_BOOL   | CO2 control of zone 1: at maximum †              | the app uses it to show that the CO2 control of the zone asks for the maximum                                    |
+| 1298 | CN_BOOL   | CO2 control of zone 2: at maximum †              | the app uses it to show that the CO2 control of the zone asks for the maximum                                    |
+| 1299 | CN_BOOL   | CO2 control of zone 3: at maximum †              | the app uses it to show that the CO2 control of the zone asks for the maximum                                    |
+| 1300 | CN_BOOL   | CO2 control of zone 4: at maximum †              | the app uses it to show that the CO2 control of the zone asks for the maximum                                    |
+| 1301 | CN_BOOL   | CO2 control of zone 5: at maximum †              | the app uses it to show that the CO2 control of the zone asks for the maximum                                    |
+| 1302 | CN_BOOL   | CO2 control of zone 6: at maximum †              | the app uses it to show that the CO2 control of the zone asks for the maximum                                    |
+| 1303 | CN_BOOL   | CO2 control of zone 7: at maximum †              | the app uses it to show that the CO2 control of the zone asks for the maximum                                    |
+| 1304 | CN_BOOL   | CO2 control of zone 8: at maximum †              | the app uses it to show that the CO2 control of the zone asks for the maximum                                    |
+
+## Ventilation constraints (PDO 230)
+
+PDO 230 is a 64 bit set that tells why the unit doesn't run at the requested airflow. `calculate_airflow_constraints()`
+in `util.py` decodes it. The official app reads these bits †:
+
+| bit   | meaning †                                                                                    |
+|-------|----------------------------------------------------------------------------------------------|
+| 0     | named an "add" flag; the app shows no text for it                                            |
+| 1     | a maximum limits the airflow                                                                 |
+| 2, 3  | resistance: maximum of the exhaust (2) or supply (3) fan                                     |
+| 4     | preheater, negative                                                                          |
+| 5, 7  | noise guard: exhaust (5) or supply (7) side                                                  |
+| 6, 8  | resistance guard: exhaust (6) or supply (8) side                                             |
+| 9     | frost protection of the supply air                                                           |
+| 10    | bypass position                                                                              |
+| 11    | a minimum raises the airflow                                                                 |
+| 12-15 | analog input 1 to 4                                                                          |
+| 16    | ComfoHood                                                                                    |
+| 17    | named a "required minimum"; the app shows no text for it                                     |
+| 18    | analog input preset                                                                          |
+| 19    | ComfoCool                                                                                    |
+| 20, 21| minimum of the exhaust (20) or supply (21) fan; the app shows no text for these              |
+| 22    | preheater, positive                                                                          |
+| 23    | RF sensor, flow preset                                                                       |
+| 24    | RF sensor, flow proportional                                                                 |
+| 25    | temperature comfort (passive temperature control)                                           |
+| 26    | humidity comfort                                                                             |
+| 27    | humidity protection                                                                          |
+| 41, 42| frost protection unbalance (42 is named its "off" variant); the app checks these first       |
+| 45    | a constraint is active; the app ignores the other bits when this one is not set              |
+| 46    | sign: set when the constraint lowers the airflow                                             |
+| 47-54 | CO2 control of zone 1 to 8                                                                   |
+
+## Commissioning wizard steps (PDO 257)
+
+The step the commissioning wizard on the unit is in †: 0=language, 1=date, 2=continue commissioning, 3=pass,
+4=orientation, 5=drain, 6=no drain, 7=drain warning, 8=filter, 9=wait for the preheater, 10=preheater warning,
+11=preheater correct, 12=airflow unit, 13=altitude, 14=fireplace, 15=open all valves, 16=confirm open, 17=maximum flow
+test, 18=medium flow test, 19=medium flow ready, 20=fine tune test, 21=final test, 22=final ready, 23=final ready
+with a warning, 24=final warning confirmed, 25=finished, 26=error, 27=save the configuration.
 
 # Schedule PDOs
 
