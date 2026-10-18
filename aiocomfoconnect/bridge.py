@@ -149,7 +149,6 @@ class Bridge:
         self,
         host: str,
         uuid: str,
-        loop: Optional[asyncio.AbstractEventLoop] = None,
         bridge_type: int = 0,
     ):
         self.host: str = host
@@ -171,7 +170,6 @@ class Bridge:
         self._sensor_pdo_types: Dict[int, int] = {}
         self.__alarm_callback_fn: Optional[Callable[[int, ProtobufMessage], None]] = None
 
-        self._loop: Optional[asyncio.AbstractEventLoop] = loop
         self._read_task = None
         # The time.monotonic() of the last message we received from the bridge.
         self._last_received: float = 0
@@ -222,10 +220,6 @@ class Bridge:
         # Clean up what is left of a connection that ended by itself.
         await self._close()
 
-        # Get the running loop if not provided
-        if self._loop is None:
-            self._loop = asyncio.get_running_loop()
-
         _LOGGER.debug("Connecting to bridge %s", self.host)
         try:
             self._reader, self._writer = await asyncio.wait_for(asyncio.open_connection(self.host, self.PORT), TIMEOUT)
@@ -248,7 +242,7 @@ class Bridge:
         self._ventilation_node_found = asyncio.Event()
 
         # Start background task to read messages
-        self._read_task = self._loop.create_task(self._read_messages())
+        self._read_task = asyncio.create_task(self._read_messages())
         _LOGGER.debug("Connected to bridge %s", self.host)
 
     async def _read_messages(self):
@@ -397,9 +391,6 @@ class Bridge:
         if timeout is None:
             timeout = TIMEOUT
 
-        if self._loop is None:
-            self._loop = asyncio.get_running_loop()
-
         if not self.is_connected() or self._writer is None or self._reference is None:
             raise AioComfoConnectNotConnected("Not connected to bridge")
 
@@ -426,7 +417,7 @@ class Bridge:
         if reply:
             if event_bus is None:
                 raise RuntimeError("Event bus is not initialized")
-            fut = self._loop.create_future()
+            fut = asyncio.get_running_loop().create_future()
             event_bus.add_listener(reference, fut)
 
         try:
