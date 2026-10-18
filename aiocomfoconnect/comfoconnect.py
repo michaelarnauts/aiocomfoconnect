@@ -17,7 +17,6 @@ from aiocomfoconnect.const import (
     SUBUNIT_03,
     SUBUNIT_06,
     SUBUNIT_07,
-    SUBUNIT_08,
     UNIT_ERROR,
     UNIT_SCHEDULE,
     UNIT_TEMPHUMCONTROL,
@@ -437,10 +436,11 @@ class ComfoConnect(Bridge):
     async def set_mode(self, mode: Literal["auto", "manual"]):
         """Set ventilation mode, cancelling the temporary speed override for auto."""
         if mode == VentilationMode.AUTO:
-            await self.cmd_rmi_request(bytes([0x85, UNIT_SCHEDULE, SUBUNIT_08, 0x01]))
-            await self.cmd_rmi_request(bytes([0x85, UNIT_SCHEDULE, SUBUNIT_01, 0x01]))
+            await self.cancel_timer(SCHEDULE_MANUAL_MODE, TIMER_DEFAULT)
+            await self.cancel_timer(SCHEDULE_PRESET, TIMER_DEFAULT)
         elif mode == VentilationMode.MANUAL:
-            await self.cmd_rmi_request(bytes([0x84, UNIT_SCHEDULE, SUBUNIT_08, 0x01, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01]))
+            # A duration of 1, like the official app. The unit then reports the timer as running until it is cancelled.
+            await self.set_timer(SCHEDULE_MANUAL_MODE, TIMER_DEFAULT, 0x01, duration=1)
         else:
             raise ValueError(f"Invalid mode: {mode}")
 
@@ -465,15 +465,18 @@ class ComfoConnect(Bridge):
     async def set_speed(self, speed: Literal["away", "low", "medium", "high"]):
         """Set the ventilation speed (away / low / medium / high)."""
         if speed == VentilationSpeed.AWAY:
-            await self.cmd_rmi_request(bytes([0x84, UNIT_SCHEDULE, SUBUNIT_01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00]))
+            value = 0x00
         elif speed == VentilationSpeed.LOW:
-            await self.cmd_rmi_request(bytes([0x84, UNIT_SCHEDULE, SUBUNIT_01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01]))
+            value = 0x01
         elif speed == VentilationSpeed.MEDIUM:
-            await self.cmd_rmi_request(bytes([0x84, UNIT_SCHEDULE, SUBUNIT_01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02]))
+            value = 0x02
         elif speed == VentilationSpeed.HIGH:
-            await self.cmd_rmi_request(bytes([0x84, UNIT_SCHEDULE, SUBUNIT_01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x03]))
+            value = 0x03
         else:
             raise ValueError(f"Invalid speed: {speed}")
+
+        # A duration of 1, like the official app. The unit then reports the timer as running until it is cancelled.
+        await self.set_timer(SCHEDULE_PRESET, TIMER_DEFAULT, value, duration=1)
 
     async def get_flow_for_speed(self, speed: Literal["away", "low", "medium", "high"]) -> int:
         """Get the targeted airflow in m³/h for the given VentilationSpeed (away / low / medium / high)."""
