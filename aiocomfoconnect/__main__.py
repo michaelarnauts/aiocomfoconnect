@@ -13,7 +13,7 @@ from aiocomfoconnect import DEFAULT_NAME, DEFAULT_PIN, DEFAULT_UUID
 from aiocomfoconnect.comfoconnect import ComfoConnect
 from aiocomfoconnect.const import ProductId
 from aiocomfoconnect.discovery import discover_bridges
-from aiocomfoconnect.exceptions import BridgeNotFoundException, ComfoConnectNotAllowed
+from aiocomfoconnect.exceptions import AioComfoConnectError, BridgeNotFoundException, ComfoConnectNotAllowed
 from aiocomfoconnect.properties import Property
 from aiocomfoconnect.sensors import SENSORS
 
@@ -23,6 +23,9 @@ PRODUCT_NAMES = {value: name.lower() for name, value in vars(ProductId).items() 
 
 # How long show-sensor waits for the first value. The bridge only reports a sensor after the sensor hold (5 seconds by default).
 SENSOR_VALUE_TIMEOUT = 30
+
+# How long list-nodes waits for the nodes to be announced. The bridge announces its own node a bit after connecting.
+NODE_REQUEST_WAIT = 2
 
 
 class CliError(Exception):
@@ -191,12 +194,25 @@ async def run_list_nodes(args):
     async with connected(args) as comfoconnect:
         await comfoconnect.cmd_node_request()
         # Nodes arrive as unsolicited notifications, so give the bridge a moment to report them all.
-        await asyncio.sleep(2)
+        await asyncio.sleep(NODE_REQUEST_WAIT)
 
         print("Nodes on the ComfoNet bus:")
         for node in sorted(comfoconnect.nodes.values(), key=lambda n: n.node_id):
             product = PRODUCT_NAMES.get(node.product_id, "unknown")
             print(f"* node {node.node_id}: product {node.product_id} ({product}), zone {node.zone_id}, mode {node.mode}")
+            try:
+                info = await comfoconnect.get_node_info(node.node_id)
+            except AioComfoConnectError as exc:
+                print(f"  could not read the node info: {exc}")
+                continue
+            fields = {
+                "name": info.name,
+                "model": info.model,
+                "firmware": info.firmware,
+                "hardware version": info.hardware_version,
+                "serial number": info.serial_number,
+            }
+            print("  " + ", ".join(f"{label}: {value}" for label, value in fields.items() if value is not None))
 
 
 def build_parser() -> argparse.ArgumentParser:
