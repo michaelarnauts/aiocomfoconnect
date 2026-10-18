@@ -443,6 +443,9 @@ class TestComfoConnect:
         ("set_timer", (0x02, 0x01, 0x01), ["84 15 02 01 00000000 ffffffff 01"]),
         ("set_timer", (0x01, 0x06, 0x03, 600), ["84 15 01 06 00000000 58020000 03"]),
         ("cancel_timer", (0x02, 0x01), ["85 15 02 01"]),
+        # One group (count 01) of unit, subunit, then 0x10 (actual value) OR'ed with the number of properties.
+        ("get_multiple_properties", (0x01, 0x01, [0x03, 0x04, 0x06, 0x05, 0x14]), ["02 01 01 01 15 03 04 06 05 14"]),
+        ("get_multiple_properties", (0x1D, 0x01, [0x0A, 0x0B]), ["02 01 1d 01 12 0a 0b"]),
     ],
 )
 async def test_command_rmi_bytes(method, args, expected):
