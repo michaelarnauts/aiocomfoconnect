@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from aiocomfoconnect.const import PdoType
+from aiocomfoconnect.const import NUMERIC_PROPERTY_TYPES, PdoType
 
 
 def bytestring(arr):
@@ -129,26 +129,10 @@ def calculate_airflow_constraints(value):
 
 def encode_pdo_value(value: int, pdo_type: PdoType) -> bytes:
     """Encode a PDO value to the raw equivalent."""
-    match pdo_type:
-        case PdoType.TYPE_CN_BOOL:
-            return b"\x01" if bool(value) else b"\x00"
-        case PdoType.TYPE_CN_UINT8 | PdoType.TYPE_CN_UINT16 | PdoType.TYPE_CN_UINT32:
-            signed = False
-        case PdoType.TYPE_CN_INT8 | PdoType.TYPE_CN_INT16 | PdoType.TYPE_CN_INT64:
-            signed = True
-        case _:
-            raise ValueError("Type is not supported at this time", pdo_type)
+    if pdo_type == PdoType.TYPE_CN_BOOL:
+        return b"\x01" if bool(value) else b"\x00"
+    if pdo_type not in NUMERIC_PROPERTY_TYPES:
+        raise ValueError("Type is not supported at this time", pdo_type)
 
-    match pdo_type:
-        case PdoType.TYPE_CN_INT8 | PdoType.TYPE_CN_UINT8:
-            length = 1
-        case PdoType.TYPE_CN_INT16 | PdoType.TYPE_CN_UINT16:
-            length = 2
-        case PdoType.TYPE_CN_UINT32:
-            length = 4
-        case PdoType.TYPE_CN_INT64:
-            length = 8
-        case _:
-            raise ValueError("Type is not supported at this time", pdo_type)
-
-    return value.to_bytes(length, "little", signed=signed)
+    size, signed = NUMERIC_PROPERTY_TYPES[pdo_type]
+    return value.to_bytes(size, "little", signed=signed)

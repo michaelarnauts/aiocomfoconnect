@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from aiocomfoconnect.comfoconnect import ComfoConnect, TimerEntry
-from aiocomfoconnect.const import ERRORS_BASE, SCHEDULE_PRESET, TIMER_BOOST, ProductId
+from aiocomfoconnect.const import ERRORS_BASE, SCHEDULE_PRESET, TIMER_BOOST, PdoType, ProductId
 from aiocomfoconnect.exceptions import (
     AioComfoConnectNotConnected,
     ComfoClimeNotFoundException,
@@ -166,6 +166,42 @@ class TestComfoConnect:
             prop = Property(unit=1, subunit=1, property_id=8, property_type=PdoType.TYPE_CN_INT16)
             value = await comfoconnect.get_property(prop)
             assert value == 100
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "property_type,message,expected",
+        [
+            (PdoType.TYPE_CN_BOOL, b"\x02", True),
+            (PdoType.TYPE_CN_BOOL, b"\x00", False),
+            (PdoType.TYPE_CN_UINT8, b"\xff", 255),
+            (PdoType.TYPE_CN_UINT16, b"\xff\xff", 65535),
+            (PdoType.TYPE_CN_UINT32, b"\x00\x00\x00\x80", 2147483648),
+            (PdoType.TYPE_CN_INT8, b"\x80", -128),
+            (PdoType.TYPE_CN_INT16, b"\xec\xff", -20),
+            (PdoType.TYPE_CN_INT64, b"\xff" * 8, -1),
+            (PdoType.TYPE_CN_STRING, b"ComfoAir Q\x00\x00", "ComfoAir Q"),
+            (PdoType.TYPE_CN_TIME, b"\x01\x02", b"\x01\x02"),
+            (PdoType.TYPE_CN_VERSION, b"\x01\x02", b"\x01\x02"),
+            (None, b"\x01\x02", b"\x01\x02"),
+        ],
+    )
+    async def test_get_single_property_types(self, comfoconnect, property_type, message, expected):
+        """Test that each property type is decoded like before, and other types return the raw bytes."""
+        mock_response = Mock()
+        mock_response.message = message
+
+        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=mock_response)):
+            assert await comfoconnect.get_single_property(0x01, 0x01, 0x04, property_type) == expected
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("property_type", [PdoType.TYPE_CN_BOOL, PdoType.TYPE_CN_STRING, PdoType.TYPE_CN_TIME, PdoType.TYPE_CN_VERSION, None])
+    async def test_get_property_constraints_rejects_non_numeric(self, comfoconnect, property_type):
+        """Test that only numeric property types have a range."""
+        from aiocomfoconnect.properties import Property
+
+        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock()) as mock_rmi, pytest.raises(ValueError, match="has no range"):
+            await comfoconnect.get_property_constraints(Property(0x01, 0x01, 0x04, property_type))
+        mock_rmi.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_get_property_constraints(self, comfoconnect):
