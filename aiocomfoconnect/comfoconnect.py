@@ -48,7 +48,7 @@ from aiocomfoconnect.exceptions import (
 )
 from aiocomfoconnect.properties import Property, PropertyConstraints
 from aiocomfoconnect.sensors import Sensor
-from aiocomfoconnect.util import bytearray_to_bits, bytestring, encode_pdo_value
+from aiocomfoconnect.util import bytearray_to_bits, bytestring, encode_pdo_value, version_decode
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -354,6 +354,8 @@ class ComfoConnect(Bridge):
             return int.from_bytes(result.message, byteorder="little", signed=signed)
         if property_type == PdoType.TYPE_CN_BOOL:
             return bool(result.message[0])
+        if property_type == PdoType.TYPE_CN_VERSION:
+            return version_decode(int.from_bytes(result.message, byteorder="little"))
 
         return result.message
 

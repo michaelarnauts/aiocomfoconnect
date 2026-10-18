@@ -18,6 +18,7 @@ from aiocomfoconnect.properties import (
     PROPERTY_CLIME_AUTO_SEASON,
     PROPERTY_CLIME_HEATPUMP_STANDBY,
     PROPERTY_CLIME_SEASON,
+    PROPERTY_FIRMWARE_VERSION,
     PROPERTY_CLIME_TEMPERATURE_PROFILE,
     PROPERTY_FLOW_AWAY,
     PROPERTY_FLOW_HIGH,
@@ -192,7 +193,8 @@ class TestComfoConnect:
             (PdoType.TYPE_CN_INT64, b"\xff" * 8, -1),
             (PdoType.TYPE_CN_STRING, b"ComfoAir Q\x00\x00", "ComfoAir Q"),
             (PdoType.TYPE_CN_TIME, b"\x01\x02", b"\x01\x02"),
-            (PdoType.TYPE_CN_VERSION, b"\x01\x02", b"\x01\x02"),
+            (PdoType.TYPE_CN_VERSION, bytes.fromhex("001010c0"), "R1.4.0"),
+            (PdoType.TYPE_CN_VERSION, bytes.fromhex("01300040"), "D0.12.1"),
             (None, b"\x01\x02", b"\x01\x02"),
         ],
     )
@@ -450,6 +452,16 @@ class TestComfoConnect:
             "PROPERTY_CLIME_HEATPUMP_MIN_TEMP",
         }
         assert all(getattr(properties, name).scale == 0.1 for name in scaled)
+
+    @pytest.mark.asyncio
+    async def test_get_firmware_version(self, comfoconnect):
+        """The firmware version is decoded to a version string."""
+        node_notification(comfoconnect, node_id=1, product_id=ProductId.COMFOAIRQ)
+
+        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=Mock(message=bytes.fromhex("001010c0")))) as mock_rmi:
+            assert await comfoconnect.get_property(PROPERTY_FIRMWARE_VERSION) == "R1.4.0"
+
+        mock_rmi.assert_called_once_with(bytes([0x01, 0x01, 0x01, 0x10, 0x06]), node_id=None)
 
     def test_property_products(self):
         """The ComfoClime properties live on the ComfoClime, the others on the ventilation unit."""
