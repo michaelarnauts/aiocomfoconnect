@@ -261,9 +261,13 @@ class TestReconnect:
         await roundtrip(client)
         assert fake_bridge.connections == 2
 
-    async def test_no_heartbeat_by_default(self, fake_bridge, make_client):
-        """Without a heartbeat, the client doesn't send anything while the connection is idle."""
-        client = make_client()
+    def test_heartbeat_by_default(self):
+        """The heartbeat is on by default, every 30 seconds."""
+        assert comfoconnect_module.ComfoConnect("127.0.0.1", BRIDGE_UUID).heartbeat_interval == 30
+
+    async def test_no_heartbeat_with_none(self, fake_bridge, make_client):
+        """With heartbeat_interval=None, the client doesn't send anything while the connection is idle."""
+        client = make_client(heartbeat_interval=None)
         await client.connect(LOCAL_UUID)
 
         await asyncio.sleep(0.05)

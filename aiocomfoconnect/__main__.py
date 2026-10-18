@@ -13,12 +13,7 @@ from aiocomfoconnect import DEFAULT_NAME, DEFAULT_PIN, DEFAULT_UUID
 from aiocomfoconnect.comfoconnect import ComfoConnect
 from aiocomfoconnect.const import ProductId
 from aiocomfoconnect.discovery import discover_bridges
-from aiocomfoconnect.exceptions import (
-    AioComfoConnectNotConnected,
-    AioComfoConnectTimeout,
-    BridgeNotFoundException,
-    ComfoConnectNotAllowed,
-)
+from aiocomfoconnect.exceptions import BridgeNotFoundException, ComfoConnectNotAllowed
 from aiocomfoconnect.properties import Property
 from aiocomfoconnect.sensors import SENSORS
 
@@ -28,9 +23,6 @@ PRODUCT_NAMES = {value: name.lower() for name, value in vars(ProductId).items() 
 
 # How long show-sensor waits for the first value. The bridge only reports a sensor after the sensor hold (5 seconds by default).
 SENSOR_VALUE_TIMEOUT = 30
-
-# How often we send a keepalive while following sensor updates.
-KEEPALIVE_INTERVAL = 30
 
 
 class CliError(Exception):
@@ -60,19 +52,9 @@ async def connected(args, *, connect: bool = True, **kwargs) -> AsyncIterator[Co
         await comfoconnect.disconnect()
 
 
-async def follow(comfoconnect: ComfoConnect):
-    """Keep the session open to receive updates, until cancelled (Ctrl-C)."""
-    while True:
-        await asyncio.sleep(KEEPALIVE_INTERVAL)
-
-        try:
-            print("Sending keepalive...")
-            # Use cmd_time_request as a keepalive since cmd_keepalive doesn't send back a reply we can wait for
-            await comfoconnect.cmd_time_request()
-        except AioComfoConnectNotConnected:
-            print("Got AioComfoConnectNotConnected")
-        except AioComfoConnectTimeout:
-            print("Got AioComfoConnectTimeout")
+async def follow():
+    """Keep receiving updates until cancelled (Ctrl-C). The library keeps the connection alive, and reconnects."""
+    await asyncio.Event().wait()
 
 
 async def print_registered_apps(comfoconnect: ComfoConnect):
@@ -162,7 +144,7 @@ async def run_show_sensors(args):
         for sensor in SENSORS.values():
             await comfoconnect.register_sensor(sensor)
 
-        await follow(comfoconnect)
+        await follow()
 
 
 async def run_show_sensor(args):
@@ -187,7 +169,7 @@ async def run_show_sensor(args):
             raise CliError(f"No value received for sensor {args.sensor} within {SENSOR_VALUE_TIMEOUT} seconds") from exc
 
         if args.follow:
-            await follow(comfoconnect)
+            await follow()
 
 
 async def run_get_property(args):

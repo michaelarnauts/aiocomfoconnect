@@ -45,7 +45,8 @@ $ python -m aiocomfoconnect set-property --host 192.168.1.213 30 1 4 6 120  # Se
 
 ## Available methods
 
-- `async connect()`: Connect to the bridge.
+- `async connect()`: Connect to the bridge. The connection is kept: when it is lost, it reconnects, and when nothing was received for `heartbeat_interval` seconds (30 by default, `None` disables it), it checks that the bridge still answers.
+- `connection_state_callback`: Pass it to `ComfoConnect()` to be called with a `ConnectionState` when the state of the session changes.
 - `async disconnect()`: Disconnect from the bridge.
 - `async register_sensor(sensor)`: Register a sensor.
 - `async deregister_sensor(sensor)`: Deregister a sensor.
