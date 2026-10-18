@@ -403,8 +403,11 @@ class ComfoConnect(Bridge):
         return PropertyConstraints(value=prop.scaled(value), minimum=prop.scaled(minimum), maximum=prop.scaled(maximum), step=prop.scaled(step))
 
     async def get_multiple_properties(self, unit: int, subunit: int, property_ids: List[int], node_id: Optional[int] = None) -> Any:
-        """Get multiple properties."""
-        result = await self.cmd_rmi_request(bytestring([0x02, unit, subunit, 0x01, 0x10 | len(property_ids), bytes(property_ids)]), node_id=node_id)
+        """Get the actual values of several properties of one unit and subunit in one request, as raw bytes one after the other.
+
+        The request is one group (count 1) of the unit, the subunit, and 0x10 (actual value) OR'ed with the number of properties.
+        """
+        result = await self.cmd_rmi_request(bytestring([0x02, 0x01, unit, subunit, 0x10 | len(property_ids), bytes(property_ids)]), node_id=node_id)
 
         return result.message
 
