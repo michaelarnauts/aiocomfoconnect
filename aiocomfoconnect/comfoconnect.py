@@ -13,9 +13,7 @@ from aiocomfoconnect.const import (
     ERRORS,
     ERRORS_140,
     SUBUNIT_01,
-    SUBUNIT_02,
     SUBUNIT_03,
-    SUBUNIT_05,
     SUBUNIT_06,
     SUBUNIT_07,
     SUBUNIT_08,
@@ -495,11 +493,11 @@ class ComfoConnect(Bridge):
     async def set_bypass(self, mode: Literal["auto", "on", "off"], timeout=-1):
         """Set the bypass mode (auto / on / off)."""
         if mode == VentilationSetting.AUTO:
-            await self.cmd_rmi_request(bytes([0x85, UNIT_SCHEDULE, SUBUNIT_02, 0x01]))
+            await self.cancel_timer(SCHEDULE_BYPASS, TIMER_DEFAULT)
         elif mode == VentilationSetting.ON:
-            await self.cmd_rmi_request(bytestring([0x84, UNIT_SCHEDULE, SUBUNIT_02, 0x01, 0x00, 0x00, 0x00, 0x00, timeout.to_bytes(4, "little", signed=True), 0x01]))
+            await self.set_timer(SCHEDULE_BYPASS, TIMER_DEFAULT, 0x01, timeout)
         elif mode == VentilationSetting.OFF:
-            await self.cmd_rmi_request(bytestring([0x84, UNIT_SCHEDULE, SUBUNIT_02, 0x01, 0x00, 0x00, 0x00, 0x00, timeout.to_bytes(4, "little", signed=True), 0x02]))
+            await self.set_timer(SCHEDULE_BYPASS, TIMER_DEFAULT, 0x02, timeout)
         else:
             raise ValueError(f"Invalid mode: {mode}")
 
@@ -560,9 +558,9 @@ class ComfoConnect(Bridge):
     async def set_comfocool_mode(self, mode: Literal["auto", "off"], timeout=-1):
         """Set the comfocool mode (auto / off)."""
         if mode == ComfoCoolMode.AUTO:
-            await self.cmd_rmi_request(bytes([0x85, UNIT_SCHEDULE, SUBUNIT_05, 0x01]))
+            await self.cancel_timer(SCHEDULE_COMFOCOOL, TIMER_DEFAULT)
         elif mode == ComfoCoolMode.OFF:
-            await self.cmd_rmi_request(bytestring([0x84, UNIT_SCHEDULE, SUBUNIT_05, 0x01, 0x00, 0x00, 0x00, 0x00, timeout.to_bytes(4, "little", signed=True), 0x00]))
+            await self.set_timer(SCHEDULE_COMFOCOOL, TIMER_DEFAULT, 0x00, timeout)
         else:
             raise ValueError(f"Invalid mode: {mode}")
 
