@@ -1,6 +1,7 @@
 """Tests for the Bridge class."""
 
 import asyncio
+import gc
 import socket
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
@@ -969,3 +970,236 @@ class TestReadLoopResilience:
 
         received.assert_called_once_with(comfoconnect._sensors[277], 2)
         assert any(isinstance(r.exc_info[1], ZeroDivisionError) for r in caplog.records if r.exc_info)
+
+
+class FakeBridgeServer:
+    """A bridge on localhost that hands each connection to a handler, to test what happens on the real transport."""
+
+    def __init__(self, handler):
+        self.handler = handler
+        self.connections = 0
+        self.server = None
+
+    async def __aenter__(self):
+        self.server = await asyncio.start_server(self._handle, "127.0.0.1", 0)
+        return self
+
+    async def __aexit__(self, *exc_info):
+        self.server.close()
+        self.server.close_clients()
+        await self.server.wait_closed()
+
+    @property
+    def port(self):
+        return self.server.sockets[0].getsockname()[1]
+
+    def bridge(self):
+        bridge = Bridge("127.0.0.1", LOCAL_UUID)
+        bridge.PORT = self.port
+        return bridge
+
+    async def _handle(self, reader, writer):
+        self.connections += 1
+        try:
+            await self.handler(reader, writer)
+        except (ConnectionError, asyncio.IncompleteReadError):
+            pass
+        finally:
+            writer.close()
+
+    @staticmethod
+    async def read_request(reader):
+        """Read the next request a client sends."""
+        length = int.from_bytes(await reader.readexactly(4), byteorder="big")
+        return Message.decode(await reader.readexactly(length))
+
+    @staticmethod
+    def reply(writer, request, cmd_type, msg, result=zehnder_pb2.GatewayOperation.OK):
+        """Send a reply to a request."""
+        cmd = zehnder_pb2.GatewayOperation()
+        cmd.type = cmd_type
+        cmd.reference = request.cmd.reference
+        cmd.result = result
+        writer.write(Message(cmd, msg, LOCAL_UUID, LOCAL_UUID).encode())
+
+
+def _collect_loop_errors():
+    """Collect the errors the event loop reports, like "Task exception was never retrieved"."""
+    reports = []
+    asyncio.get_running_loop().set_exception_handler(lambda _loop, context: reports.append(context))
+    return reports
+
+
+async def _wait_for_read_task(bridge):
+    """Wait until the read loop of the bridge has ended."""
+    await asyncio.wait({bridge._read_task}, timeout=2)
+    assert bridge._read_task.done()
+
+
+class TestConnectionLifecycle:
+    """When the read loop ends, the connection is closed and pending requests fail right away."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("ending", ["eof", "close_session"])
+    async def test_read_loop_end_closes_connection(self, ending):
+        """A pending request fails at once, new requests fail at once, and connect() works again without disconnect()."""
+        unretrieved = _collect_loop_errors()
+        session_started = asyncio.Event()
+
+        async def handler(reader, writer):
+            if server.connections == 1:
+                await server.read_request(reader)  # The request that never gets a reply
+                if ending == "close_session":
+                    writer.write(_frame(zehnder_pb2.GatewayOperation.CloseSessionRequestType, zehnder_pb2.CloseSessionRequest()))
+                    await writer.drain()
+                    await reader.read()  # The bridge waits for us to close the connection
+                return
+            request = await server.read_request(reader)
+            server.reply(writer, request, zehnder_pb2.GatewayOperation.StartSessionConfirmType, zehnder_pb2.StartSessionConfirm())
+            await writer.drain()
+            session_started.set()
+            await reader.read()
+
+        async with FakeBridgeServer(handler) as server:
+            bridge = server.bridge()
+            await bridge.connect(LOCAL_UUID)
+
+            loop = asyncio.get_running_loop()
+            start = loop.time()
+            with pytest.raises(AioComfoConnectNotConnected):
+                await bridge._send(zehnder_pb2.VersionRequest, zehnder_pb2.GatewayOperation.VersionRequestType, timeout=5)
+            assert loop.time() - start < 1
+
+            await _wait_for_read_task(bridge)
+            assert not bridge.is_connected()
+            assert bridge._event_bus.listeners == {}
+            with pytest.raises(AioComfoConnectNotConnected):
+                await bridge.cmd_version_request()
+
+            # Reconnect without disconnect() first
+            await bridge.connect(LOCAL_UUID)
+            assert server.connections == 2
+            assert bridge.is_connected()
+            await bridge.cmd_start_session(True)
+            assert session_started.is_set()
+
+            await bridge.disconnect()
+            assert not bridge.is_connected()
+
+        assert unretrieved == []
+
+    @pytest.mark.asyncio
+    async def test_disconnect_after_read_loop_ended(self):
+        """disconnect() cleans up after a read loop that already ended, and retrieves its exception."""
+        unretrieved = _collect_loop_errors()
+
+        async def handler(reader, writer):
+            return  # Close the connection right away
+
+        async with FakeBridgeServer(handler) as server:
+            bridge = server.bridge()
+            await bridge.connect(LOCAL_UUID)
+            read_task = bridge._read_task
+            await _wait_for_read_task(bridge)
+
+            await bridge.disconnect()
+
+        assert bridge._read_task is None
+        assert bridge._writer is None
+        assert bridge._event_bus is None
+        assert read_task.done()
+        del read_task
+        gc.collect()
+        assert unretrieved == []
+
+    @pytest.mark.asyncio
+    async def test_disconnect_when_closing_fails(self, bridge_with_writer):
+        """disconnect() still clears its state when waiting for the connection to close raises."""
+        bridge = bridge_with_writer
+        bridge._writer.wait_closed = AsyncMock(side_effect=ConnectionResetError("reset"))
+
+        await bridge.disconnect()
+
+        assert bridge._writer is None
+        assert bridge._event_bus is None
+
+    @pytest.fixture
+    def bridge_with_writer(self):
+        """A bridge with a mocked open connection and no read loop."""
+        bridge = Bridge("192.168.1.100", LOCAL_UUID)
+        bridge._writer = MagicMock()
+        bridge._writer.is_closing.return_value = False
+        bridge._writer.drain = AsyncMock()
+        bridge._writer.wait_closed = AsyncMock()
+        bridge._reference = iter(range(1, 100))
+        bridge._event_bus = EventBus()
+        bridge._local_uuid = LOCAL_UUID
+        return bridge
+
+    @pytest.mark.asyncio
+    async def test_reply_removes_listener(self, bridge_with_writer):
+        """A request that gets its reply leaves nothing behind in the listener table."""
+        bridge = bridge_with_writer
+        task = asyncio.create_task(bridge.cmd_version_request())
+        await asyncio.sleep(0)
+        assert list(bridge._event_bus.listeners) == [1]
+
+        bridge._event_bus.emit(1, zehnder_pb2.VersionConfirm())
+        await task
+
+        assert bridge._event_bus.listeners == {}
+
+    @pytest.mark.asyncio
+    async def test_timeout_removes_listener(self, bridge_with_writer):
+        """A request that times out leaves nothing behind in the listener table."""
+        bridge = bridge_with_writer
+        with pytest.raises(AioComfoConnectTimeout):
+            await bridge._send(zehnder_pb2.VersionRequest, zehnder_pb2.GatewayOperation.VersionRequestType, timeout=0.01)
+
+        assert bridge._event_bus.listeners == {}
+
+    @pytest.mark.asyncio
+    async def test_cancel_removes_listener(self, bridge_with_writer):
+        """A request that is cancelled leaves nothing behind in the listener table."""
+        bridge = bridge_with_writer
+        task = asyncio.create_task(bridge.cmd_version_request())
+        await asyncio.sleep(0)
+        assert bridge._event_bus.listeners != {}
+
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        assert bridge._event_bus.listeners == {}
+
+    @pytest.mark.asyncio
+    async def test_send_failure(self, bridge_with_writer):
+        """A send failure raises AioComfoConnectNotConnected and sets no exception on a future that nobody awaits."""
+        bridge = bridge_with_writer
+        bridge._writer.drain = AsyncMock(side_effect=ConnectionResetError("reset"))
+        futures = []
+        add_listener = bridge._event_bus.add_listener
+        bridge._event_bus.add_listener = lambda reference, fut: (futures.append(fut), add_listener(reference, fut))
+
+        with pytest.raises(AioComfoConnectNotConnected, match="while sending"):
+            await bridge.cmd_version_request()
+
+        assert bridge._event_bus.listeners == {}
+        # An exception on it would be logged as "Future exception was never retrieved"
+        assert len(futures) == 1 and not futures[0].done()
+
+    @pytest.mark.asyncio
+    async def test_unmatched_error_reply_is_logged(self, caplog):
+        """An error reply for a request that nobody waits for anymore is logged."""
+        bridge = Bridge("192.168.1.100", LOCAL_UUID)
+        bridge._event_bus = EventBus()
+        cmd = zehnder_pb2.GatewayOperation()
+        cmd.type = zehnder_pb2.GatewayOperation.CnRmiResponseType
+        cmd.reference = 42
+        cmd.result = zehnder_pb2.GatewayOperation.NOT_ALLOWED
+        bridge._reader = asyncio.StreamReader()
+        bridge._reader.feed_data(Message(cmd, zehnder_pb2.CnRmiResponse(), LOCAL_UUID, LOCAL_UUID).encode())
+
+        await bridge._process_message()
+
+        assert any(r.levelname == "WARNING" and "without a matching request" in r.getMessage() for r in caplog.records)
