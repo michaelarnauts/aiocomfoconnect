@@ -188,7 +188,7 @@ follow the app †.
 | NODE              | 0x01    | 0x02     | ro     | UINT8  | Product id (`01` = 1, ComfoAir Q) †                                    |
 | NODE              | 0x01    | 0x03     | ro     | UINT8  | Product variant: ComfoAir Q 1=Q350, 2=Q450 (seen on a unit), 3=Q600 †; ComfoAir Flex 1=250 (85 W), 2=350 (115 W), 3=350 (85 W). `02` = 2 |
 | NODE              | 0x01    | 0x04     | ro     | STRING | Serial number (BEA009999999999)                                        |
-| NODE              | 0x01    | 0x05     | ro     | UINT8  | Hardware version † (`02` = 2)                                          |
+| NODE              | 0x01    | 0x05     | ro     | UINT8  | Hardware version (`02` = 2, seen on a unit)                            |
 | NODE              | 0x01    | 0x06     | ro     | UINT32 | Firmware version (See `version_decode()`)                              |
 | NODE              | 0x01    | 0x07     | ro     | UINT32 | Version of the object definitions, encoded like the firmware version † (`00541040`) |
 | NODE              | 0x01    | 0x08     | ro     | STRING | Model number (ComfoAir Q450 B R RF ST Quality)                         |
