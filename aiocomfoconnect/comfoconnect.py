@@ -439,7 +439,7 @@ class ComfoConnect(Bridge):
             await self.cancel_timer(SCHEDULE_MANUAL_MODE, TIMER_DEFAULT)
             await self.cancel_timer(SCHEDULE_PRESET, TIMER_DEFAULT)
         elif mode == VentilationMode.MANUAL:
-            # A duration of 1, like the official app. The unit then reports the timer as running until it is cancelled.
+            # A duration of 1 lets the unit pick its default, like the official app: until cancelled in manual mode, 2 hours in auto mode.
             await self.set_timer(SCHEDULE_MANUAL_MODE, TIMER_DEFAULT, 0x01, duration=1)
         else:
             raise ValueError(f"Invalid mode: {mode}")
@@ -475,7 +475,7 @@ class ComfoConnect(Bridge):
         else:
             raise ValueError(f"Invalid speed: {speed}")
 
-        # A duration of 1, like the official app. The unit then reports the timer as running until it is cancelled.
+        # A duration of 1 lets the unit pick its default, like the official app: until cancelled in manual mode, 2 hours in auto mode.
         await self.set_timer(SCHEDULE_PRESET, TIMER_DEFAULT, value, duration=1)
 
     async def get_flow_for_speed(self, speed: Literal["away", "low", "medium", "high"]) -> int:
