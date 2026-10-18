@@ -37,7 +37,6 @@ from .protobuf import zehnder_pb2
 _LOGGER = logging.getLogger(__name__)
 
 TIMEOUT = 5
-GATEWAY_TYPE_PRO = GatewayType.PRO
 
 # How long we wait for the bridge to announce the ventilation unit before we give up.
 NODE_DISCOVERY_TIMEOUT = 5
@@ -200,7 +199,7 @@ class Bridge:
         Returns True if the app was newly registered, False if it was already registered.
         """
         await self._open_connection(uuid)
-        if self.bridge_type != GATEWAY_TYPE_PRO:
+        if self.bridge_type != GatewayType.PRO:
             # LAN C: check whether we are already registered by starting a session.
             try:
                 await self.cmd_start_session()

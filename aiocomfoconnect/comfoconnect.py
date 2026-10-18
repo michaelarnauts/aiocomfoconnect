@@ -14,7 +14,6 @@ from aiocomfoconnect.const import (
     ERRORS,
     ERRORS_140,
     NUMERIC_PROPERTY_TYPES,
-    SUBUNIT_01,
     UNIT_ERROR,
     UNIT_SCHEDULE,
     UNIT_VENTILATIONCONFIG,
@@ -65,6 +64,14 @@ RECONNECT_SESSION_CLOSED_DELAY = 60
 SPEEDS = (VentilationSpeed.AWAY, VentilationSpeed.LOW, VentilationSpeed.MEDIUM, VentilationSpeed.HIGH)
 BYPASS_MODES = (VentilationSetting.AUTO, VentilationSetting.ON, VentilationSetting.OFF)
 TEMPERATURE_PROFILES = (VentilationTemperatureProfile.NORMAL, VentilationTemperatureProfile.COOL, VentilationTemperatureProfile.WARM)
+
+# The properties with the airflow in m³/h of each speed.
+FLOW_FOR_SPEED = {
+    VentilationSpeed.AWAY: Property(UNIT_VENTILATIONCONFIG, 0x01, 0x03, PdoType.TYPE_CN_INT16),
+    VentilationSpeed.LOW: Property(UNIT_VENTILATIONCONFIG, 0x01, 0x04, PdoType.TYPE_CN_INT16),
+    VentilationSpeed.MEDIUM: Property(UNIT_VENTILATIONCONFIG, 0x01, 0x05, PdoType.TYPE_CN_INT16),
+    VentilationSpeed.HIGH: Property(UNIT_VENTILATIONCONFIG, 0x01, 0x06, PdoType.TYPE_CN_INT16),
+}
 
 
 @dataclass
@@ -492,37 +499,17 @@ class ComfoConnect(Bridge):
 
     async def get_flow_for_speed(self, speed: Literal["away", "low", "medium", "high"]) -> int:
         """Get the targeted airflow in m³/h for the given VentilationSpeed (away / low / medium / high)."""
+        if speed not in FLOW_FOR_SPEED:
+            raise ValueError(f"Invalid speed: {speed}")
 
-        match speed:
-            case VentilationSpeed.AWAY:
-                property_id = 3
-            case VentilationSpeed.LOW:
-                property_id = 4
-            case VentilationSpeed.MEDIUM:
-                property_id = 5
-            case VentilationSpeed.HIGH:
-                property_id = 6
-            case _:
-                raise ValueError(f"Invalid speed: {speed}")
-
-        return await self.get_single_property(UNIT_VENTILATIONCONFIG, SUBUNIT_01, property_id, PdoType.TYPE_CN_INT16)
+        return await self.get_property(FLOW_FOR_SPEED[speed])
 
     async def set_flow_for_speed(self, speed: Literal["away", "low", "medium", "high"], desired_flow: int):
         """Set the targeted airflow in m³/h for the given VentilationSpeed (away / low / medium / high)."""
+        if speed not in FLOW_FOR_SPEED:
+            raise ValueError(f"Invalid speed: {speed}")
 
-        match speed:
-            case VentilationSpeed.AWAY:
-                property_id = 3
-            case VentilationSpeed.LOW:
-                property_id = 4
-            case VentilationSpeed.MEDIUM:
-                property_id = 5
-            case VentilationSpeed.HIGH:
-                property_id = 6
-            case _:
-                raise ValueError(f"Invalid speed: {speed}")
-
-        await self.set_property(Property(UNIT_VENTILATIONCONFIG, SUBUNIT_01, property_id, PdoType.TYPE_CN_INT16), desired_flow)
+        await self.set_property(FLOW_FOR_SPEED[speed], desired_flow)
 
     async def get_bypass(self):
         """Get the bypass mode (auto / on / off)."""

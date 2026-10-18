@@ -115,15 +115,6 @@ UNIT_CLIME_HEATPUMP = 0x17
 # UNIT_CO2SENSOR_ENVPRESSURESENSOR(24) = 0x18
 # UNIT_CO2SENSOR_HMI(25) = 0x19
 
-SUBUNIT_01 = 0x01
-SUBUNIT_02 = 0x02
-SUBUNIT_03 = 0x03
-SUBUNIT_04 = 0x04
-SUBUNIT_05 = 0x05
-SUBUNIT_06 = 0x06
-SUBUNIT_07 = 0x07
-SUBUNIT_08 = 0x08
-
 # The subunits of the SCHEDULE unit. Each one has timers that override a setting for a while.
 SCHEDULE_PRESET = 0x01  # The fan speed, and the boost and away timers.
 SCHEDULE_BYPASS = 0x02

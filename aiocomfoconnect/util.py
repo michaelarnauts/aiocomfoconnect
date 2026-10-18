@@ -52,16 +52,6 @@ def version_decode(version):
     return f"{v_1}{v_2}.{v_3}.{v_4}"
 
 
-def pdo_to_can(pdo, node_id=1):
-    """Convert a PDO-ID to a CAN-ID."""
-    return ((pdo << 14) + 0x40 + node_id).to_bytes(4, byteorder="big").hex()
-
-
-def can_to_pdo(can, node_id=1):
-    """Convert a CAN-ID to a PDO-ID."""
-    return (int(can, 16) - 0x40 - node_id) >> 14
-
-
 def calculate_airflow_constraints(value):
     """Calculate the airflow constraints based on the bitshift value."""
     bits = uint_to_bits(value)
