@@ -17,18 +17,20 @@ _LOGGER = logging.getLogger(__name__)
 # that the routing table selects, so it doesn't reach bridges that live behind another interface.
 BROADCAST_ADDRESS = "<broadcast>"
 
+# How long we wait for bridges to answer, in seconds.
+DISCOVERY_TIMEOUT = 1
+
 
 class BridgeDiscoveryProtocol(asyncio.DatagramProtocol):
     """UDP Protocol for the ComfoConnect LAN C bridge discovery."""
 
-    def __init__(self, target: str = None, timeout: int = 5, broadcast_addresses: Iterable[Any] = None):
+    def __init__(self, target: str = None, timeout: float = DISCOVERY_TIMEOUT, broadcast_addresses: Iterable[Any] = None):
         loop = asyncio.get_running_loop()
 
         self._bridges: List[Bridge] = []
         self._bridge_uuids: set[str] = set()
         self._target = target
         self._future = loop.create_future()
-        self.transport = None
         self._timeout = loop.call_later(timeout, self.disconnect)
 
         if target:
@@ -42,20 +44,15 @@ class BridgeDiscoveryProtocol(asyncio.DatagramProtocol):
     def connection_made(self, transport: asyncio.transports.DatagramTransport):
         """Called when a connection is made."""
         _LOGGER.debug("Socket has been created")
-        self.transport = transport
 
         for target in self._targets:
             _LOGGER.debug("Sending discovery request to %s:%d", target, Bridge.PORT)
-            self.transport.sendto(b"\x0a\x00", (target, Bridge.PORT))
+            transport.sendto(b"\x0a\x00", (target, Bridge.PORT))
 
     def datagram_received(self, data: Union[bytes, str], addr: tuple[str | Any, int]):
         """Called when some datagram is received."""
         if self._future.done():
             _LOGGER.debug("Ignoring data received from %s after the discovery finished", addr)
-            return
-
-        if data == b"\x0a\x00":
-            _LOGGER.debug("Ignoring discovery request from %s:%d", addr[0], addr[1])
             return
 
         _LOGGER.debug("Data received from %s: %s", addr, data)
@@ -90,9 +87,7 @@ class BridgeDiscoveryProtocol(asyncio.DatagramProtocol):
             self.disconnect()
 
     def disconnect(self):
-        """Disconnect the socket."""
-        if self.transport:
-            self.transport.close()
+        """Finish the discovery with the bridges found so far. The caller closes the socket."""
         if not self._future.done():
             self._future.set_result(self._bridges)
 
@@ -101,7 +96,7 @@ class BridgeDiscoveryProtocol(asyncio.DatagramProtocol):
         return self._future
 
 
-async def discover_bridges(host: str = None, timeout: int = 1, loop=None, broadcast_addresses: Iterable[Any] = None) -> List[Bridge]:
+async def discover_bridges(host: str = None, timeout: float = DISCOVERY_TIMEOUT, broadcast_addresses: Iterable[Any] = None) -> List[Bridge]:
     """Discover bridges on the network, or by IP.
 
     The discovery request is sent to the limited broadcast address by default, which only reaches the
@@ -109,11 +104,7 @@ async def discover_bridges(host: str = None, timeout: int = 1, loop=None, broadc
     search in broadcast_addresses to reach bridges behind the other interfaces as well. In Home
     Assistant, `network.async_get_ipv4_broadcast_addresses()` provides these.
     """
-
-    if loop is None:
-        loop = asyncio.get_event_loop()
-
-    transport, protocol = await loop.create_datagram_endpoint(
+    transport, protocol = await asyncio.get_running_loop().create_datagram_endpoint(
         lambda: BridgeDiscoveryProtocol(host, timeout, broadcast_addresses),
         local_addr=("0.0.0.0", 0),
         allow_broadcast=not host,
