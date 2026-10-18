@@ -10,10 +10,13 @@ from aiocomfoconnect.exceptions import (
     AioComfoConnectError,
     AioComfoConnectNotConnected,
     AioComfoConnectSessionClosed,
+    ComfoClimeNotFoundException,
     ComfoConnectError,
     ComfoConnectNotAllowed,
     ComfoConnectRmiError,
+    NodeNotFoundException,
     SelfDeregistrationError,
+    VentilationUnitNotFoundException,
 )
 from aiocomfoconnect.protobuf import zehnder_pb2
 
@@ -39,6 +42,13 @@ def test_existing_parents_are_kept():
     """The base class is added without breaking existing except clauses."""
     assert issubclass(AioComfoConnectSessionClosed, AioComfoConnectNotConnected)
     assert issubclass(ComfoConnectNotAllowed, ComfoConnectError)
+
+
+@pytest.mark.parametrize("cls", [VentilationUnitNotFoundException, ComfoClimeNotFoundException])
+def test_node_not_found_exceptions(cls):
+    """A missing node of any kind can be caught with NodeNotFoundException."""
+    assert issubclass(cls, NodeNotFoundException)
+    assert issubclass(cls, AioComfoConnectError)
 
 
 def test_self_deregistration_error_importable_from_bridge():

@@ -68,11 +68,15 @@ class BridgeNotFoundException(AioComfoConnectError):
     """Exception raised when no bridge is found."""
 
 
-class VentilationUnitNotFoundException(AioComfoConnectError):
+class NodeNotFoundException(AioComfoConnectError):
+    """Exception raised when the bridge didn't announce the node we need on the ComfoNet bus."""
+
+
+class VentilationUnitNotFoundException(NodeNotFoundException):
     """Exception raised when the bridge didn't announce a ventilation unit on the ComfoNet bus."""
 
 
-class ComfoClimeNotFoundException(AioComfoConnectError):
+class ComfoClimeNotFoundException(NodeNotFoundException):
     """Exception raised when the bridge didn't announce a ComfoClime on the ComfoNet bus."""
 
 

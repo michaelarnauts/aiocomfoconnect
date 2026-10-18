@@ -69,8 +69,9 @@ $ python -m aiocomfoconnect get-property --host 192.168.1.213 1 1 8 9  # Unit 0x
 - `async set_sensor_ventmode_humidity_comfort(mode)`: Set the sensor based ventilation humidity comfort setting. (auto / on / off)
 - `async get_sensor_ventmode_humidity_protection()`: Get the sensor based ventilation humidity protection setting.
 - `async set_sensor_ventmode_humidity_protection(mode)`: Set the sensor based ventilation humidity protection setting. (auto / on / off)
-- `async get_property(prop)`: Get the value of a property, e.g. `PROPERTY_RMOT_HEATING_THRESHOLD`.
-- `async get_property_constraints(prop)`: Get the raw value of a numeric property, together with the range and step size the unit accepts.
+- `async get_property(prop, node_id=None)`: Get the value of a property, e.g. `PROPERTY_RMOT_HEATING_THRESHOLD`. It is read from the node the property lives on: the ventilation unit, or the ComfoClime for the `PROPERTY_CLIME_*` properties. Pass `node_id` to read it from another node. A `NodeNotFoundException` is raised when the node isn't on the bus.
+- `async set_property(prop, value, node_id=None)`: Set the raw value of a property, on the same node as `get_property`.
+- `async get_property_constraints(prop, node_id=None)`: Get the raw value of a numeric property, together with the range and step size the unit accepts.
 - `bridge_type`: The type of the bridge (`GatewayType.LANC`, `SEASON` or `PRO`). Discovery reports it, and a ComfoConnect Pro is also recognised once a session has started.
 
 ### Low-level API
