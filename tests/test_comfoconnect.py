@@ -501,15 +501,15 @@ async def test_get_properties(props, request_hex, reply, expected):
 
 @pytest.mark.parametrize("node_id", [None, 5])
 async def test_get_node_info(node_id):
-    """get_node_info reads the name, model, serial number and firmware of a node in one request."""
+    """get_node_info reads the name, model, article and serial number, and firmware and hardware version of a node in one request."""
     comfoconnect = ComfoConnect("127.0.0.1", LOCAL_UUID)
-    reply = b"My unit\x00" + b"ComfoAir Q450\x00" + b"FAKE0000000000\x00" + bytes.fromhex("001010c0")
+    reply = b"My unit\x00" + b"ComfoAir Q450\x00" + b"000000000\x00" + b"FAKE0000000000\x00" + bytes.fromhex("001010c0 02")
 
     with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=Mock(message=reply))) as mock_rmi:
         info = await comfoconnect.get_node_info(node_id)
 
-    assert info == NodeInfo(name="My unit", model="ComfoAir Q450", serial_number="FAKE0000000000", firmware="R1.4.0")
-    mock_rmi.assert_awaited_once_with(bytes.fromhex("02 01 01 01 14 14 08 04 06"), node_id=node_id)
+    assert info == NodeInfo(name="My unit", model="ComfoAir Q450", article_number="000000000", serial_number="FAKE0000000000", firmware="R1.4.0", hardware_version=2)
+    mock_rmi.assert_awaited_once_with(bytes.fromhex("02 01 01 01 16 14 08 0b 04 06 05"), node_id=node_id)
 
 
 async def test_get_properties_on_comfoclime():

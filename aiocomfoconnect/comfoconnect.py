@@ -48,7 +48,9 @@ from aiocomfoconnect.exceptions import (
     NodeNotFoundException,
 )
 from aiocomfoconnect.properties import (
+    PROPERTY_ARTICLE,
     PROPERTY_FIRMWARE_VERSION,
+    PROPERTY_HARDWARE_VERSION,
     PROPERTY_MODEL,
     PROPERTY_NAME,
     PROPERTY_SERIAL_NUMBER,
@@ -108,8 +110,10 @@ class NodeInfo:
 
     name: str
     model: str
+    article_number: str
     serial_number: str
     firmware: str
+    hardware_version: int
 
 
 @dataclass
@@ -453,8 +457,9 @@ class ComfoConnect(Bridge):
         return values
 
     async def get_node_info(self, node_id: Optional[int] = None) -> NodeInfo:
-        """Get the name, model, serial number and firmware version of a node (the ventilation unit by default), in one request."""
-        return NodeInfo(*await self.get_properties([PROPERTY_NAME, PROPERTY_MODEL, PROPERTY_SERIAL_NUMBER, PROPERTY_FIRMWARE_VERSION], node_id))
+        """Get the NodeInfo of a node (the ventilation unit by default), in one request."""
+        props = [PROPERTY_NAME, PROPERTY_MODEL, PROPERTY_ARTICLE, PROPERTY_SERIAL_NUMBER, PROPERTY_FIRMWARE_VERSION, PROPERTY_HARDWARE_VERSION]
+        return NodeInfo(*await self.get_properties(props, node_id))
 
     async def get_single_property(self, unit: int, subunit: int, property_id: int, property_type: int = None, node_id: Optional[int] = None) -> Any:
         """Get a property and convert to the right type."""
