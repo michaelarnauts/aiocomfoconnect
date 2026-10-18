@@ -82,6 +82,9 @@ will start with the `length` of the message, excluding this `length`-field itsel
 
 Note that only `op` and `msg` is valid Protocol Buffers data. The other fields should not be parsed.
 
+A † marks information that comes from the official ComfoControl app, but that has not been checked against a
+bridge.
+
 ### Header
 
 The header then consist of a `src`, `dst` and `op_length`, followed by the `op` and the `msg`. The `src` seems to be
@@ -97,6 +100,25 @@ indicates the length of the `op` field, the rest of the data contains the `msg`.
 | op (variable length)  | `0x08342002`                         | Message with type `GatewayOperation`                  |
 | msg (variable length) | `...`                                | Message with type that is stated in `op.type`         |
 
+### Result codes
+
+Every confirm carries a `result` in the `GatewayOperation`. These are the values from the protobuf definition:
+
+| result | name           | meaning                                                                                  |
+|--------|----------------|------------------------------------------------------------------------------------------|
+| 0      | OK             | The request was successful                                                               |
+| 1      | BAD_REQUEST    | Something was wrong with the request                                                     |
+| 2      | INTERNAL_ERROR | The request was ok, but handling it failed                                               |
+| 3      | NOT_REACHABLE  | The backend cannot route the request                                                     |
+| 4      | OTHER_SESSION  | The bridge already has a session with another client                                     |
+| 5      | NOT_ALLOWED    | The request is not allowed (like a RegisterApp with a wrong PIN)                         |
+| 6      | NO_RESOURCES   | Not enough resources, e.g. memory, to complete the request                               |
+| 7      | NOT_EXIST      | The ComfoNet node or property does not exist                                             |
+| 8      | RMI_ERROR      | The RMI failed; `CnRmiResponse.result` holds the RMI error code                          |
+
+The official app treats a `NOT_ALLOWED` on any request during a session as "the session was closed by the bridge", and
+a `NOT_REACHABLE` that is not a reply to one of its requests as a lost connection †.
+
 ### Commands
 
 A message consists of a command block (`GatewayOperation`) and a message block (variable type). The command block
@@ -108,7 +130,7 @@ This is a list of the commands.
 | Request                       | Confirm                       | Notification / Response | Description                                        |
 |-------------------------------|-------------------------------|-------------------------|----------------------------------------------------|
 | NoOperation                   |                               |                         |                                                    |
-| SetAddressRequestType         | SetAddressConfirmType         |                         |                                                    |
+| SetAddressRequestType         | SetAddressConfirmType         |                         | Sent by the app only when it connects through the cloud, not on the LAN † |
 | RegisterAppRequestType        | RegisterAppConfirmType        |                         | Adds a device in the registration list             |
 | StartSessionRequestType       | StartSessionConfirmType       |                         | Start as session with the bridge                   |
 | CloseSessionRequestType       | CloseSessionConfirmType       |                         | Terminate your session                             |
@@ -118,6 +140,7 @@ This is a list of the commands.
 | GetRemoteAccessIdRequestType  | GetRemoteAccessIdConfirmType  |                         |                                                    |
 | SetRemoteAccessIdRequestType  | SetRemoteAccessIdConfirmType  |                         |                                                    |
 | GetSupportIdRequestType       | GetSupportIdConfirmType       |                         |                                                    |
+| SetSupportIdRequestType       | SetSupportIdConfirmType       |                         |                                                    |
 | GetWebIdRequestType           | GetWebIdConfirmType           |                         |                                                    |
 | SetWebIdRequestType           | SetWebIdConfirmType           |                         |                                                    |
 | SetPushIdRequestType          | SetPushIdConfirmType          |                         |                                                    |
@@ -126,7 +149,7 @@ This is a list of the commands.
 | SetDeviceSettingsRequestType  | SetDeviceSettingsConfirmType  |                         |                                                    |
 | VersionRequestType            | VersionConfirmType            |                         |                                                    |
 |                               |                               | GatewayNotificationType |                                                    |
-|                               |                               | KeepAliveType           | You should send these to keep the connection open. |
+|                               |                               | KeepAliveType           | The official app never sends these, see [Keeping the connection alive](#keeping-the-connection-alive) † |
 | FactoryResetType              |                               |                         |                                                    |
 | CnTimeRequestType             | CnTimeConfirmType             |                         | Returns the seconds since 2000-01-01 00:00:00.     |
 | CnNodeRequestType             |                               | CnNodeNotificationType  |                                                    |
@@ -140,6 +163,10 @@ This is a list of the commands.
 | CnFupProgramEndRequestType    | CnFupProgramEndConfirmType    |                         |                                                    |
 | CnFupReadRequestType          | CnFupReadConfirmType          |                         |                                                    |
 | CnFupResetRequestType         | CnFupResetConfirmType         |                         |                                                    |
+| CnWhoAmIRequestType           | CnWhoAmIConfirmType           |                         | The app's installer menu sends it with a node id to identify a node, and with `0` afterwards † |
+| WiFiSettingsRequestType       | WiFiSettingsConfirmType       |                         | WiFi settings of a bridge with WiFi                |
+| WiFiNetworksRequestType       | WiFiNetworksConfirmType       |                         | The WiFi networks the bridge sees                  |
+| WiFiJoinNetworkRequestType    | WiFiJoinNetworkConfirmType    |                         | Join a WiFi network                                |
 
 #### RegisterApp (`RegisterAppRequestType` and `RegisterAppConfirmType`)
 
@@ -179,7 +206,7 @@ type: StartSessionRequestType
 reference: 16
 ```
 
-In case of a success, it will respond with a `type: StartSessionRequestType` with `result: OK`.
+In case of a success, it will respond with a `type: StartSessionConfirmType` with `result: OK`.
 
 ```javascript
 type: StartSessionConfirmType
@@ -190,6 +217,9 @@ reference: 16
 A ComfoConnect Pro fills in `devicename: "ccpro"` in this confirmation, while a LAN C leaves it empty. The official app
 uses this to recognise a Pro, since the gateway type from the discovery isn't known when a bridge is added by IP
 address.
+
+The confirmation also has a `resumed` field. The official app treats a confirmation with `resumed` set as a failed
+connection and stops †.
 
 If another client is already logged in, the bridge will respond with a `result` of `OTHER_SESSION`. The name of the
 other device will be in `devicename`.
@@ -263,7 +293,7 @@ These are the known `productId`s.
 #### CloseSession (`CloseSessionRequestType`)
 
 The client logs out by sending a `type: CloseSessionRequestType`. The bridge doesn't seem to send a response on
-this.
+this. The official app doesn't wait for one either: it closes the connection half a second later †.
 
 ```javascript
 type: CloseSessionRequestType
@@ -275,8 +305,16 @@ a `type: CloseSessionRequestType` message to the client.
 #### CnRpdoRequest (`CnRpdoRequestType`, `CnRpdoConfirmType` and `CnRpdoNotificationType`)
 
 To receive status updates, you need to register to a `pdid` by sending a `type: CnRpdoRequestType`. You also need
-to specify a `pdid`, `zone`, `type` and `timeout`. The zone always seems to be `1`. The `type` seems to depend on the
-`pdid`.
+to specify a `pdid`, `zone`, `type` and `timeout`. The `type` is the data type of the `pdid` (see
+[PROTOCOL-PDO.md](PROTOCOL-PDO.md)).
+
+The `zone` is a bit set of zones: zone 1 is `1`, zone 2 is `2`, zone 3 is `4`, and so on up to zone 8 (`128`) †. For a
+ventilation unit with one zone it is always `1`. The official app subscribes to the CO2 levels of a CO2 sensor in the
+zone of that sensor, and hands a notification to every zone whose bit is set in its `zone` field †.
+
+The official app subscribes with a `timeout` of `16777215` (`0xffffff`) †. It can also set the optional `interval`
+field, but only with intervals it got for a remote (not LAN) connection. To unsubscribe, it sends a `CnRpdoRequestType` with the `pdid`
+and the `zone` but without a `type`; the protobuf definition says that this deletes the subscription †.
 
 ```javascript
 type: CnRpdoRequestType
@@ -329,7 +367,22 @@ reference: 122
 message: "ComfoAir Q450 B R RF ST Quality\000"
 ```
 
+When the RMI itself fails, the bridge answers with `result: RMI_ERROR` and puts the error code in the `result` field
+of the `CnRmiResponse` (see [Error codes](PROTOCOL-RMI.md#error-codes)). The official app sends a request a second time
+when the first one failed or got no answer, also after an `RMI_ERROR` †.
+
 For an overview about the known RMI Requests, check [PROTOCOL-RMI.md](PROTOCOL-RMI.md)
+
+### Keeping the connection alive
+
+The official app never sends a `KeepAlive`. Instead, when it has sent nothing for 5 seconds and has no request
+waiting for a reply, it sends a `CnTimeRequest`. When it has received nothing at all for 10 seconds, it considers the
+connection lost and closes it †.
+
+aiocomfoconnect uses a heartbeat: when it has received nothing for 30 seconds, it sends a `CnTimeRequest`, and
+when that isn't answered it closes the connection and reconnects. On an established session, it also closes the
+connection and starts a new session when a request is answered with `NOT_ALLOWED` or `OTHER_SESSION`, because the bridge
+then dropped the session without closing the connection.
 
 # ComfoControl CAN/RMI Protocol
 
