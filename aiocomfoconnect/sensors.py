@@ -66,6 +66,7 @@ SENSOR_POWER_USAGE_TOTAL_YEAR = 129
 SENSOR_PREHEATER_POWER = 146
 SENSOR_PREHEATER_POWER_TOTAL = 145
 SENSOR_PREHEATER_POWER_TOTAL_YEAR = 144
+SENSOR_PRESET_TIMERS = 337  # The running timers of the preset schedule, as a bit set: bit 6 is boost, bit 11 is away.
 SENSOR_PROFILE_TEMPERATURE = 67
 SENSOR_RF_PAIRING_MODE = 176
 SENSOR_RMOT = 209
@@ -80,6 +81,16 @@ SENSOR_UNIT_AIRFLOW = 224
 SENSOR_UNIT_TEMPERATURE = 208
 SENSOR_COMFOCOOL_STATE = 784
 SENSOR_COMFOCOOL_CONDENSOR_TEMP = 802
+
+# The CO2 level of the CO2 sensors (ProductId.CO2SENSOR) in zone 1: SENSOR_CO2_1 is the one with the lowest node id.
+SENSOR_CO2_1 = 1024
+SENSOR_CO2_2 = 1025
+SENSOR_CO2_3 = 1026
+SENSOR_CO2_4 = 1027
+SENSOR_CO2_5 = 1028
+SENSOR_CO2_6 = 1029
+SENSOR_CO2_7 = 1030
+SENSOR_CO2_8 = 1031
 
 # ComfoClime sensors. These are only reported when a ComfoClime is present on the ComfoNet bus.
 SENSOR_COMFOCLIME_TPMA_TEMPERATURE = 4145
@@ -102,6 +113,7 @@ UNIT_CELCIUS = "°C"
 UNIT_PERCENT = "%"
 UNIT_RPM = "rpm"
 UNIT_M3H = "m³/h"
+UNIT_PPM = "ppm"
 
 
 @dataclass
@@ -184,7 +196,7 @@ SENSORS: Dict[int, Sensor] = {
         Sensor("Supply Air Humidity", UNIT_PERCENT, SENSOR_HUMIDITY_SUPPLY, PdoType.TYPE_CN_UINT8),
         Sensor("sensor_321", None, 321, PdoType.TYPE_CN_UINT16),
         Sensor("sensor_325", None, 325, PdoType.TYPE_CN_UINT16),
-        Sensor("sensor_337", None, 337, PdoType.TYPE_CN_UINT32),
+        Sensor("Preset Timers", None, SENSOR_PRESET_TIMERS, PdoType.TYPE_CN_UINT32),
         Sensor("Bypass Override", None, SENSOR_BYPASS_OVERRIDE, PdoType.TYPE_CN_UINT32),
         Sensor("sensor_341", None, 341, PdoType.TYPE_CN_UINT32),
         Sensor("Supply Fan Mode (running timers)", None, SENSOR_FAN_MODE_SUPPLY_3, PdoType.TYPE_CN_UINT32),
@@ -205,6 +217,14 @@ SENSORS: Dict[int, Sensor] = {
         Sensor("ComfoCool State", None, SENSOR_COMFOCOOL_STATE, PdoType.TYPE_CN_UINT8),
         Sensor("sensor_785", None, 785, PdoType.TYPE_CN_BOOL, bool),
         Sensor("ComfoCool Condensor Temperature", UNIT_CELCIUS, SENSOR_COMFOCOOL_CONDENSOR_TEMP, PdoType.TYPE_CN_INT16, lambda x: x / 10),
+        Sensor("CO2 Sensor 1", UNIT_PPM, SENSOR_CO2_1, PdoType.TYPE_CN_UINT16),
+        Sensor("CO2 Sensor 2", UNIT_PPM, SENSOR_CO2_2, PdoType.TYPE_CN_UINT16),
+        Sensor("CO2 Sensor 3", UNIT_PPM, SENSOR_CO2_3, PdoType.TYPE_CN_UINT16),
+        Sensor("CO2 Sensor 4", UNIT_PPM, SENSOR_CO2_4, PdoType.TYPE_CN_UINT16),
+        Sensor("CO2 Sensor 5", UNIT_PPM, SENSOR_CO2_5, PdoType.TYPE_CN_UINT16),
+        Sensor("CO2 Sensor 6", UNIT_PPM, SENSOR_CO2_6, PdoType.TYPE_CN_UINT16),
+        Sensor("CO2 Sensor 7", UNIT_PPM, SENSOR_CO2_7, PdoType.TYPE_CN_UINT16),
+        Sensor("CO2 Sensor 8", UNIT_PPM, SENSOR_CO2_8, PdoType.TYPE_CN_UINT16),
         Sensor("ComfoClime TPMA Temperature", UNIT_CELCIUS, SENSOR_COMFOCLIME_TPMA_TEMPERATURE, PdoType.TYPE_CN_INT16, lambda x: x / 10),
         Sensor("ComfoClime Target Temperature", UNIT_CELCIUS, SENSOR_COMFOCLIME_TARGET_TEMPERATURE, PdoType.TYPE_CN_INT16, lambda x: x / 10),
         Sensor("ComfoClime Device Mode", None, SENSOR_COMFOCLIME_DEVICE_MODE, PdoType.TYPE_CN_UINT8),

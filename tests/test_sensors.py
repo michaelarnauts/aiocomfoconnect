@@ -6,9 +6,12 @@ import pytest
 
 from aiocomfoconnect.const import PdoType
 from aiocomfoconnect.sensors import (
+    SENSOR_CO2_1,
+    SENSOR_CO2_8,
     SENSOR_POSTHEATER_PRESENT,
     SENSOR_POSTHEATER_STATE,
     SENSOR_POSTHEATER_TEMPERATURE_BEFORE,
+    SENSOR_PRESET_TIMERS,
     SENSOR_UNIT_AIRFLOW,
     SENSOR_UNIT_TEMPERATURE,
     SENSORS,
@@ -32,6 +35,19 @@ def test_scaled_sensors_have_a_unit():
     """A sensor that is scaled by 10 has a unit, unless we don't know what it measures (sensor_<id>)."""
     scaled = [sensor for sensor in SENSORS.values() if sensor.value_fn and sensor.value_fn(75) == 7.5]
     assert scaled and all(sensor.unit or sensor.name.startswith("sensor_") for sensor in scaled)
+
+
+def test_co2_sensors():
+    """The CO2 levels of up to 8 CO2 sensors are pdids 1024 to 1031, in ppm."""
+    assert (SENSOR_CO2_1, SENSOR_CO2_8) == (1024, 1031)
+    for pdid in range(1024, 1032):
+        assert (SENSORS[pdid].type, SENSORS[pdid].unit, SENSORS[pdid].value_fn) == (PdoType.TYPE_CN_UINT16, "ppm", None)
+
+
+def test_preset_timers_sensor():
+    """The running timers of the preset schedule are a UINT32 bit set on pdid 337."""
+    sensor = SENSORS[SENSOR_PRESET_TIMERS]
+    assert (sensor.id, sensor.name, sensor.type) == (337, "Preset Timers", PdoType.TYPE_CN_UINT32)
 
 
 def test_postheater_sensors():
