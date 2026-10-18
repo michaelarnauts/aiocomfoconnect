@@ -29,6 +29,7 @@ from .exceptions import (
     ComfoConnectNotReachable,
     ComfoConnectOtherSession,
     ComfoConnectRmiError,
+    SelfDeregistrationError,
     VentilationUnitNotFoundException,
 )
 from .protobuf import zehnder_pb2
@@ -43,10 +44,6 @@ NODE_DISCOVERY_TIMEOUT = 5
 
 # Source UUID (16 bytes), destination UUID (16 bytes) and the length of the command (2 bytes)
 HEADER_LENGTH = 34
-
-
-class SelfDeregistrationError(Exception):
-    """Exception raised when trying to deregister self."""
 
 
 @dataclass(frozen=True)
