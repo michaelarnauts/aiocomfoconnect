@@ -22,6 +22,7 @@ from aiocomfoconnect.const import (
     UNIT_TEMPHUMCONTROL,
     UNIT_VENTILATIONCONFIG,
     ComfoCoolMode,
+    ConnectionState,
     PdoType,
     SCHEDULE_BYPASS,
     SCHEDULE_COMFOCOOL,
@@ -92,11 +93,14 @@ class ComfoConnect(Bridge):
         connect_timeout=30,
         bridge_type: int = 0,
         heartbeat_interval: Optional[float] = None,
+        connection_state_callback: Optional[Callable[[str], None]] = None,
     ):
         """Initialize the ComfoConnect class.
 
         With a heartbeat_interval, we ask the bridge for its time when we received nothing for that many seconds, and
         reconnect when it doesn't answer. This detects a bridge that stopped answering without closing the connection.
+
+        The connection_state_callback is called with a ConnectionState when the state of the session changes.
         """
         super().__init__(host, uuid, loop, bridge_type)
 
@@ -108,6 +112,8 @@ class ComfoConnect(Bridge):
 
         self._sensor_callback_fn: Optional[Callable[[Sensor, Any], None]] = sensor_callback
         self._alarm_callback_fn: Optional[Callable[[int, Dict[int, str]], None]] = alarm_callback
+        self._connection_state_callback_fn: Optional[Callable[[str], None]] = connection_state_callback
+        self._connection_state = ConnectionState.DISCONNECTED
         self._sensors: Dict[int, Sensor] = {}
         self._sensors_values: Dict[int, Any] = {}
         self._sensor_holds: Dict[int, asyncio.Handle] = {}
@@ -165,6 +171,7 @@ class ComfoConnect(Bridge):
                     raise AioComfoConnectTimeout(f"Failed to connect within {self.connect_timeout} seconds") from exc
                 raise
 
+            self._set_connection_state(ConnectionState.CONNECTED)
             self._reconnect_task = asyncio.create_task(self._reconnect_loop(uuid))
 
     async def _start_session(self, uuid: str):
@@ -199,6 +206,7 @@ class ComfoConnect(Bridge):
             while True:
                 await self._wait_for_disconnect()
                 _LOGGER.info("Disconnected from bridge, reconnecting...")
+                self._set_connection_state(ConnectionState.DISCONNECTED)
                 delay = RECONNECT_DELAY
                 while True:
                     # Clean up the connection before reconnecting, also when it already ended by itself.
@@ -206,9 +214,11 @@ class ComfoConnect(Bridge):
                     await asyncio.sleep(delay)
                     try:
                         await self._start_session(uuid)
+                        self._set_connection_state(ConnectionState.CONNECTED)
                         break
                     except ComfoConnectNotAllowed as exc:
                         _LOGGER.error("Not allowed to connect (not registered?): %s", exc)
+                        self._set_connection_state(ConnectionState.NOT_ALLOWED)
                         return
                     except Exception as exc:  # pylint: disable=broad-exception-caught
                         _LOGGER.warning("Could not reconnect: %r. Retrying in %s seconds...", exc, RECONNECT_RETRY_DELAY)
@@ -235,6 +245,23 @@ class ComfoConnect(Bridge):
                 _LOGGER.warning("The bridge did not answer the heartbeat")
                 return
 
+    @property
+    def connection_state(self) -> str:
+        """The state of the session, one of ConnectionState. Unlike is_connected(), this is only CONNECTED once the session is up."""
+        return self._connection_state
+
+    def _set_connection_state(self, state: str):
+        """Remember the state of the session, and tell the callback when it changed."""
+        if state == self._connection_state:
+            return
+        self._connection_state = state
+        if self._connection_state_callback_fn is None:
+            return
+        try:
+            self._connection_state_callback_fn(state)
+        except Exception:  # pylint: disable=broad-exception-caught
+            _LOGGER.exception("Error in the connection state callback")
+
     async def disconnect(self):
         """Disconnect from the bridge and stop reconnecting. A connect() that is still busy fails."""
         _LOGGER.debug("Stopping reconnection and disconnecting")
@@ -251,6 +278,7 @@ class ComfoConnect(Bridge):
                 await asyncio.wait([self._reconnect_task])
                 self._reconnect_task = None
             await super().disconnect()
+            self._set_connection_state(ConnectionState.DISCONNECTED)
 
     async def register_sensor(self, sensor: Sensor):
         """Register a sensor on the bridge."""
