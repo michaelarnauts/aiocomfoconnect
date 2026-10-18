@@ -14,9 +14,6 @@ from aiocomfoconnect.const import (
     ERRORS,
     ERRORS_140,
     SUBUNIT_01,
-    SUBUNIT_03,
-    SUBUNIT_06,
-    SUBUNIT_07,
     UNIT_ERROR,
     UNIT_SCHEDULE,
     UNIT_TEMPHUMCONTROL,
@@ -581,14 +578,14 @@ class ComfoConnect(Bridge):
     async def set_balance_mode(self, mode: Literal["balance", "supply_only", "exhaust_only"], timeout=-1):
         """Set the ventilation balance mode (balance / supply only / exhaust only)."""
         if mode == VentilationBalance.BALANCE:
-            await self.cmd_rmi_request(bytes([0x85, UNIT_SCHEDULE, SUBUNIT_06, 0x01]))
-            await self.cmd_rmi_request(bytes([0x85, UNIT_SCHEDULE, SUBUNIT_07, 0x01]))
+            await self.cancel_timer(SCHEDULE_SUPPLY_ONLY, TIMER_DEFAULT)
+            await self.cancel_timer(SCHEDULE_EXHAUST_ONLY, TIMER_DEFAULT)
         elif mode == VentilationBalance.SUPPLY_ONLY:
-            await self.cmd_rmi_request(bytestring([0x84, UNIT_SCHEDULE, SUBUNIT_06, 0x01, 0x00, 0x00, 0x00, 0x00, timeout.to_bytes(4, "little", signed=True), 0x01]))
-            await self.cmd_rmi_request(bytes([0x85, UNIT_SCHEDULE, SUBUNIT_07, 0x01]))
+            await self.set_timer(SCHEDULE_SUPPLY_ONLY, TIMER_DEFAULT, 0x01, timeout)
+            await self.cancel_timer(SCHEDULE_EXHAUST_ONLY, TIMER_DEFAULT)
         elif mode == VentilationBalance.EXHAUST_ONLY:
-            await self.cmd_rmi_request(bytes([0x85, UNIT_SCHEDULE, SUBUNIT_06, 0x01]))
-            await self.cmd_rmi_request(bytestring([0x84, UNIT_SCHEDULE, SUBUNIT_07, 0x01, 0x00, 0x00, 0x00, 0x00, timeout.to_bytes(4, "little", signed=True), 0x01]))
+            await self.cancel_timer(SCHEDULE_SUPPLY_ONLY, TIMER_DEFAULT)
+            await self.set_timer(SCHEDULE_EXHAUST_ONLY, TIMER_DEFAULT, 0x01, timeout)
         else:
             raise ValueError(f"Invalid mode: {mode}")
 
@@ -649,11 +646,11 @@ class ComfoConnect(Bridge):
     async def set_temperature_profile(self, profile: Literal["warm", "normal", "cool"], timeout=-1):
         """Set the temperature profile (warm / normal / cool)."""
         if profile == VentilationTemperatureProfile.WARM:
-            await self.cmd_rmi_request(bytestring([0x84, UNIT_SCHEDULE, SUBUNIT_03, 0x01, 0x00, 0x00, 0x00, 0x00, timeout.to_bytes(4, "little", signed=True), 0x02]))
+            await self.set_timer(SCHEDULE_TEMPERATURE_PROFILE, TIMER_DEFAULT, 0x02, timeout)
         elif profile == VentilationTemperatureProfile.NORMAL:
-            await self.cmd_rmi_request(bytestring([0x84, UNIT_SCHEDULE, SUBUNIT_03, 0x01, 0x00, 0x00, 0x00, 0x00, timeout.to_bytes(4, "little", signed=True), 0x00]))
+            await self.set_timer(SCHEDULE_TEMPERATURE_PROFILE, TIMER_DEFAULT, 0x00, timeout)
         elif profile == VentilationTemperatureProfile.COOL:
-            await self.cmd_rmi_request(bytestring([0x84, UNIT_SCHEDULE, SUBUNIT_03, 0x01, 0x00, 0x00, 0x00, 0x00, timeout.to_bytes(4, "little", signed=True), 0x01]))
+            await self.set_timer(SCHEDULE_TEMPERATURE_PROFILE, TIMER_DEFAULT, 0x01, timeout)
         else:
             raise ValueError(f"Invalid profile: {profile}")
 
