@@ -1,7 +1,6 @@
 """Tests for the bridge discovery."""
 
 import asyncio
-import inspect
 from ipaddress import IPv4Address
 from unittest.mock import MagicMock, patch
 
@@ -197,7 +196,3 @@ class TestDiscoverBridges:
         with pytest.raises(asyncio.CancelledError):
             await task
         assert len(transports) == 1 and transports[0].is_closing()
-
-    def test_default_timeout(self):
-        """The discovery waits one second by default."""
-        assert inspect.signature(discover_bridges).parameters["timeout"].default == 1

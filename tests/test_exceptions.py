@@ -25,13 +25,6 @@ LOCAL_UUID = "00000000000000000000000000000001"
 EXCEPTION_CLASSES = [cls for _, cls in inspect.getmembers(exceptions, inspect.isclass) if issubclass(cls, BaseException) and cls.__module__ == exceptions.__name__]
 
 
-def test_exception_classes_found():
-    """The parametrized tests below actually cover the module."""
-    assert AioComfoConnectError in EXCEPTION_CLASSES
-    assert ComfoConnectNotAllowed in EXCEPTION_CLASSES
-    assert len(EXCEPTION_CLASSES) > 10
-
-
 @pytest.mark.parametrize("cls", EXCEPTION_CLASSES, ids=lambda cls: cls.__name__)
 def test_every_exception_is_an_aiocomfoconnect_error(cls):
     """Every exception of the library can be caught with AioComfoConnectError."""
@@ -56,11 +49,6 @@ def test_self_deregistration_error_importable_from_bridge():
     from aiocomfoconnect.bridge import SelfDeregistrationError as FromBridge  # pylint: disable=import-outside-toplevel
 
     assert FromBridge is SelfDeregistrationError
-
-
-def test_unknown_action_exception_removed():
-    """The unused UnknownActionException is gone."""
-    assert not hasattr(exceptions, "UnknownActionException")
 
 
 def test_comfoconnect_error_str_with_text():

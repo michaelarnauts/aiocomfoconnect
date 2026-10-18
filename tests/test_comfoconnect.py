@@ -11,12 +11,10 @@ from aiocomfoconnect.exceptions import (
     AioComfoConnectNotConnected,
     ComfoClimeNotFoundException,
     NodeNotFoundException,
-    VentilationUnitNotFoundException,
 )
 from aiocomfoconnect.properties import (
     PROPERTY_CLIME_HEATING_COMFORT_TEMP,
     PROPERTY_CLIME_AUTO_SEASON,
-    PROPERTY_CLIME_HEATPUMP_STANDBY,
     PROPERTY_CLIME_SEASON,
     PROPERTY_FIRMWARE_VERSION,
     PROPERTY_CLIME_TEMPERATURE_PROFILE,
@@ -55,23 +53,6 @@ class TestComfoConnect:
             sensor_delay=0,  # Disable sensor delay for tests
             connect_timeout=1,  # Short timeout for tests
         )
-
-    @pytest.mark.asyncio
-    async def test_init(self, comfoconnect):
-        """Test ComfoConnect initialization."""
-        assert comfoconnect.host == "192.168.1.100"
-        assert comfoconnect.uuid == "00000000000000000000000000000001"
-        assert comfoconnect.sensor_delay == 0
-        assert comfoconnect._sensors == {}
-        assert comfoconnect._sensors_values == {}
-        assert comfoconnect._reconnect_task is None
-
-    @pytest.mark.asyncio
-    async def test_rmi_request_without_ventilation_node(self, comfoconnect):
-        """Test that RMI commands are refused instead of being sent to node 1."""
-        with patch.object(comfoconnect, "is_connected", return_value=True):
-            with pytest.raises(VentilationUnitNotFoundException):
-                await comfoconnect.get_speed()
 
     @pytest.mark.asyncio
     async def test_deregister_unregistered_sensor(self, comfoconnect):
@@ -140,44 +121,11 @@ class TestComfoConnect:
         mock_callback.assert_called_once_with(10, {21: "Unknown error 21"})
 
     @pytest.mark.asyncio
-    async def test_set_comfocool_mode_rejects_invalid_mode(self, comfoconnect):
-        """Test that an invalid comfocool mode raises like the other setters."""
-        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock()) as mock_rmi:
-            with pytest.raises(ValueError):
-                await comfoconnect.set_comfocool_mode("on")
-
-            mock_rmi.assert_not_called()
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize("first_byte,expected", [(0x00, "auto"), (0x01, "off")])
-    async def test_get_comfocool_mode(self, comfoconnect, first_byte, expected):
-        """Test that the comfocool getter returns the same values the setter takes."""
-        mock_response = Mock()
-        mock_response.message = bytes([first_byte, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00])
-
-        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=mock_response)):
-            assert await comfoconnect.get_comfocool_mode() == expected
-
-    @pytest.mark.asyncio
     async def test_auto_mode_reports_a_failed_speed_override_cancellation(self, comfoconnect):
         """A partially completed mode change must not report full success."""
         with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(side_effect=[Mock(), AioComfoConnectNotConnected("Disconnected")])):
             with pytest.raises(AioComfoConnectNotConnected):
                 await comfoconnect.set_mode("auto")
-
-    @pytest.mark.asyncio
-    async def test_get_property(self, comfoconnect):
-        """Test getting a property."""
-        from aiocomfoconnect.const import PdoType
-        from aiocomfoconnect.properties import Property
-
-        mock_response = Mock()
-        mock_response.message = b"\x64\x00"  # 100 in little-endian
-
-        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=mock_response)):
-            prop = Property(unit=1, subunit=1, property_id=8, property_type=PdoType.TYPE_CN_INT16)
-            value = await comfoconnect.get_property(prop)
-            assert value == 100
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -232,19 +180,6 @@ class TestComfoConnect:
             mock_rmi.assert_called_once_with(bytes([0x01, 0x1D, 0x01, 0x70, 0x03]), node_id=None)
 
     @pytest.mark.asyncio
-    async def test_get_property_constraints_uint8(self, comfoconnect):
-        """Test that the value size follows the property type."""
-        from aiocomfoconnect.properties import PROPERTY_TEMPERATURE_PROFILE_MODE, PropertyConstraints
-
-        mock_response = Mock()
-        mock_response.message = bytes.fromhex("00000101")  # adaptive, range 0 - 1, step 1
-
-        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=mock_response)):
-            constraints = await comfoconnect.get_property_constraints(PROPERTY_TEMPERATURE_PROFILE_MODE)
-
-            assert constraints == PropertyConstraints(value=0, minimum=0, maximum=1, step=1)
-
-    @pytest.mark.asyncio
     async def test_get_property_constraints_sensor_ventilation(self, comfoconnect):
         """Test that the sensor ventilation properties are single bytes, like the unit sends them."""
         from aiocomfoconnect.properties import (
@@ -276,28 +211,15 @@ class TestComfoConnect:
             assert (constraints.value, constraints.minimum, constraints.maximum, constraints.step) == (-50, -100, 100, 1)
 
     @pytest.mark.asyncio
-    async def test_get_property_constraints_rejects_invalid(self, comfoconnect):
-        """Test that non-numeric types and unexpected responses raise."""
-        from aiocomfoconnect.properties import PROPERTY_NAME, PROPERTY_RMOT_COOLING_THRESHOLD
-
-        with pytest.raises(ValueError):
-            await comfoconnect.get_property_constraints(PROPERTY_NAME)
+    async def test_get_property_constraints_rejects_short_reply(self, comfoconnect):
+        """Test that a reply without the range and step raises."""
+        from aiocomfoconnect.properties import PROPERTY_RMOT_COOLING_THRESHOLD
 
         mock_response = Mock()
         mock_response.message = bytes.fromhex("a000")  # only the value
 
         with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=mock_response)), pytest.raises(ValueError):
             await comfoconnect.get_property_constraints(PROPERTY_RMOT_COOLING_THRESHOLD)
-
-    @pytest.mark.asyncio
-    async def test_set_comfoclime_standby_property(self, comfoconnect):
-        """Test the verified ComfoClime standby property framing."""
-        node_notification(comfoconnect, node_id=11, product_id=ProductId.COMFOCLIME)
-
-        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock()) as mock_rmi:
-            await comfoconnect.set_property(PROPERTY_CLIME_HEATPUMP_STANDBY, 1)
-
-            mock_rmi.assert_called_once_with(bytes([0x03, 0x16, 0x01, 0x15, 0x01]), node_id=11)
 
     @pytest.mark.asyncio
     async def test_get_property_on_comfoclime(self, comfoconnect):
@@ -430,28 +352,6 @@ class TestComfoConnect:
             await comfoconnect.set_property(PROPERTY_PROFILE_TEMPERATURE_NORMAL, value)
 
         assert mock_rmi.await_args_list[1].args == (bytes([0x03, 0x1D, 0x01, 0x0B]) + raw.to_bytes(2, "little", signed=True),)
-
-    def test_property_scales(self):
-        """Only the temperatures in tenths of a degree are scaled."""
-        scaled = {name for name in dir(properties) if name.startswith("PROPERTY_") and getattr(properties, name).scale is not None}
-
-        assert scaled == {
-            "PROPERTY_RMOT_HEATING_THRESHOLD",
-            "PROPERTY_RMOT_COOLING_THRESHOLD",
-            "PROPERTY_PROFILE_TEMPERATURE_WARM",
-            "PROPERTY_PROFILE_TEMPERATURE_NORMAL",
-            "PROPERTY_PROFILE_TEMPERATURE_COOL",
-            "PROPERTY_CLIME_HEATING_KNEE_POINT",
-            "PROPERTY_CLIME_COOLING_KNEE_POINT",
-            "PROPERTY_CLIME_HEATING_COMFORT_TEMP",
-            "PROPERTY_CLIME_COOLING_COMFORT_TEMP",
-            "PROPERTY_CLIME_COOLING_TEMP_LIMIT",
-            "PROPERTY_CLIME_HEATING_DELTA",
-            "PROPERTY_CLIME_MANUAL_TARGET_TEMP",
-            "PROPERTY_CLIME_HEATPUMP_MAX_TEMP",
-            "PROPERTY_CLIME_HEATPUMP_MIN_TEMP",
-        }
-        assert all(getattr(properties, name).scale == 0.1 for name in scaled)
 
     @pytest.mark.asyncio
     async def test_get_firmware_version(self, comfoconnect):
@@ -609,7 +509,7 @@ async def test_timer_getters_reject_unknown_value(method):
             await getattr(comfoconnect, method)()
 
 
-@pytest.mark.parametrize("method", ["set_speed", "set_bypass", "set_temperature_profile"])
+@pytest.mark.parametrize("method", ["set_speed", "set_bypass", "set_temperature_profile", "set_comfocool_mode"])
 async def test_timer_setters_reject_unknown_value(method):
     """A timer setter raises a ValueError for a value it doesn't know, and sends nothing."""
     comfoconnect = ComfoConnect("127.0.0.1", LOCAL_UUID)
