@@ -51,7 +51,7 @@ $ python -m aiocomfoconnect get-property --host 192.168.1.213 1 1 8 9  # Unit 0x
 - `async set_mode(mode)`: Set the ventilation mode. (auto / manual) Selecting `auto` also cancels the temporary fan-speed override and returns control to the unit's schedule.
 - `async get_comfocool_mode()`: Get Comfocool mode
 - `async set_comfocool_mode()`: Set Comfocool mode. (auto / off)
-- `async get_speed()`: Get the ventilation speed.
+- `async get_speed()`: Get the ventilation speed, or `None` when no speed is set and the unit follows its schedule (auto mode).
 - `async set_speed(speed)`: Set the ventilation speed. (away / low / medium / high)
 - `async get_bypass()`: Get the bypass mode.
 - `async set_bypass(mode, timeout=-1)`: Set the bypass mode. (auto / on / off)
@@ -61,7 +61,7 @@ $ python -m aiocomfoconnect get-property --host 192.168.1.213 1 1 8 9  # Unit 0x
 - `async set_boost(mode, timeout=3600)`: Set the boost mode. (boolean)
 - `async get_away()`: Get the away mode.
 - `async set_away(mode, timeout=3600)`: Set the away mode. (boolean)
-- `async get_temperature_profile()`: Get the temperature profile.
+- `async get_temperature_profile()`: Get the temperature profile, or `None` when no profile is set and the unit follows its schedule.
 - `async set_temperature_profile(profile)`: Set the temperature profile. (warm / normal / cool)
 - `async get_sensor_ventmode_temperature_passive()`: Get the sensor based ventilation passive temperature control setting.
 - `async set_sensor_ventmode_temperature_passive(mode)`: Set the sensor based ventilation passive temperature control setting. (auto / on / off)

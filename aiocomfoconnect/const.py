@@ -106,6 +106,20 @@ SUBUNIT_06 = 0x06
 SUBUNIT_07 = 0x07
 SUBUNIT_08 = 0x08
 
+# The subunits of the SCHEDULE unit. Each one has timers that override a setting for a while.
+SCHEDULE_PRESET = 0x01  # The fan speed, and the boost and away timers.
+SCHEDULE_BYPASS = 0x02
+SCHEDULE_TEMPERATURE_PROFILE = 0x03
+SCHEDULE_COMFOCOOL = 0x05
+SCHEDULE_SUPPLY_ONLY = 0x06
+SCHEDULE_EXHAUST_ONLY = 0x07
+SCHEDULE_MANUAL_MODE = 0x08
+
+# The timers of a schedule subunit. Every subunit has TIMER_DEFAULT, the preset subunit also has the boost and away timers.
+TIMER_DEFAULT = 0x01
+TIMER_BOOST = 0x06
+TIMER_AWAY = 0x0B
+
 ERRORS_BASE = {
     21: "DANGER! OVERHEATING! Two or more sensors are detecting an incorrect temperature. Ventilation has stopped.",
     22: "Temperature too high for ComfoAir Q (TEMP_HRU ERROR)",
