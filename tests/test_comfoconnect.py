@@ -15,6 +15,7 @@ from aiocomfoconnect.exceptions import (
 from aiocomfoconnect.properties import (
     PROPERTY_CLIME_HEATING_COMFORT_TEMP,
     PROPERTY_CLIME_AUTO_SEASON,
+    PROPERTY_CLIME_HEATPUMP_STANDBY,
     PROPERTY_CLIME_SEASON,
     PROPERTY_FIRMWARE_VERSION,
     PROPERTY_CLIME_TEMPERATURE_PROFILE,
@@ -22,6 +23,8 @@ from aiocomfoconnect.properties import (
     PROPERTY_FLOW_HIGH,
     PROPERTY_FLOW_LOW,
     PROPERTY_FLOW_MEDIUM,
+    PROPERTY_MODEL,
+    PROPERTY_NAME,
     PROPERTY_PROFILE_TEMPERATURE_NORMAL,
     PROPERTY_PROFILE_TEMPERATURE_WARM,
     PROPERTY_RMOT_HEATING_THRESHOLD,
@@ -443,9 +446,6 @@ class TestComfoConnect:
         ("set_timer", (0x02, 0x01, 0x01), ["84 15 02 01 00000000 ffffffff 01"]),
         ("set_timer", (0x01, 0x06, 0x03, 600), ["84 15 01 06 00000000 58020000 03"]),
         ("cancel_timer", (0x02, 0x01), ["85 15 02 01"]),
-        # One group (count 01) of unit, subunit, then 0x10 (actual value) OR'ed with the number of properties.
-        ("get_multiple_properties", (0x01, 0x01, [0x03, 0x04, 0x06, 0x05, 0x14]), ["02 01 01 01 15 03 04 06 05 14"]),
-        ("get_multiple_properties", (0x1D, 0x01, [0x0A, 0x0B]), ["02 01 1d 01 12 0a 0b"]),
     ],
 )
 async def test_command_rmi_bytes(method, args, expected):
@@ -460,6 +460,78 @@ async def test_command_rmi_bytes(method, args, expected):
         await getattr(comfoconnect, method)(*args)
 
     assert [rmi_call.args for rmi_call in mock_rmi.await_args_list] == [(bytes.fromhex(request),) for request in expected]
+
+
+@pytest.mark.parametrize(
+    "props, request_hex, reply, expected",
+    [
+        # One group: 02, the number of groups, then per group the unit, the subunit, 0x10 (actual value) OR'ed with the
+        # number of properties, and the properties. Strings end with a NUL, the other types have a fixed size.
+        (
+            [PROPERTY_MODEL, PROPERTY_SERIAL_NUMBER, PROPERTY_FIRMWARE_VERSION, PROPERTY_NAME],
+            "02 01 01 01 14 08 04 06 14",
+            b"ComfoAir Q450\x00" + b"FAKE0000000000\x00" + bytes.fromhex("001010c0") + b"My unit\x00",
+            ["ComfoAir Q450", "FAKE0000000000", "R1.4.0", "My unit"],
+        ),
+        # A group per unit and subunit, with a scaled INT16, a UINT8 with options and a string.
+        (
+            [PROPERTY_RMOT_HEATING_THRESHOLD, PROPERTY_TEMPERATURE_PROFILE_MODE, PROPERTY_NAME],
+            "02 02 1d 01 12 02 08 01 01 11 14",
+            bytes.fromhex("b400 01") + b"My unit\x00",
+            [18.0, "fixed", "My unit"],
+        ),
+        # At most 7 properties in a group, like the official app.
+        (
+            [PROPERTY_NAME] * 8,
+            "02 02 01 01 17 14 14 14 14 14 14 14 01 01 11 14",
+            b"A\x00" * 8,
+            ["A"] * 8,
+        ),
+    ],
+)
+async def test_get_properties(props, request_hex, reply, expected):
+    """get_properties reads several properties in one request, and decodes them like get_property."""
+    comfoconnect = ComfoConnect("127.0.0.1", LOCAL_UUID)
+
+    with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=Mock(message=reply))) as mock_rmi:
+        assert await comfoconnect.get_properties(props) == expected
+
+    mock_rmi.assert_awaited_once_with(bytes.fromhex(request_hex), node_id=None)
+
+
+async def test_get_properties_on_comfoclime():
+    """Properties of the ComfoClime are read from its node."""
+    comfoconnect = ComfoConnect("127.0.0.1", LOCAL_UUID)
+    node_notification(comfoconnect, node_id=1, product_id=ProductId.COMFOAIRQ)
+    node_notification(comfoconnect, node_id=2, product_id=ProductId.COMFOCLIME)
+
+    with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=Mock(message=b"\x01\x05"))) as mock_rmi:
+        assert await comfoconnect.get_properties([PROPERTY_CLIME_SEASON, PROPERTY_CLIME_HEATPUMP_STANDBY]) == ["heating", 5]
+
+    assert mock_rmi.await_args.kwargs == {"node_id": 2}
+
+
+@pytest.mark.parametrize(
+    "props, reply",
+    [
+        ([PROPERTY_NAME, PROPERTY_CLIME_SEASON], None),  # Two nodes
+        ([Property(0x01, 0x01, 0x04, PdoType.TYPE_CN_TIME)], None),  # A type without a known size
+        ([PROPERTY_RMOT_HEATING_THRESHOLD, PROPERTY_RMOT_HEATING_THRESHOLD], b"\xb4\x00\xb4"),  # Too short
+        ([PROPERTY_RMOT_HEATING_THRESHOLD], b"\xb4\x00\xb4"),  # Too long
+    ],
+)
+async def test_get_properties_rejects_invalid(props, reply):
+    """Properties on several nodes or of an unknown size, and a reply of the wrong length, raise a ValueError."""
+    comfoconnect = ComfoConnect("127.0.0.1", LOCAL_UUID)
+    node_notification(comfoconnect, node_id=1, product_id=ProductId.COMFOAIRQ)
+    node_notification(comfoconnect, node_id=2, product_id=ProductId.COMFOCLIME)
+
+    with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=Mock(message=reply))) as mock_rmi:
+        with pytest.raises(ValueError):
+            await comfoconnect.get_properties(props)
+
+    if reply is None:
+        mock_rmi.assert_not_awaited()
 
 
 # Replies to a schedule "get timer" request (0x83): active, delay, duration, remaining time and value. An inactive timer keeps
