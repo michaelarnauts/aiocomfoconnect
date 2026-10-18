@@ -9,7 +9,7 @@ import struct
 import time
 from asyncio import StreamReader, StreamWriter
 from dataclasses import dataclass
-from typing import Awaitable, Callable, Dict, Iterator, Optional, Set
+from typing import Awaitable, Callable, Dict, Iterator, Optional
 
 from google.protobuf.message import DecodeError
 from google.protobuf.message import Message as ProtobufMessage
@@ -88,57 +88,6 @@ class Node:
         return self.product_id == ProductId.COMFOCLIME
 
 
-class EventBus:
-    """An event bus for async replies."""
-
-    def __init__(self):
-        self._listeners: Dict[int, Set[asyncio.Future]] = {}
-
-    @property
-    def listeners(self) -> Dict[int, Set[asyncio.Future]]:
-        """Expose listeners for diagnostic purposes (primarily tests)."""
-        return self._listeners
-
-    def add_listener(self, event_name: int, future: asyncio.Future):
-        """Add a listener to the event bus."""
-        _LOGGER.debug("Adding listener for event %s", event_name)
-        self._listeners.setdefault(event_name, set()).add(future)
-
-    def remove_listener(self, event_name: int, future: asyncio.Future):
-        """Remove a listener from the event bus, if it is still there."""
-        futures = self._listeners.get(event_name)
-        if futures is None:
-            return
-        futures.discard(future)
-        if not futures:
-            del self._listeners[event_name]
-
-    def emit(self, event_name: int, event) -> bool:
-        """Emit an event to the event bus. Returns False when nobody was waiting for it."""
-        _LOGGER.debug("Emitting for event %s", event_name)
-        futures = self._listeners.pop(event_name, set())
-        delivered = False
-        for future in futures:
-            if future.done():
-                continue
-            if isinstance(event, Exception):
-                future.set_exception(event)
-            else:
-                future.set_result(event)
-            delivered = True
-        return delivered
-
-    def fail_all(self, exc: Exception):
-        """Fail all pending listeners with the provided exception."""
-        pending = list(self._listeners.values())
-        self._listeners.clear()
-        for futures in pending:
-            for future in futures:
-                if future.done():
-                    continue
-                future.set_exception(exc)
-
-
 class Bridge:
     """ComfoConnect LAN C / PRO API."""
 
@@ -160,7 +109,8 @@ class Bridge:
         self._writer: Optional[StreamWriter] = None
         self._reference: Optional[Iterator[int]] = None
 
-        self._event_bus: Optional[EventBus] = None
+        # The requests that wait for their reply, by reference. Each connection gets its own, since references start at 1 again.
+        self._pending: Dict[int, asyncio.Future] = {}
 
         self._nodes: Dict[int, Node] = {}
         self._ventilation_node_found: Optional[asyncio.Event] = None
@@ -234,7 +184,7 @@ class Bridge:
         self._reference = itertools.count(1)
         self._local_uuid = uuid
         self._last_received = time.monotonic()
-        self._event_bus = EventBus()
+        self._pending = {}
 
         # The bridge announces its nodes at the start of every session, so forget what we knew.
         self._nodes = {}
@@ -268,7 +218,7 @@ class Bridge:
         finally:
             if self._writer is not None:
                 self._writer.close()
-            self._notify_pending_futures(AioComfoConnectNotConnected(reason))
+            self._fail_pending(AioComfoConnectNotConnected(reason))
 
     def _process_node_notification(self, msg: ProtobufMessage):
         """Keep track of the nodes that are available on the ComfoNet bus."""
@@ -328,11 +278,12 @@ class Bridge:
 
         return node_id
 
-    def _notify_pending_futures(self, exc: Exception):
-        """Fail all pending listeners so callers do not hang."""
-        if self._event_bus is None:
-            return
-        self._event_bus.fail_all(exc)
+    def _fail_pending(self, exc: Exception):
+        """Fail the requests that wait for a reply, so they don't hang."""
+        pending, self._pending = self._pending, {}
+        for fut in pending.values():
+            if not fut.done():
+                fut.set_exception(exc)
 
     async def disconnect(self):
         """Disconnect from the bridge."""
@@ -355,7 +306,7 @@ class Bridge:
             if not read_task.cancelled():
                 read_task.exception()
 
-        self._notify_pending_futures(AioComfoConnectNotConnected("Disconnected"))
+        self._fail_pending(AioComfoConnectNotConnected("Disconnected"))
 
         # Close the connection. When the connection was lost, waiting for it to close can raise the original error.
         if self._writer is not None:
@@ -369,7 +320,6 @@ class Bridge:
         self._reader = None
         self._writer = None
         self._read_task = None
-        self._event_bus = None
         self._reference = None
         self._nodes = {}
         self._ventilation_node_found = None
@@ -409,15 +359,12 @@ class Bridge:
 
         message = Message(cmd, msg, self._local_uuid, self.uuid)
 
-        # Create and register future BEFORE sending to avoid race condition
-        # where response arrives before listener is registered
-        event_bus = self._event_bus
+        # Register the future before sending, so a fast reply finds it. Keep the table of this connection, since a
+        # new connection may use the same reference.
+        pending = self._pending
         fut = None
         if reply:
-            if event_bus is None:
-                raise RuntimeError("Event bus is not initialized")
-            fut = asyncio.get_running_loop().create_future()
-            event_bus.add_listener(reference, fut)
+            fut = pending[reference] = asyncio.get_running_loop().create_future()
 
         try:
             # Send message (no lock needed - TCP writes are serialized by the OS)
@@ -441,8 +388,7 @@ class Bridge:
 
         finally:
             # Whatever happened, nobody waits for this reply anymore.
-            if fut is not None:
-                event_bus.remove_listener(reference, fut)
+            pending.pop(reference, None)
 
     async def _read(self) -> Message | None:
         """Read the next message from the bridge. Returns None for a message that we can't decode and should skip."""
@@ -486,7 +432,7 @@ class Bridge:
 
         except ComfoConnectError as exc:
             reference = exc.message.cmd.reference
-            if not (reference and self._event_bus and self._event_bus.emit(reference, exc)):
+            if not self._resolve(reference, exc):
                 _LOGGER.warning("Received an error reply without a matching request (reference %s): %r", reference, exc)
             return
 
@@ -506,6 +452,17 @@ class Bridge:
             self._dispatch_message(message)
         except Exception:  # pylint: disable=broad-exception-caught
             _LOGGER.exception("Error while processing message of type %s", message.cmd.type)
+
+    def _resolve(self, reference: int, reply) -> bool:
+        """Hand a reply, or the exception of an error reply, to the request that waits for it. Returns False when none does."""
+        fut = self._pending.pop(reference, None)
+        if fut is None or fut.done():
+            return False
+        if isinstance(reply, Exception):
+            fut.set_exception(reply)
+        else:
+            fut.set_result(reply)
+        return True
 
     def _dispatch_message(self, message: Message):
         """Hand a received message to the callbacks or to the request that is waiting for it."""
@@ -531,9 +488,8 @@ class Bridge:
             else:
                 _LOGGER.info("Unhandled CnAlarmNotificationType since no callback is registered.")
 
-        elif message.cmd.reference and self._event_bus:
-            # Emit to the event bus
-            self._event_bus.emit(message.cmd.reference, message.msg)
+        elif message.cmd.reference:
+            self._resolve(message.cmd.reference, message.msg)
 
         else:
             _LOGGER.warning("Unhandled message type %s: %s", message.cmd.type, message)
