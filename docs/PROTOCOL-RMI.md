@@ -248,23 +248,31 @@ The ComfoClime also drives two properties on the ventilation unit node:
 
 ### Known schedules
 
-| SubUnit | Property | Description                                       |
-|:--------|----------|---------------------------------------------------|
-| 0x01    | 0x01     | Preset (`00`=away/`01`=low/`02`=medium/`03`=high) |
-| 0x01    | 0x02     | PRESETRF                                          |
-| 0x01    | 0x03     | PRESETANALOG                                      |
-| 0x01    | 0x04     | PRESETRFANALOG                                    |
-| 0x01    | 0x05     | MANUALMODE                                        |
-| 0x01    | 0x06     | BOOST                                             |
-| 0x01    | 0x07     | BOOSTRF                                           |
-| 0x01    | 0x08     | BOOSTSWITCH                                       |
-| 0x01    | 0x0b     | AWAY                                              |
-| 0x02    | 0x01     | Bypass control (auto/on/off)                      |
-| 0x03    | 0x01     | Temperature profile (warm/normal/cool)            |
-| 0x05    | 0x01     | Comfocool control                                 |
-| 0x06    | 0x01     | Supply fan control                                |
-| 0x07    | 0x01     | Exhaust fan control                               |
-| 0x08    | 0x01     | Ventilation mode (auto/manual)                    |
+Each subunit has one or more timers that override a setting. The request is `command subunit timer`:
+
+- `0x83 subunit timer`: get the timer. Reply: `active(u8) delay(i32) duration(i32) remaining(i32) value(u8)`. An inactive timer keeps the fields of its last run, so only use them when `active` is `01`.
+- `0x84 subunit timer delay(i32) duration(i32) value(u8)`: start the timer. A duration of `-1` runs until it is cancelled. A duration of `1` lets the unit pick its default (the speed and manual mode timers use this, like the official app).
+- `0x85 subunit timer`: cancel the timer.
+
+The constants are in `aiocomfoconnect/const.py`, and `ComfoConnect` has `get_timer`, `set_timer` and `cancel_timer`.
+
+| SubUnit | Timer | Constants                                       | Description                                           |
+|:--------|-------|-------------------------------------------------|-------------------------------------------------------|
+| 0x01    | 0x01  | `SCHEDULE_PRESET`, `TIMER_DEFAULT`              | Fan speed (`00`=away/`01`=low/`02`=medium/`03`=high)  |
+| 0x01    | 0x02  |                                                 | PRESETRF                                              |
+| 0x01    | 0x03  |                                                 | PRESETANALOG                                          |
+| 0x01    | 0x04  |                                                 | PRESETRFANALOG                                        |
+| 0x01    | 0x05  |                                                 | MANUALMODE                                            |
+| 0x01    | 0x06  | `SCHEDULE_PRESET`, `TIMER_BOOST`                | Boost (`03`=high)                                     |
+| 0x01    | 0x07  |                                                 | BOOSTRF                                               |
+| 0x01    | 0x08  |                                                 | BOOSTSWITCH                                           |
+| 0x01    | 0x0b  | `SCHEDULE_PRESET`, `TIMER_AWAY`                 | Away (`00`=away)                                      |
+| 0x02    | 0x01  | `SCHEDULE_BYPASS`, `TIMER_DEFAULT`              | Bypass (`01`=on/`02`=off, no timer is auto)           |
+| 0x03    | 0x01  | `SCHEDULE_TEMPERATURE_PROFILE`, `TIMER_DEFAULT` | Temperature profile (`00`=normal/`01`=cool/`02`=warm) |
+| 0x05    | 0x01  | `SCHEDULE_COMFOCOOL`, `TIMER_DEFAULT`           | ComfoCool (`00`=auto/`01`=off in the official app)    |
+| 0x06    | 0x01  | `SCHEDULE_SUPPLY_ONLY`, `TIMER_DEFAULT`         | Exhaust fan off (`01`), so supply only                |
+| 0x07    | 0x01  | `SCHEDULE_EXHAUST_ONLY`, `TIMER_DEFAULT`        | Supply fan off (`01`), so exhaust only                |
+| 0x08    | 0x01  | `SCHEDULE_MANUAL_MODE`, `TIMER_DEFAULT`         | Manual mode (`01`=manual, no timer is auto)           |
 
 ## ERROR Unit commands
 

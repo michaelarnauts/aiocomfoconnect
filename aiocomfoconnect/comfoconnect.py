@@ -64,6 +64,11 @@ NUMERIC_PROPERTY_TYPES = {
     PdoType.TYPE_CN_INT64: (8, True),
 }
 
+# The settings of the speed, bypass and temperature profile timers. The index is the value of the timer.
+SPEEDS = (VentilationSpeed.AWAY, VentilationSpeed.LOW, VentilationSpeed.MEDIUM, VentilationSpeed.HIGH)
+BYPASS_MODES = (VentilationSetting.AUTO, VentilationSetting.ON, VentilationSetting.OFF)
+TEMPERATURE_PROFILES = (VentilationTemperatureProfile.NORMAL, VentilationTemperatureProfile.COOL, VentilationTemperatureProfile.WARM)
+
 
 @dataclass
 class TimerEntry:
@@ -474,34 +479,18 @@ class ComfoConnect(Bridge):
         timer = await self.get_timer(SCHEDULE_PRESET, TIMER_DEFAULT)
         if not timer.active:
             return None
-        speed = timer.value
+        if timer.value >= len(SPEEDS):
+            raise ValueError(f"Invalid speed: {timer.value}")
 
-        if speed == 0:
-            return VentilationSpeed.AWAY
-        if speed == 1:
-            return VentilationSpeed.LOW
-        if speed == 2:
-            return VentilationSpeed.MEDIUM
-        if speed == 3:
-            return VentilationSpeed.HIGH
-
-        raise ValueError(f"Invalid speed: {speed}")
+        return SPEEDS[timer.value]
 
     async def set_speed(self, speed: Literal["away", "low", "medium", "high"]):
         """Set the ventilation speed (away / low / medium / high)."""
-        if speed == VentilationSpeed.AWAY:
-            value = 0x00
-        elif speed == VentilationSpeed.LOW:
-            value = 0x01
-        elif speed == VentilationSpeed.MEDIUM:
-            value = 0x02
-        elif speed == VentilationSpeed.HIGH:
-            value = 0x03
-        else:
+        if speed not in SPEEDS:
             raise ValueError(f"Invalid speed: {speed}")
 
         # A duration of 1 lets the unit pick its default, like the official app: until cancelled in manual mode, 2 hours in auto mode.
-        await self.set_timer(SCHEDULE_PRESET, TIMER_DEFAULT, value, duration=1)
+        await self.set_timer(SCHEDULE_PRESET, TIMER_DEFAULT, SPEEDS.index(speed), duration=1)
 
     async def get_flow_for_speed(self, speed: Literal["away", "low", "medium", "high"]) -> int:
         """Get the targeted airflow in m³/h for the given VentilationSpeed (away / low / medium / high)."""
@@ -542,25 +531,17 @@ class ComfoConnect(Bridge):
         timer = await self.get_timer(SCHEDULE_BYPASS, TIMER_DEFAULT)
         if not timer.active:
             return VentilationSetting.AUTO
-        mode = timer.value
+        if timer.value >= len(BYPASS_MODES):
+            raise ValueError(f"Invalid mode: {timer.value}")
 
-        if mode == 0:
-            return VentilationSetting.AUTO
-        if mode == 1:
-            return VentilationSetting.ON
-        if mode == 2:
-            return VentilationSetting.OFF
-
-        raise ValueError(f"Invalid mode: {mode}")
+        return BYPASS_MODES[timer.value]
 
     async def set_bypass(self, mode: Literal["auto", "on", "off"], timeout=-1):
         """Set the bypass mode (auto / on / off)."""
         if mode == VentilationSetting.AUTO:
             await self.cancel_timer(SCHEDULE_BYPASS, TIMER_DEFAULT)
-        elif mode == VentilationSetting.ON:
-            await self.set_timer(SCHEDULE_BYPASS, TIMER_DEFAULT, 0x01, timeout)
-        elif mode == VentilationSetting.OFF:
-            await self.set_timer(SCHEDULE_BYPASS, TIMER_DEFAULT, 0x02, timeout)
+        elif mode in BYPASS_MODES:
+            await self.set_timer(SCHEDULE_BYPASS, TIMER_DEFAULT, BYPASS_MODES.index(mode), timeout)
         else:
             raise ValueError(f"Invalid mode: {mode}")
 
@@ -632,27 +613,17 @@ class ComfoConnect(Bridge):
         timer = await self.get_timer(SCHEDULE_TEMPERATURE_PROFILE, TIMER_DEFAULT)
         if not timer.active:
             return None
-        mode = timer.value
+        if timer.value >= len(TEMPERATURE_PROFILES):
+            raise ValueError(f"Invalid mode: {timer.value}")
 
-        if mode == 2:
-            return VentilationTemperatureProfile.WARM
-        if mode == 0:
-            return VentilationTemperatureProfile.NORMAL
-        if mode == 1:
-            return VentilationTemperatureProfile.COOL
-
-        raise ValueError(f"Invalid mode: {mode}")
+        return TEMPERATURE_PROFILES[timer.value]
 
     async def set_temperature_profile(self, profile: Literal["warm", "normal", "cool"], timeout=-1):
         """Set the temperature profile (warm / normal / cool)."""
-        if profile == VentilationTemperatureProfile.WARM:
-            await self.set_timer(SCHEDULE_TEMPERATURE_PROFILE, TIMER_DEFAULT, 0x02, timeout)
-        elif profile == VentilationTemperatureProfile.NORMAL:
-            await self.set_timer(SCHEDULE_TEMPERATURE_PROFILE, TIMER_DEFAULT, 0x00, timeout)
-        elif profile == VentilationTemperatureProfile.COOL:
-            await self.set_timer(SCHEDULE_TEMPERATURE_PROFILE, TIMER_DEFAULT, 0x01, timeout)
-        else:
+        if profile not in TEMPERATURE_PROFILES:
             raise ValueError(f"Invalid profile: {profile}")
+
+        await self.set_timer(SCHEDULE_TEMPERATURE_PROFILE, TIMER_DEFAULT, TEMPERATURE_PROFILES.index(profile), timeout)
 
     async def get_sensor_ventmode_temperature_passive(self):
         """Get sensor based ventilation mode - temperature passive (auto / on / off)."""
