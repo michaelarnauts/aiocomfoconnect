@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from aiocomfoconnect.comfoconnect import ComfoConnect
-from aiocomfoconnect.const import ERRORS_BASE, ProductId
+from aiocomfoconnect.comfoconnect import ComfoConnect, TimerEntry
+from aiocomfoconnect.const import ERRORS_BASE, SCHEDULE_PRESET, TIMER_BOOST, ProductId
 from aiocomfoconnect.exceptions import (
     AioComfoConnectNotConnected,
     ComfoClimeNotFoundException,
@@ -117,18 +117,6 @@ class TestComfoConnect:
         comfoconnect._alarm_callback(10, alarm)
 
         mock_callback.assert_called_once_with(10, {21: "Unknown error 21"})
-
-    @pytest.mark.asyncio
-    async def test_get_mode(self, comfoconnect):
-        """Test getting ventilation mode."""
-        mock_response = Mock()
-        mock_response.message = bytes([0x00])  # Auto mode
-
-        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=mock_response)):
-            from aiocomfoconnect.const import VentilationMode
-
-            mode = await comfoconnect.get_mode()
-            assert mode == VentilationMode.AUTO
 
     @pytest.mark.asyncio
     async def test_flow_for_speed_rejects_invalid_speed(self, comfoconnect):
@@ -352,12 +340,62 @@ class TestComfoConnect:
         ("set_sensor_ventmode_humidity_protection", ("on",), ["03 1d 01 07 02"]),
         ("set_sensor_ventmode_humidity_protection", ("off",), ["03 1d 01 07 00"]),
         ("clear_errors", (), ["82 03 01"]),
+        ("get_timer", (0x02, 0x01), ["83 15 02 01"]),
+        ("set_timer", (0x02, 0x01, 0x01), ["84 15 02 01 00000000 ffffffff 01"]),
+        ("set_timer", (0x01, 0x06, 0x03, 600), ["84 15 01 06 00000000 58020000 03"]),
+        ("cancel_timer", (0x02, 0x01), ["85 15 02 01"]),
     ],
 )
 async def test_command_rmi_bytes(method, args, expected):
     """Every high-level command sends exactly these RMI requests."""
     comfoconnect = ComfoConnect("127.0.0.1", LOCAL_UUID)
-    with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=Mock(message=b"\x01"))) as mock_rmi:
+
+    def reply(request):
+        # An active timer for the schedule "get timer" requests, a single byte for the rest.
+        return Mock(message=bytes.fromhex("01 00000000 ffffffff ffffffff 01") if request[0] == 0x83 else b"\x01")
+
+    with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(side_effect=reply)) as mock_rmi:
         await getattr(comfoconnect, method)(*args)
 
     assert [rmi_call.args for rmi_call in mock_rmi.await_args_list] == [(bytes.fromhex(request),) for request in expected]
+
+
+# Replies to a schedule "get timer" request (0x83): active, delay, duration, remaining time and value. An inactive timer keeps
+# the fields of its last run.
+@pytest.mark.parametrize(
+    "method, replies, expected",
+    [
+        ("get_mode", ["00 00000000 ffffffff 00000000 01"], "auto"),
+        ("get_mode", ["01 00000000 ffffffff ffffffff 01"], "manual"),
+        ("get_speed", ["01 00000000 ffffffff ffffffff 00"], "away"),
+        ("get_speed", ["01 00000000 ffffffff ffffffff 03"], "high"),
+        ("get_speed", ["00 00000000 ffffffff 00000000 03"], None),
+        ("get_bypass", ["01 00000000 100e0000 0b0e0000 01"], "on"),
+        ("get_bypass", ["01 00000000 100e0000 0d0e0000 02"], "off"),
+        ("get_bypass", ["00 00000000 100e0000 00000000 01"], "auto"),
+        ("get_balance_mode", ["00 00000000 08070000 00000000 01", "00 00000000 08070000 00000000 01"], "balance"),
+        ("get_balance_mode", ["01 00000000 100e0000 0e0e0000 01", "00 00000000 08070000 00000000 01"], "supply_only"),
+        ("get_balance_mode", ["00 00000000 08070000 00000000 01", "01 00000000 100e0000 0e0e0000 01"], "exhaust_only"),
+        ("get_boost", ["01 00000000 58020000 56020000 03"], True),
+        ("get_boost", ["00 00000000 58020000 00000000 03"], False),
+        ("get_away", ["01 00000000 55020000 53020000 00"], True),
+        ("get_away", ["00 00000000 b0040000 00000000 00"], False),
+        ("get_comfocool_mode", ["01 00000000 ffffffff ffffffff 00"], "off"),
+        ("get_comfocool_mode", ["00 00000000 ffffffff 00000000 00"], "auto"),
+        ("get_temperature_profile", ["01 00000000 ffffffff ffffffff 02"], "warm"),
+        ("get_temperature_profile", ["01 00000000 ffffffff ffffffff 00"], "normal"),
+        ("get_temperature_profile", ["00 00000000 100e0000 00000000 01"], None),
+    ],
+)
+async def test_timer_getters(method, replies, expected):
+    """The timer getters only use the value of an active timer."""
+    comfoconnect = ComfoConnect("127.0.0.1", LOCAL_UUID)
+    with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(side_effect=[Mock(message=bytes.fromhex(reply)) for reply in replies])):
+        assert await getattr(comfoconnect, method)() == expected
+
+
+async def test_get_timer():
+    """get_timer returns all the fields of the timer entry."""
+    comfoconnect = ComfoConnect("127.0.0.1", LOCAL_UUID)
+    with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=Mock(message=bytes.fromhex("01 00000000 58020000 56020000 03")))):
+        assert await comfoconnect.get_timer(SCHEDULE_PRESET, TIMER_BOOST) == TimerEntry(active=True, delay=0, duration=600, remaining=598, value=3)

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import struct
+from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Literal, Optional
 
 from aiocomfoconnect import Bridge
@@ -23,6 +25,16 @@ from aiocomfoconnect.const import (
     UNIT_VENTILATIONCONFIG,
     ComfoCoolMode,
     PdoType,
+    SCHEDULE_BYPASS,
+    SCHEDULE_COMFOCOOL,
+    SCHEDULE_EXHAUST_ONLY,
+    SCHEDULE_MANUAL_MODE,
+    SCHEDULE_PRESET,
+    SCHEDULE_SUPPLY_ONLY,
+    SCHEDULE_TEMPERATURE_PROFILE,
+    TIMER_AWAY,
+    TIMER_BOOST,
+    TIMER_DEFAULT,
     VentilationBalance,
     VentilationMode,
     VentilationSetting,
@@ -57,6 +69,17 @@ NUMERIC_PROPERTY_TYPES = {
     PdoType.TYPE_CN_INT16: (2, True),
     PdoType.TYPE_CN_INT64: (8, True),
 }
+
+
+@dataclass
+class TimerEntry:
+    """A timer of the SCHEDULE unit, that overrides a setting with a value for a while."""
+
+    active: bool
+    delay: int  # Seconds before the timer starts.
+    duration: int  # Seconds the timer runs, -1 is until it is cancelled.
+    remaining: int  # Seconds left, -1 is until it is cancelled.
+    value: int
 
 
 class ComfoConnect(Bridge):
@@ -405,14 +428,27 @@ class ComfoConnect(Bridge):
         errors = {bit: error_messages.get(bit, f"Unknown error {bit}") for bit in bytearray_to_bits(alarm.errors)}
         self._alarm_callback_fn(node_id, errors)
 
+    async def get_timer(self, subunit: int, timer: int) -> TimerEntry:
+        """Get a timer of the SCHEDULE unit."""
+        result = await self.cmd_rmi_request(bytes([0x83, UNIT_SCHEDULE, subunit, timer]))
+
+        active, delay, duration, remaining, value = struct.unpack_from("<BiiiB", result.message)
+
+        return TimerEntry(active == 1, delay, duration, remaining, value)
+
+    async def set_timer(self, subunit: int, timer: int, value: int, duration: int = -1):
+        """Start a timer of the SCHEDULE unit, that sets the value for the duration in seconds (-1 is until it is cancelled)."""
+        await self.cmd_rmi_request(bytes([0x84, UNIT_SCHEDULE, subunit, timer]) + struct.pack("<iiB", 0, duration, value))
+
+    async def cancel_timer(self, subunit: int, timer: int):
+        """Cancel a timer of the SCHEDULE unit."""
+        await self.cmd_rmi_request(bytes([0x85, UNIT_SCHEDULE, subunit, timer]))
+
     async def get_mode(self):
         """Get the current mode."""
-        result = await self.cmd_rmi_request(bytes([0x83, UNIT_SCHEDULE, SUBUNIT_08, 0x01]))
-        # 0000000000ffffffff0000000001 = auto
-        # 0100000000ffffffffffffffff01 = manual
-        mode = result.message[0]
+        timer = await self.get_timer(SCHEDULE_MANUAL_MODE, TIMER_DEFAULT)
 
-        return VentilationMode.MANUAL if mode == 1 else VentilationMode.AUTO
+        return VentilationMode.MANUAL if timer.active else VentilationMode.AUTO
 
     async def set_mode(self, mode: Literal["auto", "manual"]):
         """Set ventilation mode, cancelling the temporary speed override for auto."""
@@ -425,13 +461,11 @@ class ComfoConnect(Bridge):
             raise ValueError(f"Invalid mode: {mode}")
 
     async def get_speed(self):
-        """Get the ventilation speed (away / low / medium / high)."""
-        result = await self.cmd_rmi_request(bytes([0x83, UNIT_SCHEDULE, SUBUNIT_01, 0x01]))
-        # 0100000000ffffffffffffffff00 = away
-        # 0100000000ffffffffffffffff01 = low
-        # 0100000000ffffffffffffffff02 = medium
-        # 0100000000ffffffffffffffff03 = high
-        speed = result.message[-1]
+        """Get the ventilation speed (away / low / medium / high), or None when no speed is set and the unit follows its schedule."""
+        timer = await self.get_timer(SCHEDULE_PRESET, TIMER_DEFAULT)
+        if not timer.active:
+            return None
+        speed = timer.value
 
         if speed == 0:
             return VentilationSpeed.AWAY
@@ -493,11 +527,10 @@ class ComfoConnect(Bridge):
 
     async def get_bypass(self):
         """Get the bypass mode (auto / on / off)."""
-        result = await self.cmd_rmi_request(bytes([0x83, UNIT_SCHEDULE, SUBUNIT_02, 0x01]))
-        # 0000000000080700000000000000 = auto
-        # 0100000000100e00000b0e000001 = open
-        # 0100000000100e00000d0e000002 = close
-        mode = result.message[-1]
+        timer = await self.get_timer(SCHEDULE_BYPASS, TIMER_DEFAULT)
+        if not timer.active:
+            return VentilationSetting.AUTO
+        mode = timer.value
 
         if mode == 0:
             return VentilationSetting.AUTO
@@ -521,28 +554,14 @@ class ComfoConnect(Bridge):
 
     async def get_balance_mode(self):
         """Get the ventilation balance mode (balance / supply only / exhaust only)."""
-        result_06 = await self.cmd_rmi_request(bytes([0x83, UNIT_SCHEDULE, SUBUNIT_06, 0x01]))
-        result_07 = await self.cmd_rmi_request(bytes([0x83, UNIT_SCHEDULE, SUBUNIT_07, 0x01]))
-        # result_06:
-        # 0000000000080700000000000001 = balance
-        # 0100000000100e00000e0e000001 = supply only
-        # 0000000000080700000000000001 = exhaust only
+        supply_only = (await self.get_timer(SCHEDULE_SUPPLY_ONLY, TIMER_DEFAULT)).active
+        exhaust_only = (await self.get_timer(SCHEDULE_EXHAUST_ONLY, TIMER_DEFAULT)).active
 
-        # result_07:
-        # 0000000000080700000000000001 = balance
-        # 0000000000080700000000000001 = supply only
-        # 0100000000100e00000e0e000001 = exhaust only
-        mode_06 = result_06.message[0]
-        mode_07 = result_07.message[0]
-
-        if mode_06 == mode_07:
+        if supply_only == exhaust_only:
             return VentilationBalance.BALANCE
-        if mode_06 == 1 and mode_07 == 0:
+        if supply_only:
             return VentilationBalance.SUPPLY_ONLY
-        if mode_06 == 0 and mode_07 == 1:
-            return VentilationBalance.EXHAUST_ONLY
-
-        raise ValueError(f"Invalid mode: 6={mode_06}, 7={mode_07}")
+        return VentilationBalance.EXHAUST_ONLY
 
     async def set_balance_mode(self, mode: Literal["balance", "supply_only", "exhaust_only"], timeout=-1):
         """Set the ventilation balance mode (balance / supply only / exhaust only)."""
@@ -560,12 +579,7 @@ class ComfoConnect(Bridge):
 
     async def get_boost(self):
         """Get boost mode."""
-        result = await self.cmd_rmi_request(bytes([0x83, UNIT_SCHEDULE, SUBUNIT_01, 0x06]))
-        # 0000000000580200000000000003 = not active
-        # 0100000000580200005602000003 = active
-        mode = result.message[0]
-
-        return mode == 1
+        return (await self.get_timer(SCHEDULE_PRESET, TIMER_BOOST)).active
 
     async def set_boost(self, mode: bool, timeout=3600):
         """Activate boost mode."""
@@ -576,12 +590,7 @@ class ComfoConnect(Bridge):
 
     async def get_away(self):
         """Get away mode."""
-        result = await self.cmd_rmi_request(bytes([0x83, UNIT_SCHEDULE, SUBUNIT_01, 0x0B]))
-        # 0000000000b00400000000000000 = not active
-        # 0100000000550200005302000000 = active
-        mode = result.message[0]
-
-        return mode == 1
+        return (await self.get_timer(SCHEDULE_PRESET, TIMER_AWAY)).active
 
     async def set_away(self, mode: bool, timeout=3600):
         """Activate away mode."""
@@ -592,11 +601,10 @@ class ComfoConnect(Bridge):
 
     async def get_comfocool_mode(self):
         """Get the current comfocool mode."""
-        result = await self.cmd_rmi_request(bytes([0x83, UNIT_SCHEDULE, SUBUNIT_05, 0x01]))
-        # The first byte tells whether the "off" override is active.
-        if result.message[0] == 0:
-            return ComfoCoolMode.AUTO
-        return ComfoCoolMode.OFF
+        # The timer is the "off" override.
+        timer = await self.get_timer(SCHEDULE_COMFOCOOL, TIMER_DEFAULT)
+
+        return ComfoCoolMode.OFF if timer.active else ComfoCoolMode.AUTO
 
     async def set_comfocool_mode(self, mode: Literal["auto", "off"], timeout=-1):
         """Set the comfocool mode (auto / off)."""
@@ -608,12 +616,11 @@ class ComfoConnect(Bridge):
             raise ValueError(f"Invalid mode: {mode}")
 
     async def get_temperature_profile(self):
-        """Get the temperature profile (warm / normal / cool)."""
-        result = await self.cmd_rmi_request(bytes([0x83, UNIT_SCHEDULE, SUBUNIT_03, 0x01]))
-        # 0100000000ffffffffffffffff02 = warm
-        # 0100000000ffffffffffffffff00 = normal
-        # 0100000000ffffffffffffffff01 = cool
-        mode = result.message[-1]
+        """Get the temperature profile (warm / normal / cool), or None when no profile is set and the unit follows its schedule."""
+        timer = await self.get_timer(SCHEDULE_TEMPERATURE_PROFILE, TIMER_DEFAULT)
+        if not timer.active:
+            return None
+        mode = timer.value
 
         if mode == 2:
             return VentilationTemperatureProfile.WARM
