@@ -956,57 +956,6 @@ class TestReadLoopResilience:
         assert any(isinstance(r.exc_info[1], ZeroDivisionError) for r in caplog.records if r.exc_info)
 
 
-class FakeBridgeServer:
-    """A bridge on localhost that hands each connection to a handler, to test what happens on the real transport."""
-
-    def __init__(self, handler):
-        self.handler = handler
-        self.connections = 0
-        self.server = None
-
-    async def __aenter__(self):
-        self.server = await asyncio.start_server(self._handle, "127.0.0.1", 0)
-        return self
-
-    async def __aexit__(self, *exc_info):
-        self.server.close()
-        self.server.close_clients()
-        await self.server.wait_closed()
-
-    @property
-    def port(self):
-        return self.server.sockets[0].getsockname()[1]
-
-    def bridge(self):
-        bridge = Bridge("127.0.0.1", LOCAL_UUID)
-        bridge.PORT = self.port
-        return bridge
-
-    async def _handle(self, reader, writer):
-        self.connections += 1
-        try:
-            await self.handler(reader, writer)
-        except (ConnectionError, asyncio.IncompleteReadError):
-            pass
-        finally:
-            writer.close()
-
-    @staticmethod
-    async def read_request(reader):
-        """Read the next request a client sends."""
-        length = int.from_bytes(await reader.readexactly(4), byteorder="big")
-        return Message.decode(await reader.readexactly(length))
-
-    @staticmethod
-    def reply(writer, request, cmd_type, msg, result=zehnder_pb2.GatewayOperation.OK):
-        """Send a reply to a request."""
-        cmd = zehnder_pb2.GatewayOperation()
-        cmd.type = cmd_type
-        cmd.reference = request.cmd.reference
-        cmd.result = result
-        writer.write(Message(cmd, msg, LOCAL_UUID, LOCAL_UUID).encode())
-
-
 def _collect_loop_errors():
     """Collect the errors the event loop reports, like "Task exception was never retrieved"."""
     reports = []
@@ -1025,68 +974,53 @@ class TestConnectionLifecycle:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("ending", ["eof", "close_session"])
-    async def test_read_loop_end_closes_connection(self, ending):
+    async def test_read_loop_end_closes_connection(self, fake_bridge, ending):
         """A pending request fails at once, new requests fail at once, and connect() works again without disconnect()."""
         unretrieved = _collect_loop_errors()
-        session_started = asyncio.Event()
+        bridge = Bridge("127.0.0.1", LOCAL_UUID)
+        await bridge.connect(LOCAL_UUID)
 
-        async def handler(reader, writer):
-            if server.connections == 1:
-                await server.read_request(reader)  # The request that never gets a reply
-                if ending == "close_session":
-                    writer.write(_frame(zehnder_pb2.GatewayOperation.CloseSessionRequestType, zehnder_pb2.CloseSessionRequest()))
-                    await writer.drain()
-                    await reader.read()  # The bridge waits for us to close the connection
-                return
-            request = await server.read_request(reader)
-            server.reply(writer, request, zehnder_pb2.GatewayOperation.StartSessionConfirmType, zehnder_pb2.StartSessionConfirm())
-            await writer.drain()
-            session_started.set()
-            await reader.read()
+        # The fake bridge doesn't answer a VersionRequest, so this request waits until the connection ends.
+        loop = asyncio.get_running_loop()
+        start = loop.time()
+        pending = asyncio.create_task(bridge._send(zehnder_pb2.VersionRequest, zehnder_pb2.GatewayOperation.VersionRequestType, timeout=5))
+        await fake_bridge.wait_for(lambda: fake_bridge.received(zehnder_pb2.GatewayOperation.VersionRequestType))
+        if ending == "eof":
+            fake_bridge.drop()
+        else:
+            fake_bridge.close_session()
+        with pytest.raises(AioComfoConnectNotConnected):
+            await pending
+        assert loop.time() - start < 1
 
-        async with FakeBridgeServer(handler) as server:
-            bridge = server.bridge()
-            await bridge.connect(LOCAL_UUID)
+        await _wait_for_read_task(bridge)
+        assert not bridge.is_connected()
+        assert bridge._event_bus.listeners == {}
+        with pytest.raises(AioComfoConnectNotConnected):
+            await bridge.cmd_version_request()
 
-            loop = asyncio.get_running_loop()
-            start = loop.time()
-            with pytest.raises(AioComfoConnectNotConnected):
-                await bridge._send(zehnder_pb2.VersionRequest, zehnder_pb2.GatewayOperation.VersionRequestType, timeout=5)
-            assert loop.time() - start < 1
+        # Reconnect without disconnect() first
+        await bridge.connect(LOCAL_UUID)
+        assert fake_bridge.connections == 2
+        assert bridge.is_connected()
+        await bridge.cmd_start_session(True)
+        assert fake_bridge.received(zehnder_pb2.GatewayOperation.StartSessionRequestType, connection=2)
 
-            await _wait_for_read_task(bridge)
-            assert not bridge.is_connected()
-            assert bridge._event_bus.listeners == {}
-            with pytest.raises(AioComfoConnectNotConnected):
-                await bridge.cmd_version_request()
-
-            # Reconnect without disconnect() first
-            await bridge.connect(LOCAL_UUID)
-            assert server.connections == 2
-            assert bridge.is_connected()
-            await bridge.cmd_start_session(True)
-            assert session_started.is_set()
-
-            await bridge.disconnect()
-            assert not bridge.is_connected()
-
+        await bridge.disconnect()
+        assert not bridge.is_connected()
         assert unretrieved == []
 
     @pytest.mark.asyncio
-    async def test_disconnect_after_read_loop_ended(self):
+    async def test_disconnect_after_read_loop_ended(self, fake_bridge):
         """disconnect() cleans up after a read loop that already ended, and retrieves its exception."""
         unretrieved = _collect_loop_errors()
+        bridge = Bridge("127.0.0.1", LOCAL_UUID)
+        await bridge.connect(LOCAL_UUID)
+        read_task = bridge._read_task
+        fake_bridge.drop()
+        await _wait_for_read_task(bridge)
 
-        async def handler(reader, writer):
-            return  # Close the connection right away
-
-        async with FakeBridgeServer(handler) as server:
-            bridge = server.bridge()
-            await bridge.connect(LOCAL_UUID)
-            read_task = bridge._read_task
-            await _wait_for_read_task(bridge)
-
-            await bridge.disconnect()
+        await bridge.disconnect()
 
         assert bridge._read_task is None
         assert bridge._writer is None
