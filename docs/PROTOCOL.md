@@ -379,7 +379,10 @@ The official app never sends a `KeepAlive`. Instead, when it has sent nothing fo
 waiting for a reply, it sends a `CnTimeRequest`. When it has received nothing at all for 10 seconds, it considers the
 connection lost and closes it †.
 
-aiocomfoconnect uses a heartbeat: when it has received nothing for 30 seconds, it sends a `CnTimeRequest`, and
+The bridge closes the connection after about 90 seconds in which the client sent nothing, also while it keeps pushing
+sensor values (seen on a unit: twice after 90 seconds).
+
+aiocomfoconnect uses a heartbeat: when it has sent or received nothing for 30 seconds, it sends a `CnTimeRequest`, and
 when that isn't answered it closes the connection and reconnects. On an established session, it also closes the
 connection and starts a new session when a request is answered with `NOT_ALLOWED` or `OTHER_SESSION`, because the bridge
 then dropped the session without closing the connection.

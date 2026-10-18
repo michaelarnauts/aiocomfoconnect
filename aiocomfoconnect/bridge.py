@@ -119,8 +119,9 @@ class Bridge:
         self.__alarm_callback_fn: Optional[Callable[[int, ProtobufMessage], None]] = None
 
         self._read_task = None
-        # The time.monotonic() of the last message we received from the bridge.
+        # The time.monotonic() of the last message we received from the bridge, and of the last one we sent.
         self._last_received: float = 0
+        self._last_sent: float = 0
 
     def __repr__(self):
         return f"<Bridge {self.host}, UID={self.uuid}>"
@@ -182,7 +183,7 @@ class Bridge:
 
         self._reference = itertools.count(1)
         self._local_uuid = uuid
-        self._last_received = time.monotonic()
+        self._last_received = self._last_sent = time.monotonic()
         self._pending = {}
 
         # The bridge announces its nodes at the start of every session, so forget what we knew.
@@ -407,6 +408,7 @@ class Bridge:
             try:
                 self._writer.write(message.encode())
                 await self._writer.drain()
+                self._last_sent = time.monotonic()
             except (ConnectionError, OSError) as exc:
                 _LOGGER.warning("Failed to send message: %s", exc)
                 raise AioComfoConnectNotConnected("Connection lost while sending") from exc
