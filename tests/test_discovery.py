@@ -1,12 +1,15 @@
 """Tests for the bridge discovery."""
 
+import asyncio
+import inspect
 from ipaddress import IPv4Address
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
+from aiocomfoconnect import discovery
 from aiocomfoconnect.bridge import Bridge
-from aiocomfoconnect.discovery import BROADCAST_ADDRESS, BridgeDiscoveryProtocol
+from aiocomfoconnect.discovery import BROADCAST_ADDRESS, BridgeDiscoveryProtocol, discover_bridges
 from aiocomfoconnect.protobuf import zehnder_pb2
 
 BRIDGE_UUID = "0000000000221111111111111111ffff"
@@ -125,3 +128,76 @@ class TestBridgeDiscoveryProtocol:
 
         assert [bridge.host for bridge in await protocol.get_bridges()] == ["192.168.1.213"]
         assert not [record for record in caplog.records if record.levelname == "ERROR"]
+
+
+class FakeDiscoveryResponder(asyncio.DatagramProtocol):
+    """A bridge on a local UDP socket that answers discovery requests, unless it is told to stay silent."""
+
+    def __init__(self, silent: bool = False):
+        self.silent = silent
+        self.transport = None
+
+    def connection_made(self, transport):
+        self.transport = transport
+
+    def datagram_received(self, data, addr):
+        if not self.silent and data == b"\x0a\x00":
+            self.transport.sendto(discovery_response(host="127.0.0.1"), addr)
+
+
+@pytest.fixture
+async def responder(monkeypatch):
+    """Start a fake bridge on localhost and point the discovery at its port."""
+    transport, protocol = await asyncio.get_running_loop().create_datagram_endpoint(FakeDiscoveryResponder, local_addr=("127.0.0.1", 0))
+    monkeypatch.setattr(Bridge, "PORT", transport.get_extra_info("sockname")[1])
+    yield protocol
+    transport.close()
+
+
+@pytest.fixture
+def transports():
+    """Record the transports that the discovery opens."""
+    opened = []
+
+    class RecordingProtocol(BridgeDiscoveryProtocol):
+        """Remembers its transport."""
+
+        def connection_made(self, transport):
+            opened.append(transport)
+            super().connection_made(transport)
+
+    with patch.object(discovery, "BridgeDiscoveryProtocol", RecordingProtocol):
+        yield opened
+
+
+class TestDiscoverBridges:
+    """Test discover_bridges against a fake bridge on a local UDP socket."""
+
+    async def test_discovers_host(self, responder, transports):
+        """The bridge that answers is returned right away, and the socket is closed."""
+        bridges = await asyncio.wait_for(discover_bridges("127.0.0.1", timeout=10), 2)
+
+        assert [(bridge.host, bridge.uuid) for bridge in bridges] == [("127.0.0.1", BRIDGE_UUID)]
+        assert len(transports) == 1 and transports[0].is_closing()
+
+    async def test_no_answer_times_out(self, responder, transports):
+        """Nothing is returned when the bridge doesn't answer, and the socket is closed."""
+        responder.silent = True
+
+        assert await discover_bridges("127.0.0.1", timeout=0.1) == []
+        assert len(transports) == 1 and transports[0].is_closing()
+
+    async def test_cancel_closes_the_socket(self, responder, transports):
+        """The socket is closed when the discovery is cancelled."""
+        responder.silent = True
+        task = asyncio.create_task(discover_bridges("127.0.0.1", timeout=10))
+        await asyncio.sleep(0.05)
+        task.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert len(transports) == 1 and transports[0].is_closing()
+
+    def test_default_timeout(self):
+        """The discovery waits one second by default."""
+        assert inspect.signature(discover_bridges).parameters["timeout"].default == 1
