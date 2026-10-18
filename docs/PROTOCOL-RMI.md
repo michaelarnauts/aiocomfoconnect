@@ -131,7 +131,7 @@ There are three commands which always exist on a given Unit:
 
   This command allows to read multiple properties in one request.
 
-  Syntax: `02 Count Unit SubUnit Type Property1 Property2 ... PropertyN [Unit SubUnit Type Property1 ...]` †
+  Syntax: `02 Count Unit SubUnit Type Property1 Property2 ... PropertyN [Unit SubUnit Type Property1 ...]`
 
   `Count` is the number of Unit/SubUnit groups that follow, so one request can read properties from several units at
   once. In each group, the `Type` value needs to be OR'ed with the number of properties of that group. So if you want
@@ -140,11 +140,12 @@ There are three commands which always exist on a given Unit:
 
   This document used to give the syntax as `02 Unit SubUnit 01 Type ...`. That reads the same bytes for the example
   below, because it reads one group (`Count` = `01`) from Unit `01`, SubUnit `01`, but for any other unit the order
-  above is the one the official app uses †.
+  above is the one the official app uses †. On a unit, `02 01 01 01 12 03 05` (one group: Unit `01`, SubUnit `01`,
+  two actual values: `0x03` and `0x05`) replied `02 02`. Only reading several groups at once has not been tried.
 
   Example: Request: `02 01 01 01 15 03 04 06 05 14`, Response: `\02 BEA000000000000\00 \00\10\10\c0 \02 ComfoAirQ\00`
   This reads the following property values of the NODE unit (the same ones the official app reads to identify a node):
-    - 0x03: Product variant (`02` is a ComfoAir Q450) †
+    - 0x03: Product variant (`02` is a ComfoAir Q450, seen on a unit)
     - 0x04: Serial Number
     - 0x06: Firmware version
     - 0x05: Hardware version †
@@ -178,7 +179,7 @@ follow the app †.
 |-------------------|---------|----------|--------|--------|------------------------------------------------------------------------|
 | NODE              | 0x01    | 0x01     | rw     | UINT8  | Zone (bit set, see above) †; `01` = 1                                  |
 | NODE              | 0x01    | 0x02     | ro     | UINT8  | Product id (`01` = 1, ComfoAir Q) †                                    |
-| NODE              | 0x01    | 0x03     | ro     | UINT8  | Product variant †: ComfoAir Q 1=Q350, 2=Q450, 3=Q600; ComfoAir Flex 1=250 (85 W), 2=350 (115 W), 3=350 (85 W). `02` = 2 |
+| NODE              | 0x01    | 0x03     | ro     | UINT8  | Product variant: ComfoAir Q 1=Q350, 2=Q450 (seen on a unit), 3=Q600 †; ComfoAir Flex 1=250 (85 W), 2=350 (115 W), 3=350 (85 W). `02` = 2 |
 | NODE              | 0x01    | 0x04     | ro     | STRING | Serial number (BEA009999999999)                                        |
 | NODE              | 0x01    | 0x05     | ro     | UINT8  | Hardware version † (`02` = 2)                                          |
 | NODE              | 0x01    | 0x06     | ro     | UINT32 | Firmware version (See `version_decode()`)                              |
