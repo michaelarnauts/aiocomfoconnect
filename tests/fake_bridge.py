@@ -19,6 +19,13 @@ GO = pb.GatewayOperation  # pylint: disable=no-member
 BRIDGE_UUID = "00000000000000000000000000000b1d"
 LOCAL_UUID = "00000000000000000000000000000001"
 
+# The reply type of the requests that a bridge answers with NOT_ALLOWED when it has dropped our session.
+LOST_SESSION_REPLIES = {
+    GO.CnRmiRequestType: GO.CnRmiResponseType,
+    GO.CnRpdoRequestType: GO.CnRpdoConfirmType,
+    GO.CnTimeRequestType: GO.CnTimeConfirmType,
+}
+
 
 class FakeBridge:
     """A ComfoConnect LAN C on 127.0.0.1, on a free port."""
@@ -36,6 +43,8 @@ class FakeBridge:
         self.silent = False
         # Request types that are recorded but only answered when the test calls answer_pending().
         self.withhold: Set[int] = set()
+        # Connections whose session the bridge has dropped without closing them: every request on them gets NOT_ALLOWED.
+        self.lost_sessions: Set[int] = set()
 
         # Everything we received, as (connection number, message). Connections are numbered from 1.
         self.requests: List[Tuple[int, Message]] = []
@@ -78,7 +87,10 @@ class FakeBridge:
     def _answer(self, writer: StreamWriter, request: Message):
         """Answer a request like a real bridge does."""
         msg = request.msg
-        if request.cmd.type == GO.StartSessionRequestType:
+        lost = self._writers.index(writer) + 1 in self.lost_sessions
+        if lost and request.cmd.type in LOST_SESSION_REPLIES:
+            self._send(writer, LOST_SESSION_REPLIES[request.cmd.type], pb.CnRmiResponse(), request.cmd.reference, GO.NOT_ALLOWED)
+        elif request.cmd.type == GO.StartSessionRequestType:
             self._send(writer, GO.StartSessionConfirmType, pb.StartSessionConfirm(), request.cmd.reference, self.session_result)
         elif request.cmd.type == GO.CnNodeRequestType:
             for node_id, product_id, zone_id in self.nodes:

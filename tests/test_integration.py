@@ -430,6 +430,50 @@ class TestConnectionState:
         assert fake_bridge.connections == 2
         assert not client.is_connected()
 
+    async def test_lost_session_reconnects(self, fake_bridge, make_client):
+        """When the bridge answers NOT_ALLOWED on an established session, the request fails and the client starts a new session."""
+        states = []
+        client = make_client(connection_state_callback=states.append)
+        await client.connect(LOCAL_UUID)
+
+        fake_bridge.lost_sessions = {1}
+        with pytest.raises(ComfoConnectNotAllowed):
+            await client.cmd_rmi_request(b"\x01")
+
+        await fake_bridge.wait_for(lambda: len(states) == 3)
+        assert states == [ConnectionState.CONNECTED, ConnectionState.DISCONNECTED, ConnectionState.CONNECTED]
+        assert fake_bridge.connections == 2
+        await roundtrip(client)
+
+    async def test_lost_session_not_allowed(self, fake_bridge, make_client):
+        """When the new session is refused as well, the client reports NOT_ALLOWED and stops reconnecting."""
+        states = []
+        client = make_client(connection_state_callback=states.append)
+        await client.connect(LOCAL_UUID)
+
+        fake_bridge.lost_sessions = {1}
+        fake_bridge.session_result = GO.NOT_ALLOWED
+        with pytest.raises(ComfoConnectNotAllowed):
+            await client.cmd_rmi_request(b"\x01")
+
+        await fake_bridge.wait_for(lambda: len(states) == 3)
+        assert states == [ConnectionState.CONNECTED, ConnectionState.DISCONNECTED, ConnectionState.NOT_ALLOWED]
+        await asyncio.sleep(0.05)
+        assert fake_bridge.connections == 2
+        assert not client.is_connected()
+
+    async def test_lost_session_heartbeat(self, fake_bridge, make_client):
+        """The heartbeat on an idle connection notices the lost session too, and the client starts a new session."""
+        states = []
+        client = make_client(connection_state_callback=states.append, heartbeat_interval=0.02)
+        await client.connect(LOCAL_UUID)
+
+        fake_bridge.lost_sessions = {1}
+        await fake_bridge.wait_for(lambda: len(states) == 3)
+        assert states == [ConnectionState.CONNECTED, ConnectionState.DISCONNECTED, ConnectionState.CONNECTED]
+        assert fake_bridge.connections == 2
+        await roundtrip(client)
+
     async def test_failed_connect(self, fake_bridge, make_client):
         """A connect() that fails raises its error, and doesn't call the callback."""
         fake_bridge.session_result = GO.NOT_ALLOWED
