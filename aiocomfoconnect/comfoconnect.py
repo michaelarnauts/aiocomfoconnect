@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import struct
+import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Literal, Optional
 
@@ -42,6 +43,7 @@ from aiocomfoconnect.const import (
     VentilationTemperatureProfile,
 )
 from aiocomfoconnect.exceptions import (
+    AioComfoConnectNotConnected,
     AioComfoConnectTimeout,
     ComfoClimeNotFoundException,
     ComfoConnectError,
@@ -82,14 +84,30 @@ class TimerEntry:
 class ComfoConnect(Bridge):
     """Abstraction layer over the ComfoConnect LAN C API."""
 
-    def __init__(self, host: str, uuid: str, loop=None, sensor_callback=None, alarm_callback=None, sensor_delay=5, connect_timeout=30, bridge_type: int = 0):
-        """Initialize the ComfoConnect class."""
+    def __init__(
+        self,
+        host: str,
+        uuid: str,
+        loop=None,
+        sensor_callback=None,
+        alarm_callback=None,
+        sensor_delay=5,
+        connect_timeout=30,
+        bridge_type: int = 0,
+        heartbeat_interval: Optional[float] = None,
+    ):
+        """Initialize the ComfoConnect class.
+
+        With a heartbeat_interval, we ask the bridge for its time when we received nothing for that many seconds, and
+        reconnect when it doesn't answer. This detects a bridge that stopped answering without closing the connection.
+        """
         super().__init__(host, uuid, loop, bridge_type)
 
         self.set_sensor_callback(self._sensor_callback)  # Set the callback to our _sensor_callback method, so we can proces the callbacks.
         self.set_alarm_callback(self._alarm_callback)  # Set the callback to our _alarm_callback method, so we can proces the callbacks.
         self.sensor_delay = sensor_delay
         self.connect_timeout = connect_timeout
+        self.heartbeat_interval = heartbeat_interval
 
         self._sensor_callback_fn: Optional[Callable[[Sensor, Any], None]] = sensor_callback
         self._alarm_callback_fn: Optional[Callable[[int, Dict[int, str]], None]] = alarm_callback
@@ -182,8 +200,7 @@ class ComfoConnect(Bridge):
         """Start a new session every time the connection is lost, until disconnect() cancels us."""
         try:
             while True:
-                # The read task ends when the connection is lost. It has already logged why.
-                await asyncio.wait([self._read_task])
+                await self._wait_for_disconnect()
                 _LOGGER.info("Disconnected from bridge, reconnecting...")
                 delay = RECONNECT_DELAY
                 while True:
@@ -202,6 +219,24 @@ class ComfoConnect(Bridge):
         finally:
             await super().disconnect()
             _LOGGER.info("Reconnect loop stopped")
+
+    async def _wait_for_disconnect(self):
+        """Wait until the connection is lost, or until the bridge doesn't answer the heartbeat."""
+        # The read task ends when the connection is lost. It has already logged why.
+        while not self._read_task.done():
+            idle = time.monotonic() - self._last_received
+            if self.heartbeat_interval is None or idle < self.heartbeat_interval:
+                timeout = None if self.heartbeat_interval is None else self.heartbeat_interval - idle
+                await asyncio.wait([self._read_task], timeout=timeout)
+                continue
+
+            try:
+                await self.cmd_time_request()
+            except ComfoConnectError:
+                pass  # The bridge answered.
+            except (AioComfoConnectTimeout, AioComfoConnectNotConnected):
+                _LOGGER.warning("The bridge did not answer the heartbeat")
+                return
 
     async def disconnect(self):
         """Disconnect from the bridge and stop reconnecting. A connect() that is still busy fails."""
