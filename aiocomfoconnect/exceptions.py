@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 
-class ComfoConnectError(Exception):
+class AioComfoConnectError(Exception):
+    """Base class for all errors raised by aiocomfoconnect."""
+
+
+class ComfoConnectError(AioComfoConnectError):
     """Base error for ComfoConnect"""
 
     def __init__(self, message):
+        cmd = getattr(message, "cmd", None)
+        super().__init__((cmd.resultDescription or f"reference {cmd.reference}") if cmd else str(message))
         self.message = message
 
 
@@ -42,7 +48,7 @@ class ComfoConnectRmiError(ComfoConnectError):
     """The RMI failed, the message contains the error response."""
 
 
-class AioComfoConnectNotConnected(Exception):
+class AioComfoConnectNotConnected(AioComfoConnectError):
     """An error occurred because the bridge is not connected."""
 
 
@@ -50,25 +56,25 @@ class AioComfoConnectSessionClosed(AioComfoConnectNotConnected):
     """The bridge closed the session, for example because another app took it over."""
 
 
-class AioComfoConnectTimeout(Exception):
+class AioComfoConnectTimeout(AioComfoConnectError):
     """An error occurred because the bridge didn't reply in time."""
 
 
-class AioComfoConnectNotReachable(Exception):
+class AioComfoConnectNotReachable(AioComfoConnectError):
     """An error occurred because the bridge could not be reached, for example when it moved to another address."""
 
 
-class BridgeNotFoundException(Exception):
+class BridgeNotFoundException(AioComfoConnectError):
     """Exception raised when no bridge is found."""
 
 
-class VentilationUnitNotFoundException(Exception):
+class VentilationUnitNotFoundException(AioComfoConnectError):
     """Exception raised when the bridge didn't announce a ventilation unit on the ComfoNet bus."""
 
 
-class ComfoClimeNotFoundException(Exception):
+class ComfoClimeNotFoundException(AioComfoConnectError):
     """Exception raised when the bridge didn't announce a ComfoClime on the ComfoNet bus."""
 
 
-class UnknownActionException(Exception):
-    """Exception raised when an unknown action is provided."""
+class SelfDeregistrationError(AioComfoConnectError):
+    """Exception raised when trying to deregister self."""
