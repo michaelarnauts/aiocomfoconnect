@@ -19,7 +19,14 @@ from aiocomfoconnect.exceptions import (
     AioComfoConnectNotConnected,
     AioComfoConnectNotReachable,
     AioComfoConnectTimeout,
+    ComfoConnectBadRequest,
+    ComfoConnectInternalError,
+    ComfoConnectNoResources,
     ComfoConnectNotAllowed,
+    ComfoConnectNotExist,
+    ComfoConnectNotReachable,
+    ComfoConnectOtherSession,
+    ComfoConnectRmiError,
     VentilationUnitNotFoundException,
 )
 
@@ -912,6 +919,59 @@ class TestMessage:
         actual = {zehnder_pb2.GatewayOperation.OperationType.Name(op): cls.__name__ for op, cls in Message.REQUEST_MAPPING.items()}
         assert actual == expected
         assert all(cls is getattr(zehnder_pb2, cls.__name__) for cls in Message.REQUEST_MAPPING.values())
+
+
+class TestResultCodes:
+    """Test how the result code of a reply is turned into an exception."""
+
+    @staticmethod
+    async def read(bridge, frame):
+        """Feed one frame to the bridge and read it."""
+        bridge._reader = asyncio.StreamReader()
+        bridge._reader.feed_data(frame)
+        return await bridge._read()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "result,exception",
+        [
+            ("BAD_REQUEST", ComfoConnectBadRequest),
+            ("INTERNAL_ERROR", ComfoConnectInternalError),
+            ("NOT_REACHABLE", ComfoConnectNotReachable),
+            ("OTHER_SESSION", ComfoConnectOtherSession),
+            ("NOT_ALLOWED", ComfoConnectNotAllowed),
+            ("NO_RESOURCES", ComfoConnectNoResources),
+            ("NOT_EXIST", ComfoConnectNotExist),
+            ("RMI_ERROR", ComfoConnectRmiError),
+        ],
+    )
+    async def test_error_result_raises(self, result, exception):
+        """Every error result raises its own exception, with the message attached."""
+        bridge = Bridge("192.168.1.100", LOCAL_UUID)
+        cmd = zehnder_pb2.GatewayOperation(type=zehnder_pb2.GatewayOperation.CnRmiResponseType, reference=42)
+        cmd.result = zehnder_pb2.GatewayOperation.GatewayResult.Value(result)
+        frame = Message(cmd, zehnder_pb2.CnRmiResponse(), LOCAL_UUID, LOCAL_UUID).encode()
+
+        with pytest.raises(exception) as exc_info:
+            await self.read(bridge, frame)
+
+        assert type(exc_info.value) is exception
+        assert exc_info.value.message.cmd.reference == 42
+
+    @pytest.mark.asyncio
+    async def test_ok_result_returns_the_message(self):
+        """A reply with the OK result is returned."""
+        bridge = Bridge("192.168.1.100", LOCAL_UUID)
+        message = await self.read(bridge, _frame(zehnder_pb2.GatewayOperation.KeepAliveType))
+        assert message.cmd.type == zehnder_pb2.GatewayOperation.KeepAliveType
+
+    @pytest.mark.asyncio
+    async def test_unknown_result_returns_the_message(self):
+        """A result code that isn't in the enum is treated like OK."""
+        bridge = Bridge("192.168.1.100", LOCAL_UUID)
+        # Field 1 (type) with KeepAliveType (101) and field 2 (result) with 99, which isn't in the enum.
+        message = await self.read(bridge, _raw_frame(bytes([0x08, 0x65, 0x10, 0x63])))
+        assert message.cmd.type == zehnder_pb2.GatewayOperation.KeepAliveType
 
 
 def _frame(cmd_type, msg=None):

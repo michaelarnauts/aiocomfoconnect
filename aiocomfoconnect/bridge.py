@@ -45,6 +45,20 @@ NODE_DISCOVERY_TIMEOUT = 5
 # Source UUID (16 bytes), destination UUID (16 bytes) and the length of the command (2 bytes)
 HEADER_LENGTH = 34
 
+# The exception for each result code other than OK. A result code that isn't in here is treated like OK.
+# pylint: disable=no-member
+RESULT_EXCEPTIONS = {
+    zehnder_pb2.GatewayOperation.BAD_REQUEST: ComfoConnectBadRequest,
+    zehnder_pb2.GatewayOperation.INTERNAL_ERROR: ComfoConnectInternalError,
+    zehnder_pb2.GatewayOperation.NOT_REACHABLE: ComfoConnectNotReachable,
+    zehnder_pb2.GatewayOperation.OTHER_SESSION: ComfoConnectOtherSession,
+    zehnder_pb2.GatewayOperation.NOT_ALLOWED: ComfoConnectNotAllowed,
+    zehnder_pb2.GatewayOperation.NO_RESOURCES: ComfoConnectNoResources,
+    zehnder_pb2.GatewayOperation.NOT_EXIST: ComfoConnectNotExist,
+    zehnder_pb2.GatewayOperation.RMI_ERROR: ComfoConnectRmiError,
+}
+# pylint: enable=no-member
+
 
 @dataclass(frozen=True)
 class Node:
@@ -456,26 +470,9 @@ class Bridge:
 
         _LOGGER.debug("RX %s", message)
 
-        # Check status code
-        # pylint: disable=no-member
-        if message.cmd.result == zehnder_pb2.GatewayOperation.OK:
-            pass
-        elif message.cmd.result == zehnder_pb2.GatewayOperation.BAD_REQUEST:
-            raise ComfoConnectBadRequest(message)
-        elif message.cmd.result == zehnder_pb2.GatewayOperation.INTERNAL_ERROR:
-            raise ComfoConnectInternalError(message)
-        elif message.cmd.result == zehnder_pb2.GatewayOperation.NOT_REACHABLE:
-            raise ComfoConnectNotReachable(message)
-        elif message.cmd.result == zehnder_pb2.GatewayOperation.OTHER_SESSION:
-            raise ComfoConnectOtherSession(message)
-        elif message.cmd.result == zehnder_pb2.GatewayOperation.NOT_ALLOWED:
-            raise ComfoConnectNotAllowed(message)
-        elif message.cmd.result == zehnder_pb2.GatewayOperation.NO_RESOURCES:
-            raise ComfoConnectNoResources(message)
-        elif message.cmd.result == zehnder_pb2.GatewayOperation.NOT_EXIST:
-            raise ComfoConnectNotExist(message)
-        elif message.cmd.result == zehnder_pb2.GatewayOperation.RMI_ERROR:
-            raise ComfoConnectRmiError(message)
+        exception = RESULT_EXCEPTIONS.get(message.cmd.result)
+        if exception is not None:
+            raise exception(message)
 
         return message
 
