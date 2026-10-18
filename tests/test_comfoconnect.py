@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from aiocomfoconnect.comfoconnect import ComfoConnect, TimerEntry
+from aiocomfoconnect.comfoconnect import ComfoConnect, NodeInfo, TimerEntry
 from aiocomfoconnect.const import ERRORS_BASE, SCHEDULE_PRESET, TIMER_BOOST, PdoType, ProductId
 from aiocomfoconnect import properties
 from aiocomfoconnect.exceptions import (
@@ -497,6 +497,19 @@ async def test_get_properties(props, request_hex, reply, expected):
         assert await comfoconnect.get_properties(props) == expected
 
     mock_rmi.assert_awaited_once_with(bytes.fromhex(request_hex), node_id=None)
+
+
+@pytest.mark.parametrize("node_id", [None, 5])
+async def test_get_node_info(node_id):
+    """get_node_info reads the name, model, serial number and firmware of a node in one request."""
+    comfoconnect = ComfoConnect("127.0.0.1", LOCAL_UUID)
+    reply = b"My unit\x00" + b"ComfoAir Q450\x00" + b"FAKE0000000000\x00" + bytes.fromhex("001010c0")
+
+    with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=Mock(message=reply))) as mock_rmi:
+        info = await comfoconnect.get_node_info(node_id)
+
+    assert info == NodeInfo(name="My unit", model="ComfoAir Q450", serial_number="FAKE0000000000", firmware="R1.4.0")
+    mock_rmi.assert_awaited_once_with(bytes.fromhex("02 01 01 01 14 14 08 04 06"), node_id=node_id)
 
 
 async def test_get_properties_on_comfoclime():

@@ -47,7 +47,14 @@ from aiocomfoconnect.exceptions import (
     ComfoConnectOtherSession,
     NodeNotFoundException,
 )
-from aiocomfoconnect.properties import Property, PropertyConstraints
+from aiocomfoconnect.properties import (
+    PROPERTY_FIRMWARE_VERSION,
+    PROPERTY_MODEL,
+    PROPERTY_NAME,
+    PROPERTY_SERIAL_NUMBER,
+    Property,
+    PropertyConstraints,
+)
 from aiocomfoconnect.sensors import Sensor
 from aiocomfoconnect.util import bytearray_to_bits, encode_pdo_value, version_decode
 
@@ -93,6 +100,16 @@ def _property_value(prop: Property, value: Any) -> Any:
     if value not in prop.options:
         raise ValueError(f"Invalid value: {value}")
     return prop.options[value]
+
+
+@dataclass
+class NodeInfo:
+    """What a node tells about itself."""
+
+    name: str
+    model: str
+    serial_number: str
+    firmware: str
 
 
 @dataclass
@@ -434,6 +451,10 @@ class ComfoConnect(Bridge):
         if message:
             raise ValueError(f"Unexpected {len(message)} bytes at the end of the response")
         return values
+
+    async def get_node_info(self, node_id: Optional[int] = None) -> NodeInfo:
+        """Get the name, model, serial number and firmware version of a node (the ventilation unit by default), in one request."""
+        return NodeInfo(*await self.get_properties([PROPERTY_NAME, PROPERTY_MODEL, PROPERTY_SERIAL_NUMBER, PROPERTY_FIRMWARE_VERSION], node_id))
 
     async def get_single_property(self, unit: int, subunit: int, property_id: int, property_type: int = None, node_id: Optional[int] = None) -> Any:
         """Get a property and convert to the right type."""
