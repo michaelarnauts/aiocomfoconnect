@@ -335,10 +335,10 @@ class ComfoConnect(Bridge):
         return min(node_ids)
 
     async def get_property(self, prop: Property, node_id: Optional[int] = None) -> Any:
-        """Get a property from the node it lives on (or node_id), and convert it to the right type, or to its option."""
+        """Get a property from the node it lives on (or node_id), and convert it to the right type, its option or its scaled value."""
         value = await self.get_single_property(prop.unit, prop.subunit, prop.property_id, prop.property_type, node_id=self._node_id_for(prop, node_id))
         if prop.options is None:
-            return value
+            return prop.scaled(value)
         if value not in prop.options:
             raise ValueError(f"Invalid value: {value}")
         return prop.options[value]
@@ -358,7 +358,7 @@ class ComfoConnect(Bridge):
         return result.message
 
     async def get_property_constraints(self, prop: Property, node_id: Optional[int] = None) -> PropertyConstraints:
-        """Get the raw value of a numeric property, together with the range and step size the unit accepts, in one request."""
+        """Get the (scaled) value of a numeric property, together with the range and step size the unit accepts, in one request."""
         if prop.property_type not in NUMERIC_PROPERTY_TYPES:
             raise ValueError(f"Property type {prop.property_type} has no range")
         size, signed = NUMERIC_PROPERTY_TYPES[prop.property_type]
@@ -370,7 +370,7 @@ class ComfoConnect(Bridge):
         if len(message) != 4 * size:
             raise ValueError(f"Unexpected response length {len(message)} for a value with its range and step size")
         value, minimum, maximum, step = (int.from_bytes(message[i : i + size], byteorder="little", signed=signed) for i in range(0, 4 * size, size))
-        return PropertyConstraints(value=value, minimum=minimum, maximum=maximum, step=step)
+        return PropertyConstraints(value=prop.scaled(value), minimum=prop.scaled(minimum), maximum=prop.scaled(maximum), step=prop.scaled(step))
 
     async def get_multiple_properties(self, unit: int, subunit: int, property_ids: List[int], node_id: Optional[int] = None) -> Any:
         """Get multiple properties."""
@@ -378,8 +378,13 @@ class ComfoConnect(Bridge):
 
         return result.message
 
-    async def set_property(self, prop: Property, value: int | str, node_id: Optional[int] = None) -> Any:
-        """Set a property on the node it lives on (or node_id), encoded for its type. A property with options takes an option."""
+    async def set_property(self, prop: Property, value: int | float | str, node_id: Optional[int] = None) -> Any:
+        """Set a property on the node it lives on (or node_id), encoded for its type.
+
+        A property with options takes an option, a scaled property takes the scaled value.
+        """
+        if prop.scale is not None:
+            value = round(value / prop.scale)
         if prop.options is not None:
             values = {option: raw for raw, option in prop.options.items()}
             if value not in values:
