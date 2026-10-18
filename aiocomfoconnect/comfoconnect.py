@@ -7,9 +7,10 @@ import logging
 import struct
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Literal, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Literal, Optional
 
 from aiocomfoconnect import Bridge
+from aiocomfoconnect.bridge import Message
 from aiocomfoconnect.const import (
     ERRORS,
     ERRORS_140,
@@ -266,6 +267,16 @@ class ComfoConnect(Bridge):
             self._connection_state_callback_fn(state)
         except Exception:  # pylint: disable=broad-exception-caught
             _LOGGER.exception("Error in the connection state callback")
+
+    def cmd_rmi_request(self, message, node_id: Optional[int] = None) -> Awaitable[Message]:
+        """Sends a RMI request, but only once the session is up.
+
+        While we (re)connect, the connection is open before the session has started and the ventilation unit is known.
+        A command in that window fails like one while disconnected.
+        """
+        if self._connection_state != ConnectionState.CONNECTED:
+            raise AioComfoConnectNotConnected("Not connected to bridge")
+        return super().cmd_rmi_request(message, node_id)
 
     async def disconnect(self):
         """Disconnect from the bridge and stop reconnecting. A connect() that is still busy fails."""
