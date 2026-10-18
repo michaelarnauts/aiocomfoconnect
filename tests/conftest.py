@@ -1,7 +1,5 @@
 """Pytest configuration and shared fixtures."""
 
-from unittest.mock import AsyncMock, MagicMock
-
 import pytest
 
 from aiocomfoconnect import bridge as bridge_module
@@ -57,18 +55,6 @@ def node_notification(bridge, node_id, product_id, zone_id=1, mode=zehnder_pb2.C
     msg.zoneId = zone_id
     msg.mode = mode
     bridge._process_node_notification(msg)  # pylint: disable=protected-access
-
-
-@pytest.fixture
-def mock_connection():
-    """Create a mock connection (reader, writer) pair."""
-    reader = AsyncMock()
-    writer = MagicMock()
-    writer.is_closing.return_value = False
-    writer.drain = AsyncMock()
-    writer.wait_closed = AsyncMock()
-    writer.close = MagicMock()
-    return (reader, writer)
 
 
 def create_sensor(name="test_sensor", unit=None, sensor_id=276, sensor_type=1, value_fn=None):

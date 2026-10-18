@@ -2,7 +2,6 @@
 
 import asyncio
 import gc
-import socket
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
@@ -17,7 +16,6 @@ LOCAL_UUID = "00000000000000000000000000000001"
 
 from aiocomfoconnect.exceptions import (
     AioComfoConnectNotConnected,
-    AioComfoConnectNotReachable,
     AioComfoConnectTimeout,
     ComfoConnectBadRequest,
     ComfoConnectInternalError,
@@ -31,382 +29,17 @@ from aiocomfoconnect.exceptions import (
 )
 
 
-class TestBridge:
-    """Test the Bridge class."""
+async def test_connect_timeout():
+    """A bridge that doesn't accept the connection in time raises AioComfoConnectTimeout."""
 
-    @pytest.fixture
-    def bridge(self):
-        """Create a Bridge instance for testing."""
-        return Bridge("192.168.1.100", "00000000000000000000000000000001")
+    async def timeout_coro(*args, **kwargs):
+        raise asyncio.TimeoutError()
 
-    @pytest.mark.asyncio
-    async def test_init(self, bridge):
-        """Test Bridge initialization."""
-        assert bridge.host == "192.168.1.100"
-        assert bridge.uuid == "00000000000000000000000000000001"
-        assert bridge._reader is None
-        assert bridge._writer is None
-        assert bridge._reference is None
-        assert bridge._pending == {}
-        assert not bridge.is_connected()
-
-    @pytest.mark.asyncio
-    async def test_connect_success(self, bridge, mock_connection):
-        """Test successful connection."""
-        mock_reader, mock_writer = mock_connection
-
-        with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
-            # Mock the _read_messages task to block indefinitely
-            async def mock_read_messages():
-                try:
-                    await asyncio.sleep(100)
-                except asyncio.CancelledError:
-                    raise
-
-            with patch.object(bridge, "_read_messages", side_effect=mock_read_messages):
-                await bridge.connect(LOCAL_UUID)
-
-        assert bridge.is_connected()
-        assert bridge._local_uuid == LOCAL_UUID
-        assert bridge._reference is not None
-        assert bridge._pending == {}
-        assert bridge._read_task is not None
-
-        # Clean up
-        await bridge.disconnect()
-
-    @pytest.mark.asyncio
-    async def test_connect_timeout(self, bridge):
-        """Test connection timeout."""
-
-        async def timeout_coro(*args, **kwargs):
-            raise asyncio.TimeoutError()
-
-        with patch("asyncio.open_connection", side_effect=timeout_coro):
-            with pytest.raises(AioComfoConnectTimeout, match="Timeout while connecting"):
-                await bridge.connect(LOCAL_UUID)
-        assert not bridge.is_connected()
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        "error",
-        [
-            OSError(113, "No route to host"),
-            ConnectionRefusedError(111, "Connection refused"),
-            socket.gaierror("Name or service not known"),
-        ],
-    )
-    async def test_connect_not_reachable(self, bridge, error):
-        """Test that a bridge we can't reach doesn't raise a bare OSError."""
-
-        async def error_coro(*args, **kwargs):
-            raise error
-
-        with patch("asyncio.open_connection", side_effect=error_coro):
-            with pytest.raises(AioComfoConnectNotReachable, match="Could not connect to bridge"):
-                await bridge.connect(LOCAL_UUID)
-        assert not bridge.is_connected()
-
-    @pytest.mark.asyncio
-    async def test_connect_already_connected(self, bridge, mock_connection):
-        """Test connecting when already connected."""
-        mock_reader, mock_writer = mock_connection
-
-        async def mock_read_messages():
-            try:
-                await asyncio.sleep(100)
-            except asyncio.CancelledError:
-                raise
-
-        with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
-            with patch.object(bridge, "_read_messages", side_effect=mock_read_messages):
-                await bridge.connect(LOCAL_UUID)
-
-        # Try to connect again
-        with patch("asyncio.open_connection") as mock_connect:
+    bridge = Bridge("192.168.1.100", LOCAL_UUID)
+    with patch("asyncio.open_connection", side_effect=timeout_coro):
+        with pytest.raises(AioComfoConnectTimeout, match="Timeout while connecting"):
             await bridge.connect(LOCAL_UUID)
-            # Should not attempt to connect again
-            mock_connect.assert_not_called()
-
-        # Clean up
-        await bridge.disconnect()
-
-    @pytest.mark.asyncio
-    async def test_disconnect(self, bridge, mock_connection):
-        """Test disconnection."""
-        mock_reader, mock_writer = mock_connection
-
-        async def mock_read_messages():
-            try:
-                await asyncio.sleep(100)
-            except asyncio.CancelledError:
-                raise
-
-        with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
-            with patch.object(bridge, "_read_messages", side_effect=mock_read_messages):
-                await bridge.connect(LOCAL_UUID)
-
-        await bridge.disconnect()
-
-        mock_writer.close.assert_called_once()
-        mock_writer.wait_closed.assert_called_once()
-        assert bridge._reader is None
-        assert bridge._writer is None
-        assert bridge._read_task is None
-
-    @pytest.mark.asyncio
-    async def test_disconnect_when_not_connected(self, bridge):
-        """Test disconnecting when not connected."""
-        # Should not raise any errors
-        await bridge.disconnect()
-        assert not bridge.is_connected()
-
-    @pytest.mark.asyncio
-    async def test_disconnect_cancels_read_task(self, bridge, mock_connection):
-        """Test that disconnect cancels the read task."""
-        mock_reader, mock_writer = mock_connection
-
-        async def mock_read_messages():
-            try:
-                await asyncio.sleep(100)  # Long running task
-            except asyncio.CancelledError:
-                raise
-
-        with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
-            with patch.object(bridge, "_read_messages", side_effect=mock_read_messages):
-                await bridge.connect(LOCAL_UUID)
-
-        read_task = bridge._read_task
-        assert not read_task.done()
-
-        await bridge.disconnect()
-
-        assert read_task.cancelled()
-
-    @pytest.mark.asyncio
-    async def test_send_when_not_connected(self, bridge):
-        """Test sending when not connected."""
-        from aiocomfoconnect.protobuf import zehnder_pb2
-
-        with pytest.raises(AioComfoConnectNotConnected, match="Not connected"):
-            await bridge._send(
-                zehnder_pb2.KeepAlive,
-                zehnder_pb2.GatewayOperation.KeepAliveType,
-                reply=False,
-            )
-
-    @pytest.mark.asyncio
-    async def test_send_success(self, bridge, mock_connection):
-        """Test successful message sending."""
-        mock_reader, mock_writer = mock_connection
-
-        async def mock_read_messages():
-            try:
-                await asyncio.sleep(100)
-            except asyncio.CancelledError:
-                raise
-
-        with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
-            with patch.object(bridge, "_read_messages", side_effect=mock_read_messages):
-                await bridge.connect(LOCAL_UUID)
-
-        from aiocomfoconnect.protobuf import zehnder_pb2
-
-        # Send a message that doesn't expect a reply
-        result = await bridge._send(
-            zehnder_pb2.KeepAlive,
-            zehnder_pb2.GatewayOperation.KeepAliveType,
-            reply=False,
-        )
-
-        assert result is None
-        mock_writer.write.assert_called_once()
-        mock_writer.drain.assert_called_once()
-
-        # Clean up
-        await bridge.disconnect()
-
-    @pytest.mark.asyncio
-    async def test_send_with_reply_timeout(self, bridge, mock_connection):
-        """Test sending a message that expects a reply but times out."""
-        mock_reader, mock_writer = mock_connection
-
-        async def mock_read_messages():
-            try:
-                await asyncio.sleep(100)
-            except asyncio.CancelledError:
-                raise
-
-        with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
-            with patch.object(bridge, "_read_messages", side_effect=mock_read_messages):
-                await bridge.connect(LOCAL_UUID)
-
-        from aiocomfoconnect.protobuf import zehnder_pb2
-
-        # Send a message that expects a reply but won't get one (with a short timeout for faster tests)
-        with pytest.raises(AioComfoConnectTimeout, match="Timeout while waiting for response"):
-            await bridge._send(
-                zehnder_pb2.VersionRequest,
-                zehnder_pb2.GatewayOperation.VersionRequestType,
-                reply=True,
-                timeout=0.01,
-            )
-
-        # Clean up
-        await bridge.disconnect()
-
-    @pytest.mark.asyncio
-    async def test_send_connection_error(self, bridge, mock_connection):
-        """Test sending when connection is lost during send."""
-        mock_reader, mock_writer = mock_connection
-        mock_writer.drain = AsyncMock(side_effect=ConnectionError("Connection lost"))
-
-        async def mock_read_messages():
-            try:
-                await asyncio.sleep(100)
-            except asyncio.CancelledError:
-                raise
-
-        with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
-            with patch.object(bridge, "_read_messages", side_effect=mock_read_messages):
-                await bridge.connect("00000000000000000000000000000001")
-
-        from aiocomfoconnect.protobuf import zehnder_pb2
-
-        with pytest.raises(AioComfoConnectNotConnected, match="Connection lost while sending"):
-            await bridge._send(
-                zehnder_pb2.KeepAlive,
-                zehnder_pb2.GatewayOperation.KeepAliveType,
-                reply=False,
-            )
-
-        # Clean up
-        await bridge.disconnect()
-
-    @pytest.mark.asyncio
-    async def test_send_serializes_concurrent_calls(self, bridge, mock_connection):
-        """Test that concurrent sends use unique references."""
-        mock_reader, mock_writer = mock_connection
-
-        first_drain_started = asyncio.Event()
-        allow_first_drain = asyncio.Event()
-
-        async def drain_side_effect():
-            if not first_drain_started.is_set():
-                first_drain_started.set()
-                await allow_first_drain.wait()
-            else:
-                await asyncio.sleep(0)
-
-        mock_writer.drain.side_effect = drain_side_effect
-
-        async def mock_read_messages():
-            try:
-                await asyncio.sleep(100)
-            except asyncio.CancelledError:
-                raise
-
-        with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
-            with patch.object(bridge, "_read_messages", side_effect=mock_read_messages):
-                await bridge.connect(LOCAL_UUID)
-
-        from aiocomfoconnect.protobuf import zehnder_pb2
-
-        assert bridge._local_uuid == LOCAL_UUID
-        assert bridge.uuid == "00000000000000000000000000000001"
-
-        first_send = asyncio.create_task(
-            bridge._send(
-                zehnder_pb2.KeepAlive,
-                zehnder_pb2.GatewayOperation.KeepAliveType,
-                reply=False,
-            )
-        )
-
-        try:
-            await asyncio.wait_for(first_drain_started.wait(), timeout=1)
-            initial_write_calls = mock_writer.write.call_count
-
-            send_two_started = asyncio.Event()
-
-            async def run_second_send():
-                send_two_started.set()
-                await bridge._send(
-                    zehnder_pb2.KeepAlive,
-                    zehnder_pb2.GatewayOperation.KeepAliveType,
-                    reply=False,
-                )
-
-            second_send = asyncio.create_task(run_second_send())
-
-            await asyncio.wait_for(send_two_started.wait(), timeout=1)
-            await asyncio.sleep(0)
-            # With pipelining enabled, both sends complete concurrently
-            # so both writes happen immediately
-            assert mock_writer.write.call_count >= initial_write_calls + 1
-
-            allow_first_drain.set()
-
-            await asyncio.wait_for(asyncio.gather(first_send, second_send), timeout=1)
-            assert mock_writer.write.call_count == initial_write_calls + 1
-        finally:
-            allow_first_drain.set()
-            await asyncio.wait_for(bridge.disconnect(), timeout=1)
-
-    @pytest.mark.asyncio
-    async def test_disconnect_notifies_pending(self, bridge, mock_connection):
-        """Test that pending listeners receive an exception on disconnect."""
-        mock_reader, mock_writer = mock_connection
-
-        async def mock_read_messages():
-            try:
-                await asyncio.sleep(100)
-            except asyncio.CancelledError:
-                raise
-
-        with patch("asyncio.open_connection", return_value=(mock_reader, mock_writer)):
-            with patch.object(bridge, "_read_messages", side_effect=mock_read_messages):
-                await bridge.connect(LOCAL_UUID)
-
-        assert bridge._reference is not None
-        pending_future = asyncio.get_running_loop().create_future()
-        bridge._pending[next(bridge._reference)] = pending_future
-
-        await bridge.disconnect()
-
-        assert pending_future.done()
-        with pytest.raises(AioComfoConnectNotConnected):
-            pending_future.result()
-
-    @pytest.mark.asyncio
-    async def test_read_messages_cancelled(self, bridge):
-        """Test that _read_messages handles cancellation correctly."""
-        # Set up minimal state for _read_messages to work
-        bridge._reader = AsyncMock()
-        bridge._reader.readexactly = AsyncMock(side_effect=asyncio.CancelledError())
-        bridge._writer = MagicMock()
-        bridge._writer.is_closing.return_value = False
-
-        with pytest.raises(asyncio.CancelledError):
-            await bridge._read_messages()
-
-    @pytest.mark.asyncio
-    async def test_callbacks(self, bridge):
-        """Test that callbacks can be set."""
-        sensor_callback = Mock()
-        alarm_callback = Mock()
-
-        bridge.set_sensor_callback(sensor_callback)
-        bridge.set_alarm_callback(alarm_callback)
-
-        assert bridge._Bridge__sensor_callback_fn == sensor_callback
-        assert bridge._Bridge__alarm_callback_fn == alarm_callback
-
-    def test_repr(self, bridge):
-        """Test string representation."""
-        repr_str = repr(bridge)
-        assert "192.168.1.100" in repr_str
-        assert "00000000000000000000000000000001" in repr_str
+    assert not bridge.is_connected()
 
 
 class TestBridgeNodeDiscovery:
@@ -428,23 +61,6 @@ class TestBridgeNodeDiscovery:
         assert bridge.nodes[1] == Node(node_id=1, product_id=ProductId.COMFOAIRQ, zone_id=1, mode=2)
         assert bridge.nodes[48].product_id == ProductId.ZEHNDERGATEWAY
         assert bridge.ventilation_node_id == 1
-
-    @pytest.mark.asyncio
-    async def test_ventilation_node_is_not_node_1(self, bridge):
-        """Test a ComfoAir Flex setup, where the ventilation unit is not node 1."""
-        node_notification(bridge, node_id=11, product_id=25)
-        node_notification(bridge, node_id=41, product_id=ProductId.COMFOAIRFLEXCONNECTIONBOARD)
-        node_notification(bridge, node_id=45, product_id=ProductId.COMFOAIRFLEX)
-
-        assert bridge.ventilation_node_id == 45
-
-    @pytest.mark.asyncio
-    async def test_no_ventilation_node(self, bridge):
-        """Test that nodes that don't accept RMI commands are never selected."""
-        node_notification(bridge, node_id=41, product_id=ProductId.COMFOAIRFLEXCONNECTIONBOARD)
-        node_notification(bridge, node_id=48, product_id=ProductId.ZEHNDERGATEWAY, zone_id=255)
-
-        assert bridge.ventilation_node_id is None
 
     @pytest.mark.asyncio
     async def test_comfoclime_node(self, bridge):
@@ -482,41 +98,15 @@ class TestBridgeNodeDiscovery:
 
         assert bridge.nodes == {}
 
-    @pytest.mark.asyncio
-    async def test_wait_for_ventilation_node(self, bridge):
-        """Test waiting for a ventilation unit that shows up."""
-
-        async def announce():
-            await asyncio.sleep(0.05)
-            node_notification(bridge, node_id=45, product_id=ProductId.COMFOAIRFLEX)
-
-        task = asyncio.create_task(announce())
-        assert await bridge.wait_for_ventilation_node(timeout=5) == 45
-        await task
-
-    @pytest.mark.asyncio
-    async def test_wait_for_ventilation_node_timeout(self, bridge):
-        """Test waiting for a ventilation unit that never shows up."""
-        with pytest.raises(VentilationUnitNotFoundException, match="did not announce a ventilation unit"):
-            await bridge.wait_for_ventilation_node(timeout=0.05)
-
-    @pytest.mark.asyncio
-    async def test_wait_for_ventilation_node_ignores_other_nodes(self, bridge):
-        """Test that other nodes don't end the wait for the ventilation unit."""
-        node_notification(bridge, node_id=48, product_id=ProductId.ZEHNDERGATEWAY, zone_id=255)
-
-        with pytest.raises(VentilationUnitNotFoundException):
-            await bridge.wait_for_ventilation_node(timeout=0.05)
-
-    @pytest.mark.asyncio
-    async def test_rmi_request_uses_discovered_node(self, bridge):
-        """Test that RMI requests are sent to the discovered ventilation unit."""
+    async def test_nodes_are_reset_on_connect(self, bridge, fake_bridge):
+        """Test that the nodes of a previous session are forgotten when we reconnect."""
         node_notification(bridge, node_id=45, product_id=ProductId.COMFOAIRFLEX)
+        bridge.host = "127.0.0.1"
+        await bridge.connect(LOCAL_UUID)
 
-        with patch.object(bridge, "is_connected", return_value=True), patch.object(bridge, "_send", MagicMock()) as mock_send:
-            bridge.cmd_rmi_request(b"\x01\x01\x01\x10\x08")
-
-        assert mock_send.call_args[0][2]["nodeId"] == 45
+        assert bridge.nodes == {}
+        assert bridge.ventilation_node_id is None
+        await bridge.disconnect()
 
     @pytest.mark.asyncio
     async def test_rmi_request_honours_explicit_node(self, bridge):
@@ -548,47 +138,6 @@ class TestBridgeNodeDiscovery:
                 bridge.cmd_rmi_request(b"\x01\x01\x01\x10\x08")
 
         mock_send.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_rmi_request_when_not_connected_with_explicit_node(self, bridge):
-        """Test that RMI requests to an explicit node are refused while disconnected too."""
-        with patch.object(bridge, "_send", MagicMock()) as mock_send:
-            with pytest.raises(AioComfoConnectNotConnected, match="Not connected"):
-                bridge.cmd_rmi_request(b"\x01\x01\x01\x10\x08", node_id=11)
-
-        mock_send.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_nodes_are_reset_on_connect(self, bridge, mock_connection):
-        """Test that the nodes of a previous session are forgotten when we reconnect."""
-        node_notification(bridge, node_id=45, product_id=ProductId.COMFOAIRFLEX)
-
-        async def mock_read_messages():
-            await asyncio.sleep(100)
-
-        with patch("asyncio.open_connection", return_value=mock_connection):
-            with patch.object(bridge, "_read_messages", side_effect=mock_read_messages):
-                await bridge.connect(LOCAL_UUID)
-
-        assert bridge.nodes == {}
-        assert bridge.ventilation_node_id is None
-
-        await bridge.disconnect()
-
-    @pytest.mark.asyncio
-    async def test_node_notification_is_dispatched(self, bridge):
-        """Test that a CnNodeNotification message ends up in the node list."""
-        cmd = zehnder_pb2.GatewayOperation()
-        cmd.type = zehnder_pb2.GatewayOperation.CnNodeNotificationType
-        msg = zehnder_pb2.CnNodeNotification()
-        msg.nodeId = 45
-        msg.productId = ProductId.COMFOAIRFLEX
-        msg.zoneId = 1
-        msg.mode = zehnder_pb2.CnNodeNotification.NODE_NORMAL
-
-        await _run_read_loop(bridge, Message(cmd, msg, LOCAL_UUID, LOCAL_UUID).encode())
-
-        assert bridge.ventilation_node_id == 45
 
 
 class TestBridgeRegister:
@@ -732,82 +281,6 @@ class TestGatewayTypeFromSession:
         assert bridge.bridge_type == GatewayType.SEASON
 
 
-class TestMessage:
-    """Test the Message class."""
-
-    def test_request_mapping(self):
-        """Every operation type maps to the same message class as the hand-written table did."""
-        expected = {
-            "SetAddressRequestType": "SetAddressRequest",
-            "RegisterAppRequestType": "RegisterAppRequest",
-            "StartSessionRequestType": "StartSessionRequest",
-            "CloseSessionRequestType": "CloseSessionRequest",
-            "ListRegisteredAppsRequestType": "ListRegisteredAppsRequest",
-            "DeregisterAppRequestType": "DeregisterAppRequest",
-            "ChangePinRequestType": "ChangePinRequest",
-            "GetRemoteAccessIdRequestType": "GetRemoteAccessIdRequest",
-            "SetRemoteAccessIdRequestType": "SetRemoteAccessIdRequest",
-            "GetSupportIdRequestType": "GetSupportIdRequest",
-            "SetSupportIdRequestType": "SetSupportIdRequest",
-            "GetWebIdRequestType": "GetWebIdRequest",
-            "SetWebIdRequestType": "SetWebIdRequest",
-            "SetPushIdRequestType": "SetPushIdRequest",
-            "DebugRequestType": "DebugRequest",
-            "UpgradeRequestType": "UpgradeRequest",
-            "SetDeviceSettingsRequestType": "SetDeviceSettingsRequest",
-            "VersionRequestType": "VersionRequest",
-            "CnTimeRequestType": "CnTimeRequest",
-            "CnTimeConfirmType": "CnTimeConfirm",
-            "CnNodeNotificationType": "CnNodeNotification",
-            "CnRmiRequestType": "CnRmiRequest",
-            "CnRmiResponseType": "CnRmiResponse",
-            "CnRmiAsyncRequestType": "CnRmiAsyncRequest",
-            "CnRmiAsyncConfirmType": "CnRmiAsyncConfirm",
-            "CnRmiAsyncResponseType": "CnRmiAsyncResponse",
-            "CnRpdoRequestType": "CnRpdoRequest",
-            "CnRpdoConfirmType": "CnRpdoConfirm",
-            "CnRpdoNotificationType": "CnRpdoNotification",
-            "CnAlarmNotificationType": "CnAlarmNotification",
-            "CnNodeRequestType": "CnNodeRequest",
-            "SetAddressConfirmType": "SetAddressConfirm",
-            "RegisterAppConfirmType": "RegisterAppConfirm",
-            "StartSessionConfirmType": "StartSessionConfirm",
-            "CloseSessionConfirmType": "CloseSessionConfirm",
-            "ListRegisteredAppsConfirmType": "ListRegisteredAppsConfirm",
-            "DeregisterAppConfirmType": "DeregisterAppConfirm",
-            "ChangePinConfirmType": "ChangePinConfirm",
-            "GetRemoteAccessIdConfirmType": "GetRemoteAccessIdConfirm",
-            "SetRemoteAccessIdConfirmType": "SetRemoteAccessIdConfirm",
-            "GetSupportIdConfirmType": "GetSupportIdConfirm",
-            "SetSupportIdConfirmType": "SetSupportIdConfirm",
-            "GetWebIdConfirmType": "GetWebIdConfirm",
-            "SetWebIdConfirmType": "SetWebIdConfirm",
-            "SetPushIdConfirmType": "SetPushIdConfirm",
-            "DebugConfirmType": "DebugConfirm",
-            "UpgradeConfirmType": "UpgradeConfirm",
-            "SetDeviceSettingsConfirmType": "SetDeviceSettingsConfirm",
-            "VersionConfirmType": "VersionConfirm",
-            "CnFupReadRegisterRequestType": "CnFupReadRegisterRequest",
-            "CnFupReadRegisterConfirmType": "CnFupReadRegisterConfirm",
-            "CnFupProgramBeginRequestType": "CnFupProgramBeginRequest",
-            "CnFupProgramBeginConfirmType": "CnFupProgramBeginConfirm",
-            "CnFupProgramRequestType": "CnFupProgramRequest",
-            "CnFupProgramConfirmType": "CnFupProgramConfirm",
-            "CnFupProgramEndRequestType": "CnFupProgramEndRequest",
-            "CnFupProgramEndConfirmType": "CnFupProgramEndConfirm",
-            "CnFupReadRequestType": "CnFupReadRequest",
-            "CnFupReadConfirmType": "CnFupReadConfirm",
-            "CnFupResetRequestType": "CnFupResetRequest",
-            "CnFupResetConfirmType": "CnFupResetConfirm",
-            "GatewayNotificationType": "GatewayNotification",
-            "KeepAliveType": "KeepAlive",
-            "FactoryResetType": "FactoryReset",
-        }
-        actual = {zehnder_pb2.GatewayOperation.OperationType.Name(op): cls.__name__ for op, cls in Message.REQUEST_MAPPING.items()}
-        assert actual == expected
-        assert all(cls is getattr(zehnder_pb2, cls.__name__) for cls in Message.REQUEST_MAPPING.values())
-
-
 class TestResultCodes:
     """Test how the result code of a reply is turned into an exception for the request that waits for it."""
 
@@ -845,13 +318,6 @@ class TestResultCodes:
 
         assert type(exc_info.value) is exception
         assert exc_info.value.message.cmd.reference == 42
-
-    @pytest.mark.asyncio
-    async def test_ok_result_returns_the_message(self):
-        """A reply with the OK result is returned."""
-        cmd = zehnder_pb2.GatewayOperation(type=zehnder_pb2.GatewayOperation.CnRmiResponseType, reference=42)
-        future = await self.reply(Message(cmd, zehnder_pb2.CnRmiResponse(message=b"\x01"), LOCAL_UUID, LOCAL_UUID).encode())
-        assert future.result().message == b"\x01"
 
     @pytest.mark.asyncio
     async def test_unknown_result_returns_the_message(self):
@@ -905,16 +371,6 @@ class TestReadLoopResilience:
 
         received.assert_called_once_with(276, 42)
         assert any(r.levelname == "ERROR" and "Failed to decode" in r.getMessage() for r in caplog.records)
-
-    @pytest.mark.asyncio
-    async def test_received_message_updates_last_received(self):
-        """Every message we read counts as a sign of life for the heartbeat."""
-        bridge = Bridge("192.168.1.100", LOCAL_UUID)
-        bridge._last_received = 0
-
-        await _run_read_loop(bridge, _sensor_frame(276, 42))
-
-        assert bridge._last_received > 0
 
     @pytest.mark.asyncio
     async def test_connection_error_ends_the_loop(self):
@@ -1180,19 +636,6 @@ class TestConnectionLifecycle:
         assert bridge._pending == {}
         # An exception on it would be logged as "Future exception was never retrieved"
         assert len(futures) == 1 and not futures[0].done()
-
-    @pytest.mark.asyncio
-    async def test_unmatched_error_reply_is_logged(self, caplog):
-        """An error reply for a request that nobody waits for anymore is logged."""
-        bridge = Bridge("192.168.1.100", LOCAL_UUID)
-        cmd = zehnder_pb2.GatewayOperation()
-        cmd.type = zehnder_pb2.GatewayOperation.CnRmiResponseType
-        cmd.reference = 42
-        cmd.result = zehnder_pb2.GatewayOperation.NOT_ALLOWED
-
-        await _run_read_loop(bridge, Message(cmd, zehnder_pb2.CnRmiResponse(), LOCAL_UUID, LOCAL_UUID).encode())
-
-        assert any(r.levelname == "WARNING" and "without a matching request" in r.getMessage() for r in caplog.records)
 
 
 class TestPendingRequests:

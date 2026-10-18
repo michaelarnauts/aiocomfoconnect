@@ -49,6 +49,8 @@ class TestConnect:
         bridge = Bridge("127.0.0.1", BRIDGE_UUID)
         await bridge.connect(LOCAL_UUID)
         assert bridge.is_connected()
+        # Connecting again while connected does nothing.
+        await bridge.connect(LOCAL_UUID)
 
         await bridge.cmd_start_session(True)
         assert (await bridge.cmd_time_request()).currentTime == 1
