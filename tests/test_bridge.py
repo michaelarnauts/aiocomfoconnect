@@ -838,6 +838,82 @@ class TestGatewayTypeFromSession:
         assert bridge.bridge_type == GatewayType.SEASON
 
 
+class TestMessage:
+    """Test the Message class."""
+
+    def test_request_mapping(self):
+        """Every operation type maps to the same message class as the hand-written table did."""
+        expected = {
+            "SetAddressRequestType": "SetAddressRequest",
+            "RegisterAppRequestType": "RegisterAppRequest",
+            "StartSessionRequestType": "StartSessionRequest",
+            "CloseSessionRequestType": "CloseSessionRequest",
+            "ListRegisteredAppsRequestType": "ListRegisteredAppsRequest",
+            "DeregisterAppRequestType": "DeregisterAppRequest",
+            "ChangePinRequestType": "ChangePinRequest",
+            "GetRemoteAccessIdRequestType": "GetRemoteAccessIdRequest",
+            "SetRemoteAccessIdRequestType": "SetRemoteAccessIdRequest",
+            "GetSupportIdRequestType": "GetSupportIdRequest",
+            "SetSupportIdRequestType": "SetSupportIdRequest",
+            "GetWebIdRequestType": "GetWebIdRequest",
+            "SetWebIdRequestType": "SetWebIdRequest",
+            "SetPushIdRequestType": "SetPushIdRequest",
+            "DebugRequestType": "DebugRequest",
+            "UpgradeRequestType": "UpgradeRequest",
+            "SetDeviceSettingsRequestType": "SetDeviceSettingsRequest",
+            "VersionRequestType": "VersionRequest",
+            "CnTimeRequestType": "CnTimeRequest",
+            "CnTimeConfirmType": "CnTimeConfirm",
+            "CnNodeNotificationType": "CnNodeNotification",
+            "CnRmiRequestType": "CnRmiRequest",
+            "CnRmiResponseType": "CnRmiResponse",
+            "CnRmiAsyncRequestType": "CnRmiAsyncRequest",
+            "CnRmiAsyncConfirmType": "CnRmiAsyncConfirm",
+            "CnRmiAsyncResponseType": "CnRmiAsyncResponse",
+            "CnRpdoRequestType": "CnRpdoRequest",
+            "CnRpdoConfirmType": "CnRpdoConfirm",
+            "CnRpdoNotificationType": "CnRpdoNotification",
+            "CnAlarmNotificationType": "CnAlarmNotification",
+            "CnNodeRequestType": "CnNodeRequest",
+            "SetAddressConfirmType": "SetAddressConfirm",
+            "RegisterAppConfirmType": "RegisterAppConfirm",
+            "StartSessionConfirmType": "StartSessionConfirm",
+            "CloseSessionConfirmType": "CloseSessionConfirm",
+            "ListRegisteredAppsConfirmType": "ListRegisteredAppsConfirm",
+            "DeregisterAppConfirmType": "DeregisterAppConfirm",
+            "ChangePinConfirmType": "ChangePinConfirm",
+            "GetRemoteAccessIdConfirmType": "GetRemoteAccessIdConfirm",
+            "SetRemoteAccessIdConfirmType": "SetRemoteAccessIdConfirm",
+            "GetSupportIdConfirmType": "GetSupportIdConfirm",
+            "SetSupportIdConfirmType": "SetSupportIdConfirm",
+            "GetWebIdConfirmType": "GetWebIdConfirm",
+            "SetWebIdConfirmType": "SetWebIdConfirm",
+            "SetPushIdConfirmType": "SetPushIdConfirm",
+            "DebugConfirmType": "DebugConfirm",
+            "UpgradeConfirmType": "UpgradeConfirm",
+            "SetDeviceSettingsConfirmType": "SetDeviceSettingsConfirm",
+            "VersionConfirmType": "VersionConfirm",
+            "CnFupReadRegisterRequestType": "CnFupReadRegisterRequest",
+            "CnFupReadRegisterConfirmType": "CnFupReadRegisterConfirm",
+            "CnFupProgramBeginRequestType": "CnFupProgramBeginRequest",
+            "CnFupProgramBeginConfirmType": "CnFupProgramBeginConfirm",
+            "CnFupProgramRequestType": "CnFupProgramRequest",
+            "CnFupProgramConfirmType": "CnFupProgramConfirm",
+            "CnFupProgramEndRequestType": "CnFupProgramEndRequest",
+            "CnFupProgramEndConfirmType": "CnFupProgramEndConfirm",
+            "CnFupReadRequestType": "CnFupReadRequest",
+            "CnFupReadConfirmType": "CnFupReadConfirm",
+            "CnFupResetRequestType": "CnFupResetRequest",
+            "CnFupResetConfirmType": "CnFupResetConfirm",
+            "GatewayNotificationType": "GatewayNotification",
+            "KeepAliveType": "KeepAlive",
+            "FactoryResetType": "FactoryReset",
+        }
+        actual = {zehnder_pb2.GatewayOperation.OperationType.Name(op): cls.__name__ for op, cls in Message.REQUEST_MAPPING.items()}
+        assert actual == expected
+        assert all(cls is getattr(zehnder_pb2, cls.__name__) for cls in Message.REQUEST_MAPPING.values())
+
+
 def _frame(cmd_type, msg=None):
     """Encode a frame like the bridge sends it, including the 4 byte length prefix."""
     cmd = zehnder_pb2.GatewayOperation()
