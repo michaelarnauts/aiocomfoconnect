@@ -532,6 +532,15 @@ async def test_get_node_info_with_missing_properties():
     assert {call.kwargs["node_id"] for call in mock_rmi.await_args_list} == {48}
 
 
+async def test_get_node_info_of_unknown_node():
+    """When none of the properties can be read, e.g. of a node that doesn't exist, the RMI error is raised."""
+    comfoconnect = ComfoConnect("127.0.0.1", LOCAL_UUID)
+
+    with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(side_effect=ComfoConnectRmiError("RMI error"))):
+        with pytest.raises(ComfoConnectRmiError):
+            await comfoconnect.get_node_info(99)
+
+
 async def test_get_properties_on_comfoclime():
     """Properties of the ComfoClime are read from its node."""
     comfoconnect = ComfoConnect("127.0.0.1", LOCAL_UUID)

@@ -458,12 +458,15 @@ class ComfoConnect(Bridge):
         return values
 
     async def get_node_info(self, node_id: Optional[int] = None) -> NodeInfo:
-        """Get the NodeInfo of a node (the ventilation unit by default), in one request when the node has all its properties."""
+        """Get the NodeInfo of a node (the ventilation unit by default), in one request when the node has all its properties.
+
+        Raises ComfoConnectRmiError when none of the properties can be read, e.g. for a node that doesn't exist.
+        """
         props = [PROPERTY_NAME, PROPERTY_MODEL, PROPERTY_ARTICLE, PROPERTY_SERIAL_NUMBER, PROPERTY_FIRMWARE_VERSION, PROPERTY_HARDWARE_VERSION]
         try:
             return NodeInfo(*await self.get_properties(props, node_id))
-        except ComfoConnectRmiError:
-            pass
+        except ComfoConnectRmiError as exc:
+            error = exc
 
         # A request fails as a whole when the node lacks one of the properties, so read them one by one.
         async def get_or_none(prop: Property) -> Any:
@@ -472,7 +475,10 @@ class ComfoConnect(Bridge):
             except ComfoConnectRmiError:
                 return None
 
-        return NodeInfo(*[await get_or_none(prop) for prop in props])
+        values = [await get_or_none(prop) for prop in props]
+        if all(value is None for value in values):
+            raise error  # Nothing could be read, e.g. the node doesn't exist.
+        return NodeInfo(*values)
 
     async def get_single_property(self, unit: int, subunit: int, property_id: int, property_type: int = None, node_id: Optional[int] = None) -> Any:
         """Get a property and convert to the right type."""
