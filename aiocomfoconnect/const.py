@@ -276,6 +276,13 @@ class VentilationTemperatureProfile:
     COOL = "cool"
 
 
+class TemperatureProfileMode:
+    """Enum for the temperature profile mode: whether the comfort temperature follows the RMOT or the active profile."""
+
+    ADAPTIVE = "adaptive"
+    FIXED = "fixed"
+
+
 class VentilationSpeed:
     """Enum for ventilation speeds."""
 
@@ -315,6 +322,23 @@ class ComfoClimeDeviceMode:
     HEATING = "heating"
     COOLING = "cooling"
 
+
+# The options of the sensor based ventilation mode properties.
+SENSOR_VENTILATION_MODES = {
+    0: VentilationSetting.OFF,
+    1: VentilationSetting.AUTO,
+    2: VentilationSetting.ON,
+}
+
+TEMPERATURE_PROFILE_MODES = {
+    0: TemperatureProfileMode.ADAPTIVE,
+    1: TemperatureProfileMode.FIXED,
+}
+
+COMFOCLIME_AUTO_SEASON_MODES = {
+    0: VentilationSetting.OFF,
+    1: VentilationSetting.ON,
+}
 
 COMFOCLIME_SEASONS = {
     0: ComfoClimeSeason.TRANSITION,

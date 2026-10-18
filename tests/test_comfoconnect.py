@@ -15,9 +15,14 @@ from aiocomfoconnect.exceptions import (
 )
 from aiocomfoconnect.properties import (
     PROPERTY_CLIME_HEATING_COMFORT_TEMP,
+    PROPERTY_CLIME_AUTO_SEASON,
     PROPERTY_CLIME_HEATPUMP_STANDBY,
     PROPERTY_CLIME_SEASON,
+    PROPERTY_CLIME_TEMPERATURE_PROFILE,
     PROPERTY_RMOT_HEATING_THRESHOLD,
+    PROPERTY_SENSOR_VENTILATION_HUMIDITY_COMFORT,
+    PROPERTY_SENSOR_VENTILATION_HUMIDITY_PROTECTION,
+    PROPERTY_SENSOR_VENTILATION_TEMP_PASSIVE,
     PROPERTY_SERIAL_NUMBER,
     PROPERTY_TEMPERATURE_PROFILE_MODE,
     Property,
@@ -287,45 +292,12 @@ class TestComfoConnect:
             await comfoconnect.get_property_constraints(PROPERTY_RMOT_COOLING_THRESHOLD)
 
     @pytest.mark.asyncio
-    async def test_get_comfoclime_property(self, comfoconnect):
-        """Test that a ComfoClime property is read from the ComfoClime node."""
-        node_notification(comfoconnect, node_id=1, product_id=ProductId.COMFOAIRQ)
-        node_notification(comfoconnect, node_id=2, product_id=ProductId.COMFOCLIME)
-
-        mock_response = Mock()
-        mock_response.message = b"\xd7\x00"  # 215 in little-endian
-
-        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=mock_response)) as mock_rmi:
-            value = await comfoconnect.get_comfoclime_property(PROPERTY_CLIME_HEATING_COMFORT_TEMP)
-
-            assert value == 215
-            mock_rmi.assert_called_once_with(bytes([0x01, 0x16, 0x01, 0x10, 0x09]), node_id=2)
-
-    @pytest.mark.asyncio
-    async def test_set_comfoclime_property(self, comfoconnect):
-        """Test that a ComfoClime property is written to the ComfoClime node."""
-        node_notification(comfoconnect, node_id=2, product_id=ProductId.COMFOCLIME)
-
-        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock()) as mock_rmi:
-            await comfoconnect.set_comfoclime_property(PROPERTY_CLIME_HEATING_COMFORT_TEMP, 215)
-
-            mock_rmi.assert_called_once_with(bytes([0x03, 0x16, 0x01, 0x09, 0xD7, 0x00]), node_id=2)
-
-    @pytest.mark.asyncio
-    async def test_comfoclime_property_without_comfoclime(self, comfoconnect):
-        """Test that addressing a ComfoClime that isn't on the bus raises."""
-        node_notification(comfoconnect, node_id=1, product_id=ProductId.COMFOAIRQ)
-
-        with pytest.raises(ComfoClimeNotFoundException):
-            await comfoconnect.get_comfoclime_property(PROPERTY_CLIME_HEATING_COMFORT_TEMP)
-
-    @pytest.mark.asyncio
     async def test_set_comfoclime_standby_property(self, comfoconnect):
         """Test the verified ComfoClime standby property framing."""
         node_notification(comfoconnect, node_id=11, product_id=ProductId.COMFOCLIME)
 
         with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock()) as mock_rmi:
-            await comfoconnect.set_comfoclime_property(PROPERTY_CLIME_HEATPUMP_STANDBY, 1)
+            await comfoconnect.set_property(PROPERTY_CLIME_HEATPUMP_STANDBY, 1)
 
             mock_rmi.assert_called_once_with(bytes([0x03, 0x16, 0x01, 0x15, 0x01]), node_id=11)
 
@@ -359,8 +331,8 @@ class TestComfoConnect:
 
         with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=Mock(message=b"\x01"))) as mock_rmi:
             await comfoconnect.get_property(PROPERTY_SERIAL_NUMBER, node_id=2)
-            await comfoconnect.set_property(PROPERTY_TEMPERATURE_PROFILE_MODE, 1, node_id=5)
-            await comfoconnect.set_property(PROPERTY_TEMPERATURE_PROFILE_MODE, 1, 6)
+            await comfoconnect.set_property(PROPERTY_TEMPERATURE_PROFILE_MODE, "fixed", node_id=5)
+            await comfoconnect.set_property(PROPERTY_TEMPERATURE_PROFILE_MODE, "fixed", 6)
 
         assert [rmi_call.kwargs for rmi_call in mock_rmi.await_args_list] == [{"node_id": 2}, {"node_id": 5}, {"node_id": 6}]
 
@@ -369,7 +341,7 @@ class TestComfoConnect:
         "call",
         [
             lambda ccb: ccb.get_property(PROPERTY_CLIME_SEASON),
-            lambda ccb: ccb.set_property(PROPERTY_CLIME_SEASON, 1),
+            lambda ccb: ccb.set_property(PROPERTY_CLIME_SEASON, "heating"),
             lambda ccb: ccb.get_property_constraints(PROPERTY_CLIME_HEATING_COMFORT_TEMP),
         ],
     )
@@ -392,6 +364,56 @@ class TestComfoConnect:
 
         with pytest.raises(NodeNotFoundException):
             await comfoconnect.get_property(Property(0x01, 0x01, 0x04, PdoType.TYPE_CN_STRING, product=ProductId.COMFOSENSE))
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "prop, raw, option",
+        [
+            (PROPERTY_SENSOR_VENTILATION_TEMP_PASSIVE, 0, "off"),
+            (PROPERTY_SENSOR_VENTILATION_HUMIDITY_COMFORT, 1, "auto"),
+            (PROPERTY_SENSOR_VENTILATION_HUMIDITY_PROTECTION, 2, "on"),
+            (PROPERTY_TEMPERATURE_PROFILE_MODE, 0, "adaptive"),
+            (PROPERTY_TEMPERATURE_PROFILE_MODE, 1, "fixed"),
+            (PROPERTY_CLIME_AUTO_SEASON, 1, "on"),
+            (PROPERTY_CLIME_SEASON, 2, "cooling"),
+            (PROPERTY_CLIME_TEMPERATURE_PROFILE, 2, "eco"),
+        ],
+    )
+    async def test_property_options(self, comfoconnect, prop, raw, option):
+        """A property with options is read and written as an option instead of its raw value."""
+        node_notification(comfoconnect, node_id=1, product_id=ProductId.COMFOAIRQ)
+        node_notification(comfoconnect, node_id=2, product_id=ProductId.COMFOCLIME)
+
+        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=Mock(message=bytes([raw])))) as mock_rmi:
+            assert await comfoconnect.get_property(prop) == option
+            await comfoconnect.set_property(prop, option)
+
+        assert mock_rmi.await_args_list[1].args == (bytes([0x03, prop.unit, prop.subunit, prop.property_id, raw]),)
+
+    @pytest.mark.asyncio
+    async def test_property_options_reject_unknown(self, comfoconnect):
+        """An unknown raw value or option raises a ValueError, and an unknown option sends nothing."""
+        node_notification(comfoconnect, node_id=1, product_id=ProductId.COMFOAIRQ)
+
+        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=Mock(message=b"\x03"))) as mock_rmi:
+            with pytest.raises(ValueError):
+                await comfoconnect.get_property(PROPERTY_SENSOR_VENTILATION_TEMP_PASSIVE)
+            mock_rmi.reset_mock()
+            with pytest.raises(ValueError):
+                await comfoconnect.set_property(PROPERTY_SENSOR_VENTILATION_TEMP_PASSIVE, "turbo")
+            with pytest.raises(ValueError):
+                await comfoconnect.set_property(PROPERTY_SENSOR_VENTILATION_TEMP_PASSIVE, 1)
+
+        mock_rmi.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("raw, option", [(0, "off"), (1, "auto"), (2, "on")])
+    async def test_sensor_ventmode_getters(self, comfoconnect, raw, option):
+        """The sensor based ventilation mode getters return the option."""
+        node_notification(comfoconnect, node_id=1, product_id=ProductId.COMFOAIRQ)
+
+        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=Mock(message=bytes([raw])))):
+            assert await comfoconnect.get_sensor_ventmode_humidity_comfort() == option
 
     def test_property_products(self):
         """The ComfoClime properties live on the ComfoClime, the others on the ventilation unit."""
@@ -458,7 +480,7 @@ class TestComfoConnect:
         ("set_sensor_ventmode_humidity_protection", ("off",), ["03 1d 01 07 00"]),
         ("clear_errors", (), ["82 03 01"]),
         ("get_property", (PROPERTY_TEMPERATURE_PROFILE_MODE,), ["01 1d 01 10 08"]),
-        ("set_property", (PROPERTY_TEMPERATURE_PROFILE_MODE, 1), ["03 1d 01 08 01"]),
+        ("set_property", (PROPERTY_TEMPERATURE_PROFILE_MODE, "fixed"), ["03 1d 01 08 01"]),
         ("set_property", (PROPERTY_RMOT_HEATING_THRESHOLD, -15), ["03 1d 01 02 f1ff"]),
         ("set_property_typed", (0x1D, 0x01, 0x02, -15, PdoType.TYPE_CN_INT16), ["03 1d 01 02 f1ff"]),
         ("get_timer", (0x02, 0x01), ["83 15 02 01"]),
