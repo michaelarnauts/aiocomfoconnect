@@ -96,6 +96,11 @@ def _decode_value(property_type: Optional[int], raw: bytes) -> Any:
     return raw
 
 
+def _sensor_value(sensor: Sensor, raw: int) -> Any:
+    """Convert the raw value of a sensor."""
+    return sensor.value_fn(raw) if sensor.value_fn else round(raw, 2)
+
+
 def _property_value(prop: Property, value: Any) -> Any:
     """Return the option or the scaled value of a decoded property value."""
     if prop.options is None:
@@ -301,6 +306,18 @@ class ComfoConnect(Bridge):
             except (AioComfoConnectTimeout, AioComfoConnectNotConnected):
                 _LOGGER.warning("The bridge did not answer the heartbeat")
                 return
+
+    @property
+    def sensor_values(self) -> Dict[int, Any]:
+        """The latest value of every subscribed sensor, by sensor id, converted like for the sensor callback.
+
+        A value is None until the bridge sent one. Right after subscribing, it can be the invalid value that the bridge
+        sends first, which the sensor callback holds back (see sensor_delay).
+        """
+        return {
+            sensor_id: None if self._sensors_values.get(sensor_id) is None else _sensor_value(sensor, self._sensors_values[sensor_id])
+            for sensor_id, sensor in self._sensors.items()
+        }
 
     @property
     def connection_state(self) -> str:
@@ -520,9 +537,6 @@ class ComfoConnect(Bridge):
 
     def _sensor_callback(self, sensor_id, sensor_value):
         """Callback function for sensor updates."""
-        if self._sensor_callback_fn is None:
-            return
-
         sensor = self._sensors.get(sensor_id)
         if sensor is None:
             # After a quick reconnect, the bridge can still push the sensors of our previous session before we subscribe again.
@@ -540,11 +554,8 @@ class ComfoConnect(Bridge):
             _LOGGER.debug("Got a valid value for sensor %s, releasing the hold", sensor_id)
             self._sensor_holds.pop(sensor_id).cancel()
 
-        if sensor.value_fn:
-            val = sensor.value_fn(sensor_value)
-        else:
-            val = round(sensor_value, 2)
-        self._sensor_callback_fn(sensor, val)
+        if self._sensor_callback_fn is not None:
+            self._sensor_callback_fn(sensor, _sensor_value(sensor, sensor_value))
 
     def _alarm_callback(self, node_id, alarm):
         """Callback function for alarm updates."""

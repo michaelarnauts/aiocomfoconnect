@@ -560,6 +560,20 @@ class TestSensors:
 
         assert values == [(276, 42), (277, 21.5)]
 
+    async def test_sensor_values_property(self, fake_bridge, make_client):
+        """sensor_values has the latest value of every subscribed sensor, converted, also without a sensor callback."""
+        client = make_client()
+        await client.connect(LOCAL_UUID)
+        await client.register_sensor(create_sensor(sensor_id=276))
+        await client.register_sensor(create_sensor(sensor_id=277, sensor_type=2, value_fn=lambda value: value / 10))
+        await client.register_sensor(create_sensor(sensor_id=278))
+
+        fake_bridge.push_sensor(276, bytes([42]))
+        fake_bridge.push_sensor(277, (215).to_bytes(2, "little"))
+        await roundtrip(client)
+
+        assert client.sensor_values == {276: 42, 277: 21.5, 278: None}
+
     async def test_sensor_hold(self, fake_bridge, make_client):
         """The zero value the bridge sends right after subscribing is held back, and emitted when the hold expires."""
         values = []
