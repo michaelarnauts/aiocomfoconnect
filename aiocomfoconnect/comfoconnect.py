@@ -49,7 +49,7 @@ from aiocomfoconnect.exceptions import (
 )
 from aiocomfoconnect.properties import Property, PropertyConstraints
 from aiocomfoconnect.sensors import Sensor
-from aiocomfoconnect.util import bytearray_to_bits, bytestring, encode_pdo_value, version_decode
+from aiocomfoconnect.util import bytearray_to_bits, encode_pdo_value, version_decode
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -66,6 +66,33 @@ HEARTBEAT_INTERVAL = 30
 SPEEDS = (VentilationSpeed.AWAY, VentilationSpeed.LOW, VentilationSpeed.MEDIUM, VentilationSpeed.HIGH)
 BYPASS_MODES = (VentilationSetting.AUTO, VentilationSetting.ON, VentilationSetting.OFF)
 TEMPERATURE_PROFILES = (VentilationTemperatureProfile.NORMAL, VentilationTemperatureProfile.COOL, VentilationTemperatureProfile.WARM)
+
+
+# The size in bytes of the value of the property types that aren't a string.
+VALUE_SIZES = {PdoType.TYPE_CN_BOOL: 1, PdoType.TYPE_CN_VERSION: 4} | {pdo_type: size for pdo_type, (size, _) in NUMERIC_PROPERTY_TYPES.items()}
+
+
+def _decode_value(property_type: Optional[int], raw: bytes) -> Any:
+    """Decode the raw value of a property of the given type. A type we don't know is returned as bytes."""
+    if property_type == PdoType.TYPE_CN_STRING:
+        return raw.decode("utf-8").rstrip("\x00")
+    if property_type in NUMERIC_PROPERTY_TYPES:
+        _, signed = NUMERIC_PROPERTY_TYPES[property_type]
+        return int.from_bytes(raw, byteorder="little", signed=signed)
+    if property_type == PdoType.TYPE_CN_BOOL:
+        return bool(raw[0])
+    if property_type == PdoType.TYPE_CN_VERSION:
+        return version_decode(int.from_bytes(raw, byteorder="little"))
+    return raw
+
+
+def _property_value(prop: Property, value: Any) -> Any:
+    """Return the option or the scaled value of a decoded property value."""
+    if prop.options is None:
+        return prop.scaled(value)
+    if value not in prop.options:
+        raise ValueError(f"Invalid value: {value}")
+    return prop.options[value]
 
 
 @dataclass
@@ -365,27 +392,53 @@ class ComfoConnect(Bridge):
     async def get_property(self, prop: Property, node_id: Optional[int] = None) -> Any:
         """Get a property from the node it lives on (or node_id), and convert it to the right type, its option or its scaled value."""
         value = await self.get_single_property(prop.unit, prop.subunit, prop.property_id, prop.property_type, node_id=self._node_id_for(prop, node_id))
-        if prop.options is None:
-            return prop.scaled(value)
-        if value not in prop.options:
-            raise ValueError(f"Invalid value: {value}")
-        return prop.options[value]
+        return _property_value(prop, value)
+
+    async def get_properties(self, props: List[Property], node_id: Optional[int] = None) -> List[Any]:
+        """Get several properties of one node in one request, converted like get_property.
+
+        The properties are read in groups of consecutive properties of the same unit and subunit, of at most 7 like the
+        official app. A ValueError is raised for properties on different nodes, or of a type whose size we don't know.
+        """
+        node_ids = {self._node_id_for(prop, node_id) for prop in props}
+        if len(node_ids) > 1:
+            raise ValueError("The properties live on different nodes")
+        for prop in props:
+            if prop.property_type != PdoType.TYPE_CN_STRING and prop.property_type not in VALUE_SIZES:
+                raise ValueError(f"Property type {prop.property_type} can't be read with other properties")
+
+        groups: List[List[Property]] = []
+        for prop in props:
+            if groups and len(groups[-1]) < 7 and (groups[-1][0].unit, groups[-1][0].subunit) == (prop.unit, prop.subunit):
+                groups[-1].append(prop)
+            else:
+                groups.append([prop])
+
+        request = [0x02, len(groups)]
+        for group in groups:
+            request += [group[0].unit, group[0].subunit, 0x10 | len(group)] + [prop.property_id for prop in group]
+        result = await self.cmd_rmi_request(bytes(request), node_id=node_ids.pop() if node_ids else None)
+
+        # The values follow each other: a string ends with a NUL, the other types have a fixed size.
+        message = bytes(result.message)
+        values = []
+        for prop in props:
+            if prop.property_type == PdoType.TYPE_CN_STRING:
+                size = message.find(b"\x00") + 1 or len(message)
+            else:
+                size = VALUE_SIZES[prop.property_type]
+            if len(message) < size:
+                raise ValueError(f"The response is too short for the value of property {prop.property_id}")
+            values.append(_property_value(prop, _decode_value(prop.property_type, message[:size])))
+            message = message[size:]
+        if message:
+            raise ValueError(f"Unexpected {len(message)} bytes at the end of the response")
+        return values
 
     async def get_single_property(self, unit: int, subunit: int, property_id: int, property_type: int = None, node_id: Optional[int] = None) -> Any:
         """Get a property and convert to the right type."""
         result = await self.cmd_rmi_request(bytes([0x01, unit, subunit, 0x10, property_id]), node_id=node_id)
-
-        if property_type == PdoType.TYPE_CN_STRING:
-            return result.message.decode("utf-8").rstrip("\x00")
-        if property_type in NUMERIC_PROPERTY_TYPES:
-            _, signed = NUMERIC_PROPERTY_TYPES[property_type]
-            return int.from_bytes(result.message, byteorder="little", signed=signed)
-        if property_type == PdoType.TYPE_CN_BOOL:
-            return bool(result.message[0])
-        if property_type == PdoType.TYPE_CN_VERSION:
-            return version_decode(int.from_bytes(result.message, byteorder="little"))
-
-        return result.message
+        return _decode_value(property_type, result.message)
 
     async def get_property_constraints(self, prop: Property, node_id: Optional[int] = None) -> PropertyConstraints:
         """Get the (scaled) value of a numeric property, together with the range and step size the unit accepts, in one request."""
@@ -401,15 +454,6 @@ class ComfoConnect(Bridge):
             raise ValueError(f"Unexpected response length {len(message)} for a value with its range and step size")
         value, minimum, maximum, step = (int.from_bytes(message[i : i + size], byteorder="little", signed=signed) for i in range(0, 4 * size, size))
         return PropertyConstraints(value=prop.scaled(value), minimum=prop.scaled(minimum), maximum=prop.scaled(maximum), step=prop.scaled(step))
-
-    async def get_multiple_properties(self, unit: int, subunit: int, property_ids: List[int], node_id: Optional[int] = None) -> Any:
-        """Get the actual values of several properties of one unit and subunit in one request, as raw bytes one after the other.
-
-        The request is one group (count 1) of the unit, the subunit, and 0x10 (actual value) OR'ed with the number of properties.
-        """
-        result = await self.cmd_rmi_request(bytestring([0x02, 0x01, unit, subunit, 0x10 | len(property_ids), bytes(property_ids)]), node_id=node_id)
-
-        return result.message
 
     async def set_property(self, prop: Property, value: int | float | str, node_id: Optional[int] = None) -> Any:
         """Set a property on the node it lives on (or node_id), encoded for its type.

@@ -142,7 +142,13 @@ There are three commands which always exist on a given Unit:
   below, because it reads one group (`Count` = `01`) from Unit `01`, SubUnit `01`, but not for other units. Checked on
   a unit with TEMPHUMCONTROL (`0x1D`), SubUnit `01`, properties `0x0A` and `0x0B`: the syntax above,
   `02 01 1D 01 12 0A 0B`, replied `e6 00 d2 00` (230 and 210, the same as two single reads), while the old syntax,
-  `02 1D 01 01 12 0A 0B`, got an RMI error. Reading several groups in one request has not been tried yet.
+  `02 1D 01 01 12 0A 0B`, got an RMI error.
+
+  Reading several groups in one request was also checked on a unit: `02 02 1D 01 13 0A 08 02 01 01 12 14 06` reads
+  TEMPHUMCONTROL properties `0x0A` (INT16, the warm profile temperature), `0x08` (UINT8, the temperature profile mode)
+  and `0x02` (INT16, the RMOT heating threshold), then NODE properties `0x14` (the name, a string ending with `00`) and
+  `0x06` (the firmware version, 4 bytes). The reply held the five values back to back in that order, the same as five
+  single reads.
 
   Example: Request: `02 01 01 01 15 03 04 06 05 14`, Response: `\02 BEA000000000000\00 \00\10\10\c0 \02 ComfoAirQ\00`
   This reads the following property values of the NODE unit (the same ones the official app reads to identify a node):

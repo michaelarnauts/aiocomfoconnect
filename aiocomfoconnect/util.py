@@ -5,11 +5,6 @@ from __future__ import annotations
 from aiocomfoconnect.const import NUMERIC_PROPERTY_TYPES, PdoType
 
 
-def bytestring(arr):
-    """Join an array of bytes into a bytestring. Unlike `bytes()`, this method supports a mixed array with integers and bytes."""
-    return b"".join([i if isinstance(i, bytes) else bytes([i]) for i in arr])
-
-
 def bytearray_to_bits(arr):
     """Convert a bytearray to a list of set bits."""
     bits = []
