@@ -66,6 +66,7 @@ SENSOR_POWER_USAGE_TOTAL_YEAR = 129
 SENSOR_PREHEATER_POWER = 146
 SENSOR_PREHEATER_POWER_TOTAL = 145
 SENSOR_PREHEATER_POWER_TOTAL_YEAR = 144
+SENSOR_PRESET_TIMERS = 337  # The running timers of the preset schedule, as a bit set: bit 6 is boost, bit 11 is away.
 SENSOR_PROFILE_TEMPERATURE = 67
 SENSOR_RF_PAIRING_MODE = 176
 SENSOR_RMOT = 209
@@ -195,7 +196,7 @@ SENSORS: Dict[int, Sensor] = {
         Sensor("Supply Air Humidity", UNIT_PERCENT, SENSOR_HUMIDITY_SUPPLY, PdoType.TYPE_CN_UINT8),
         Sensor("sensor_321", None, 321, PdoType.TYPE_CN_UINT16),
         Sensor("sensor_325", None, 325, PdoType.TYPE_CN_UINT16),
-        Sensor("sensor_337", None, 337, PdoType.TYPE_CN_UINT32),
+        Sensor("Preset Timers", None, SENSOR_PRESET_TIMERS, PdoType.TYPE_CN_UINT32),
         Sensor("Bypass Override", None, SENSOR_BYPASS_OVERRIDE, PdoType.TYPE_CN_UINT32),
         Sensor("sensor_341", None, 341, PdoType.TYPE_CN_UINT32),
         Sensor("Supply Fan Mode (running timers)", None, SENSOR_FAN_MODE_SUPPLY_3, PdoType.TYPE_CN_UINT32),
