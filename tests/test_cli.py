@@ -8,7 +8,10 @@ import pytest
 
 from aiocomfoconnect import DEFAULT_UUID
 from aiocomfoconnect import __main__ as cli
-from aiocomfoconnect.exceptions import ComfoConnectNotAllowed
+from aiocomfoconnect.bridge import Node
+from aiocomfoconnect.comfoconnect import NodeInfo
+from aiocomfoconnect.const import ProductId
+from aiocomfoconnect.exceptions import ComfoConnectNotAllowed, ComfoConnectRmiError
 
 FAKE_HOST = "192.0.2.1"
 FAKE_BRIDGE_UUID = "0000000000000000000000000000beef"
@@ -226,4 +229,38 @@ class TestCommands:
             cli.main_cli(["show-sensor", "276"])
         assert exc.value.code == 1
         assert "No value received" in capsys.readouterr().err
+        bridge.disconnect.assert_awaited_once()
+
+    def test_list_nodes(self, bridge, capsys, monkeypatch):
+        """list-nodes prints every node with what it tells about itself, and goes on when a node can't tell."""
+        monkeypatch.setattr(cli, "NODE_REQUEST_WAIT", 0)
+        bridge.cmd_node_request = AsyncMock()
+        bridge.nodes = {
+            48: Node(node_id=48, product_id=ProductId.ZEHNDERGATEWAY, zone_id=0, mode=1),
+            1: Node(node_id=1, product_id=ProductId.COMFOAIRQ, zone_id=1, mode=1),
+            99: Node(node_id=99, product_id=200, zone_id=1, mode=1),
+        }
+        infos = {
+            1: NodeInfo(name="My unit", model="ComfoAir Q450", article_number="000000000", serial_number="FAKE0000000000", firmware="R1.12.0", hardware_version=2),
+            48: NodeInfo(name="My bridge", model=None, article_number=None, serial_number="FAKE0000000001", firmware="R1.5.1", hardware_version=1),
+        }
+
+        async def get_node_info(node_id):
+            if node_id not in infos:
+                raise ComfoConnectRmiError("RMI_ERROR (reference 9)")
+            return infos[node_id]
+
+        bridge.get_node_info = AsyncMock(side_effect=get_node_info)
+
+        cli.main_cli(["list-nodes"])
+
+        assert capsys.readouterr().out.splitlines() == [
+            "Nodes on the ComfoNet bus:",
+            "* node 1: product 1 (comfoairq), zone 1, mode 1",
+            "  name: My unit, model: ComfoAir Q450, firmware: R1.12.0, hardware version: 2, serial number: FAKE0000000000",
+            "* node 48: product 5 (zehndergateway), zone 0, mode 1",
+            "  name: My bridge, firmware: R1.5.1, hardware version: 1, serial number: FAKE0000000001",
+            "* node 99: product 200 (unknown), zone 1, mode 1",
+            "  could not read the node info: RMI_ERROR (reference 9)",
+        ]
         bridge.disconnect.assert_awaited_once()
