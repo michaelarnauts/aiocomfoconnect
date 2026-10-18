@@ -10,6 +10,7 @@ from aiocomfoconnect import properties
 from aiocomfoconnect.exceptions import (
     AioComfoConnectNotConnected,
     ComfoClimeNotFoundException,
+    ComfoConnectRmiError,
     NodeNotFoundException,
 )
 from aiocomfoconnect.properties import (
@@ -510,6 +511,25 @@ async def test_get_node_info(node_id):
 
     assert info == NodeInfo(name="My unit", model="ComfoAir Q450", article_number="000000000", serial_number="FAKE0000000000", firmware="R1.4.0", hardware_version=2)
     mock_rmi.assert_awaited_once_with(bytes.fromhex("02 01 01 01 16 14 08 0b 04 06 05"), node_id=node_id)
+
+
+async def test_get_node_info_with_missing_properties():
+    """A node without some of the properties (like the bridge, without model and article number) fails the request as a
+    whole, so they are read one by one, and the missing ones are None."""
+    comfoconnect = ComfoConnect("127.0.0.1", LOCAL_UUID)
+    values = {0x14: b"My bridge\x00", 0x04: b"FAKE0000000000\x00", 0x06: bytes.fromhex("011410c0"), 0x05: b"\x01"}
+
+    def reply(request, node_id=None):  # pylint: disable=unused-argument
+        if request[0] == 0x02 or request[4] not in values:
+            raise ComfoConnectRmiError("RMI error")
+        return Mock(message=values[request[4]])
+
+    with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(side_effect=reply)) as mock_rmi:
+        info = await comfoconnect.get_node_info(48)
+
+    assert info == NodeInfo(name="My bridge", model=None, article_number=None, serial_number="FAKE0000000000", firmware="R1.5.1", hardware_version=1)
+    assert mock_rmi.await_count == 7
+    assert {call.kwargs["node_id"] for call in mock_rmi.await_args_list} == {48}
 
 
 async def test_get_properties_on_comfoclime():
