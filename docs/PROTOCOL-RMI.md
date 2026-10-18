@@ -1,5 +1,8 @@
 # RMI Protocol
 
+A † marks information that comes from the official ComfoControl app (what it reads, writes or names), but that has
+not been checked on a unit.
+
 ## Nodes
 
 A RMI message is send towards a Node. The node ids are not fixed: the bridge announces the nodes that are available
@@ -24,8 +27,8 @@ The Ventilation Unit is seperated into multiple Units, and sometimes even SubUni
 | 0x02 | 1             | COMFOBUS          | Unit responsible for comfobus-communication. Probably stores the ID's of connected devices. |
 | 0x03 | 1             | ERROR             | Stores errors, allows errors to be reset                                                    |
 | 0x15 | 10            | SCHEDULE          | Responsible for managing Timers, the schedule, etc. Check here for level, bypass etc.       |
-| 0x16 | 2             | VALVE             | ??? Bypass PreHeater and Extract                                                            |
-| 0x17 | 2             | FAN               | Represents the two fans (supply, exhaust)                                                   |
+| 0x16 | 2             | VALVE             | The valves: `01` extract (V11), `02` bypass/preheater (V21) †                               |
+| 0x17 | 2             | FAN               | Represents the two fans: `01` exhaust (F12), `02` supply (F22) †                            |
 | 0x18 | 1             | POWERSENSOR       | Counts the actual wattage of ventilation and accumulates to year and since factory reset    |
 | 0x19 | 1             | PREHEATER         | Represents the optional preheater                                                           |
 | 0x1A | 1             | HMI               | Represents the Display + Buttons                                                            |
@@ -34,14 +37,52 @@ The Ventilation Unit is seperated into multiple Units, and sometimes even SubUni
 | 0x1D | 1             | TEMPHUMCONTROL    | Controls the target temperature, if its cooling or heating period and some settings         |
 | 0x1E | 1             | VENTILATIONCONFIG | Responsible for managing various configuration options of the ventilation                   |
 | 0x20 | 1             | NODECONFIGURATION | Manages also some options                                                                   |
-| 0x21 | 6             | TEMPERATURESENSOR | Represents the 6 temperature sensors in the ventilation                                     |
-| 0x22 | 6             | HUMIDITYSENSOR    | Represents the 6 humidity sensors                                                           |
-| 0x23 | 2             | PRESSURESENSOR    | Represents both pressure sensors                                                            |
+| 0x21 | 6             | TEMPERATURESENSOR | Represents the 6 temperature sensors in the ventilation (see below)                         |
+| 0x22 | 6             | HUMIDITYSENSOR    | Represents the 6 humidity sensors (see below)                                               |
+| 0x23 | 2             | PRESSURESENSOR    | Represents both pressure sensors: `01` exhaust (P12), `02` supply (P22) †                   |
 | 0x24 | 1             | PERIPHERALS       | Stores the ID of the ComfoCool attached, can reset peripheral errors here                   |
-| 0x25 | 4             | ANALOGINPUT       | Provides data and functionality for the analog inputs, also the scaling for the voltages    |
+| 0x25 | 4             | ANALOGINPUT       | Provides data and functionality for the analog inputs, also the scaling for the voltages. Subunit `00` holds the settings the inputs share † |
 | 0x26 | 1             | COOKERHOOD        | "Dummy" unit, probably represents the ComfoHood if attached                                 |
 | 0x27 | 1             | POSTHEATER        | Represents the optional post heater attached (temperature sens, config)                     |
 | 0x28 | 1             | COMFOFOND         | "Dummy" unit, represents the optional comfofond                                             |
+| 0x29 | 1             | ERRORLOGGING      | The error log: the number of entries and the entries themselves †                           |
+| 0x2A | 1             | COMPONENTCHECK    | The component check of the service menu (fan, bypass, preheater, …) †                       |
+| 0x2B | 8             | CO2SENSOR         | The CO2 control, one subunit per zone (`01`-`08`); subunit `00` holds the shared settings † |
+| 0x2C | 1             | SERVICEPRINT      | Countries and article numbers, for installing the unit as another article †                 |
+
+The subunits of the sensor units are the same for temperature (T) and humidity (H) †:
+
+| SubUnit | Sensor                                   |
+|---------|------------------------------------------|
+| 0x01    | Room (T10, H10)                          |
+| 0x02    | Extract air (T11, H11)                   |
+| 0x03    | Exhaust air (T12, H12)                   |
+| 0x04    | Outdoor air (T20, H20)                   |
+| 0x05    | Outdoor air after the preheater (T21, H21) |
+| 0x06    | Supply air (T22, H22)                    |
+
+Their PDOs follow the same order: `272 + subunit` for the temperatures and `288 + subunit` for the humidities (see
+[PROTOCOL-PDO.md](PROTOCOL-PDO.md)).
+
+### Units of other nodes †
+
+Other nodes reuse the unit ids from `0x15` on for their own units (like the ComfoClime below). The app knows these:
+
+| Node (productId)                  | Unit | Name                                                                                       |
+|-----------------------------------|------|--------------------------------------------------------------------------------------------|
+| ComfoCool (`6`)                   | 0x15 | The cooler                                                                                 |
+| ComfoCool (`6`)                   | 0x16 | Temperature sensors: `01` room (T10), `02` condensor (T13), `03` supply air (T23)          |
+| Option Box (`4`)                  | 0x15 | Inputs and outputs                                                                         |
+| ComfoAir Flex connection board (`9`) | 0x15 | Inputs and outputs                                                                      |
+| ComfoAir Flex connection board (`9`) | 0x16 | Node configuration                                                                      |
+| ComfoAir Flex connection board (`9`) | 0x17 | WiFi                                                                                    |
+| CO2 sensor (`10`)                 | 0x15 | CO2 sensor; property `03` (BOOL, rw) enables it                                            |
+| CO2 sensor (`10`)                 | 0x16 | Temperature sensor; property `03` (BOOL, rw) enables it                                    |
+| CO2 sensor (`10`)                 | 0x17 | Humidity sensor; property `03` (BOOL, rw) enables it                                       |
+| CO2 sensor (`10`)                 | 0x18 | Ambient pressure sensor; property `03` (BOOL, rw) enables it                               |
+| CO2 sensor (`10`)                 | 0x19 | Display: property `02` (UINT8, rw) is the LED mode (0=off, 1=warning only, 2=low, 3=medium, 4=high, 5=highest) |
+
+A CO2 sensor also has a property `0E` (BOOL, rw) on its NODE unit, which the app calls the sensor mode.
 
 ## Error codes
 
@@ -90,17 +131,25 @@ There are three commands which always exist on a given Unit:
 
   This command allows to read multiple properties in one request.
 
-  Syntax: `02 Unit SubUnit 01 Type Property1 Property2 ... PropertyN`
+  Syntax: `02 Count Unit SubUnit Type Property1 Property2 ... PropertyN [Unit SubUnit Type Property1 ...]`
 
-  The `Type` value needs to be OR'ed with the number of properties. So if you want to read the actual value of 5 properties, the `Type` value needs to be
-  `0x10 | 0x05` = `0x15`.
+  `Count` is the number of Unit/SubUnit groups that follow, so one request can read properties from several units at
+  once. In each group, the `Type` value needs to be OR'ed with the number of properties of that group. So if you want
+  to read the actual value of 5 properties, the `Type` value needs to be `0x10 | 0x05` = `0x15`. The official app puts
+  at most 7 properties in a group. The response holds the values one after the other, in the order of the request.
+
+  This document used to give the syntax as `02 Unit SubUnit 01 Type ...`. That reads the same bytes for the example
+  below, because it reads one group (`Count` = `01`) from Unit `01`, SubUnit `01`, but not for other units. Checked on
+  a unit with TEMPHUMCONTROL (`0x1D`), SubUnit `01`, properties `0x0A` and `0x0B`: the syntax above,
+  `02 01 1D 01 12 0A 0B`, replied `e6 00 d2 00` (230 and 210, the same as two single reads), while the old syntax,
+  `02 1D 01 01 12 0A 0B`, got an RMI error. Reading several groups in one request has not been tried yet.
 
   Example: Request: `02 01 01 01 15 03 04 06 05 14`, Response: `\02 BEA000000000000\00 \00\10\10\c0 \02 ComfoAirQ\00`
-  This reads the following property values:
-    - 0x03: ???
+  This reads the following property values of the NODE unit (the same ones the official app reads to identify a node):
+    - 0x03: Product variant (`02` is a ComfoAir Q450, seen on a unit)
     - 0x04: Serial Number
     - 0x06: Firmware version
-    - 0x05: ???
+    - 0x05: Hardware version †
     - 0x14: Ventilation Unit Name
 
 - `0x03`: Set a single property
@@ -114,93 +163,159 @@ There are three commands which always exist on a given Unit:
   Unit is `TEMPHUMCONTROL`, SubUnit `01`, Property: `04`, value `00`
   Sets the Property "Sensor ventilation: Temperature passive" to off
 
+Property `0x01` of every unit is the zone of the node (UINT8, rw) †. It is a bit set: zone 1 is `01`, zone 2 is `02`,
+zone 3 is `04`, and so on up to zone 8 (`80`); the ComfoConnect LAN C reports `ff` (every zone). That is why so many
+units answer `01` for property `0x01` in the tables below.
+
 All other commands are >= `0x80` and dependent on the SubUnit. Please do not try to run command `0x80`, `0x82` on NODECONFIGURATION (`0x20`), they will probably
 break your configuration, and even worse would be calling ANY >= `0x80` command on NODE (`0x01`). It can probably completely brick your ventilation. (It enters
 factory mode or tries to perform an update.)
 
 ### Known properties for Node 0x01 (Ventilation Unit)
 
+Where this table had no access or format, or one that differs from the official app, the Access and Format columns now
+follow the app †.
+
 | Unit              | SubUnit | Property | Access | Format | Description                                                            |
 |-------------------|---------|----------|--------|--------|------------------------------------------------------------------------|
-| NODE              | 0x01    | 0x01     |        | UINT8  | ?? `01` = 1                                                            |
-| NODE              | 0x01    | 0x02     |        | UINT8  | ?? `01` = 1                                                            |
-| NODE              | 0x01    | 0x03     |        | UINT8  | ?? `02` = 2                                                            |
+| NODE              | 0x01    | 0x01     | rw     | UINT8  | Zone (bit set, see above) †; `01` = 1                                  |
+| NODE              | 0x01    | 0x02     | ro     | UINT8  | Product id (`01` = 1, ComfoAir Q) †                                    |
+| NODE              | 0x01    | 0x03     | ro     | UINT8  | Product variant: ComfoAir Q 1=Q350, 2=Q450 (seen on a unit), 3=Q600 †; ComfoAir Flex 1=250 (85 W), 2=350 (115 W), 3=350 (85 W). `02` = 2 |
 | NODE              | 0x01    | 0x04     | ro     | STRING | Serial number (BEA009999999999)                                        |
-| NODE              | 0x01    | 0x05     |        | UINT8  | ?? `02` = 2                                                            |
+| NODE              | 0x01    | 0x05     | ro     | UINT8  | Hardware version † (`02` = 2)                                          |
 | NODE              | 0x01    | 0x06     | ro     | UINT32 | Firmware version (See `version_decode()`)                              |
-| NODE              | 0x01    | 0x07     |        | UINT32 | ?? `00541040` = 1074811904                                             |
+| NODE              | 0x01    | 0x07     | ro     | UINT32 | Version of the object definitions, encoded like the firmware version † (`00541040`) |
 | NODE              | 0x01    | 0x08     | ro     | STRING | Model number (ComfoAir Q450 B R RF ST Quality)                         |
-| NODE              | 0x01    | 0x09     |        | UINT32 | ?? `04000000` = 4                                                      |
-| NODE              | 0x01    | 0x0A     |        | UINT32 | ?? `0004f0c0` = 3236955136                                             |
+| NODE              | 0x01    | 0x09     | ro     | UINT32 | Version of the configuration data, encoded like the firmware version † (`04000000`) |
+| NODE              | 0x01    | 0x0A     | ro     | UINT32 | Version of the language data, encoded like the firmware version † (`0004f0c0`) |
 | NODE              | 0x01    | 0x0B     | ro     | STRING | Article number (471502004)                                             |
-| NODE              | 0x01    | 0x0C     |        | STRING | ?? NULL                                                                |
+| NODE              | 0x01    | 0x0C     | ro     | STRING | Product serial number † (NULL)                                         |
 | NODE              | 0x01    | 0x0D     | ro     | STRING | Current Country (BE)                                                   |
-| NODE              | 0x01    | 0x14     | ro     | STRING | Ventilation Unit Name (ComfoAirQ)                                      |
-| FILTER            | 0x01    | 0x02     |        | UINT8  | Filter pre-warning period in days (21)?                                |
-| FILTER            | 0x01    | 0x03     | rw     | UINT16 | Filter lifetime in days (150)                                          |
-| TEMPHUMCONTROL    | 0x01    | 0x01     |        | UINT8  | ?? `01` = 1                                                            |
+| NODE              | 0x01    | 0x14     | rw     | STRING | Ventilation Unit Name (ComfoAirQ); writable according to the app †     |
+| FILTER            | 0x01    | 0x02     | rw     | UINT16 | Filter warning period in days (21); a UINT16 in the app †              |
+| FILTER            | 0x01    | 0x03     | rw     | UINT16 | Filter lifetime in days (150); the app only uses it from firmware R1.9.0 on † |
+| TEMPHUMCONTROL    | 0x01    | 0x01     | rw     | UINT8  | Zone † (`01` = 1)                                                      |
 | TEMPHUMCONTROL    | 0x01    | 0x02     | rw     | INT16  | RMOT for heating period (180 -> 18°C)                                  |
 | TEMPHUMCONTROL    | 0x01    | 0x03     | rw     | INT16  | RMOT for cooling period (200 -> 20°C)                                  |
 | TEMPHUMCONTROL    | 0x01    | 0x04     | rw     | UINT8  | Passive temperature control (0=off, 1=autoonly, 2=on)                  |
-| TEMPHUMCONTROL    | 0x01    | 0x05     | rw     | UINT8  | ?? `00` = 0                                                            |
+| TEMPHUMCONTROL    | 0x01    | 0x05     | rw     | UINT8  | Active temperature control (0=off, 1=autoonly, 2=on) † (`00` = 0)      |
 | TEMPHUMCONTROL    | 0x01    | 0x06     | rw     | UINT8  | Humidity comfort control (o=off, 1=autoonly, 2=on)                     |
 | TEMPHUMCONTROL    | 0x01    | 0x07     | rw     | UINT8  | Humidity protection (0=off, 1=autoonly, 2=on)                          |
 | TEMPHUMCONTROL    | 0x01    | 0x08     | rw     | UINT8  | Temperature profile mode (0=adaptive, 1=fixed; a ComfoAir Q reports a range of 0-1) |
 | TEMPHUMCONTROL    | 0x01    | 0x0A     | rw     | INT16  | Target temperature for profile: Heating (230 -> 23°C)                  |
 | TEMPHUMCONTROL    | 0x01    | 0x0B     | rw     | INT16  | Target temperature for profile: Normal (210 -> 21°C)                   |
 | TEMPHUMCONTROL    | 0x01    | 0x0C     | rw     | INT16  | Target temperature for profile: Cooling (190 -> 19°C)                  |
-| TEMPHUMCONTROL    | 0x01    | 0x0D     |        | UINT8  | ?? `00` = 0                                                            |
-| VENTILATIONCONFIG | 0x01    | 0x01     |        | UINT8  | ?? `01` = 1                                                            |
-| VENTILATIONCONFIG | 0x01    | 0x02     |        | UINT8  | ?? `0f` = 15                                                           |
-| VENTILATIONCONFIG | 0x01    | 0x03     | rw     | INT16  | Ventilation speed in "Away" Level (75)                                 |
-| VENTILATIONCONFIG | 0x01    | 0x04     | rw     | INT16  | Ventilation speed in "Low" Level (110)                                 |
-| VENTILATIONCONFIG | 0x01    | 0x05     | rw     | INT16  | Ventilation speed in "Medium" Level (180)                              |
-| VENTILATIONCONFIG | 0x01    | 0x06     | rw     | INT16  | Ventilation speed in "High" Level (370)                                |
-| VENTILATIONCONFIG | 0x01    | 0x07     |        | UINT8  | Height above sea level (0=0-500, 1=500-1000, 2=1000-1500, 3=1500-2000) |
-| VENTILATIONCONFIG | 0x01    | 0x08     |        | INT16  | ?? `8b01` = 395,420                                                    |
-| VENTILATIONCONFIG | 0x01    | 0x09     |        | UINT8  | Ventilation control mode (0=flow control, 1=constant flow)             |
-| VENTILATIONCONFIG | 0x01    | 0x0a     |        | INT16  | ?? `ecff` = -20                                                        |
-| VENTILATIONCONFIG | 0x01    | 0x0b     |        | INT16  | Bathroom switch, activation delay (`300` = 300 sec)                    |
-| VENTILATIONCONFIG | 0x01    | 0x0c     |        | UINT8  | Bathroom switch, deactivation delay (`30` = 30 min)                    |
-| VENTILATIONCONFIG | 0x01    | 0x0d     |        | UINT8  | Bathroom switch, mode (0=fixed, 1=mirrored)                            |
-| VENTILATIONCONFIG | 0x01    | 0x0e     |        | UINT8  | ?? `03` = 3                                                            |
-| VENTILATIONCONFIG | 0x01    | 0x0f     |        | UINT8  | ?? `00` = 0                                                            |
-| VENTILATIONCONFIG | 0x01    | 0x11     |        | INT16  | ?? `c800` = 200                                                        |
-| VENTILATIONCONFIG | 0x01    | 0x12     |        | INT16  | Unbalance (`9dff` = -99 -> -9.9)                                       |
-| VENTILATIONCONFIG | 0x01    | 0x13     |        | INT16  | ?? `0000` = 0                                                          |
-| VENTILATIONCONFIG | 0x01    | 0x14     |        | INT16  | ?? `0000` = 0                                                          |
-| VENTILATIONCONFIG | 0x01    | 0x15     |        | INT16  | ?? `980d` = 3480                                                       |
-| VENTILATIONCONFIG | 0x01    | 0x16     |        | INT16  | ?? `660c` = 3174                                                       |
-| VENTILATIONCONFIG | 0x01    | 0x17     |        | INT16  | ?? `0000` = 0                                                          |
-| VENTILATIONCONFIG | 0x01    | 0x18     |        | INT16  | ?? `0000` = 0                                                          |
-| VENTILATIONCONFIG | 0x01    | 0x19     |        | INT16  | ?? `8107` = 1921                                                       |
-| VENTILATIONCONFIG | 0x01    | 0x1a     |        | INT16  | ?? `a106` = 1697                                                       |
-| VENTILATIONCONFIG | 0x01    | 0x1b     |        | INT16  | ?? `0f05` = 1295                                                       |
-| VENTILATIONCONFIG | 0x01    | 0x1c     |        | INT16  | ?? `0c05` = 1292                                                       |
-| VENTILATIONCONFIG | 0x01    | 0x1d     |        | INT16  | ?? `5304` = 1107                                                       |
-| VENTILATIONCONFIG | 0x01    | 0x1e     |        | INT16  | ?? `1304` = 1043                                                       |
-| NODECONFIGURATION | 0x01    | 0x01     |        | UINT8  | ?? `01` = 1                                                            |
-| NODECONFIGURATION | 0x01    | 0x03     |        | STRING | Maintainer password (NL=4210, BE=2468, DE=4210)                        |
-| NODECONFIGURATION | 0x01    | 0x04     |        | UINT8  | Orientation (0=left, 1=right)                                          |
-| NODECONFIGURATION | 0x01    | 0x05     |        | UINT8  | ?? `01` = 1                                                            |
-| NODECONFIGURATION | 0x01    | 0x06     |        | UINT8  | ?? `00` = 0                                                            |
-| NODECONFIGURATION | 0x01    | 0x07     |        | UINT8  | ?? `00` = 0                                                            |
-| NODECONFIGURATION | 0x01    | 0x08     |        | UINT8  | ?? `01` = 1                                                            |
-| NODECONFIGURATION | 0x01    | 0x0A     |        | UINT8  | ?? `00` = 0                                                            |
-| NODECONFIGURATION | 0x01    | 0x0B     |        | UINT8  | ?? `02` = 2                                                            |
-| NODECONFIGURATION | 0x01    | 0x0C     |        | UINT8  | ?? `01` = 1                                                            |
+| TEMPHUMCONTROL    | 0x01    | 0x0D     | rw     | UINT8  | Temperature unit (0=Celsius, 1=Fahrenheit) † (`00` = 0)                |
+| TEMPHUMCONTROL    | 0x01    | 0x0E     | rw     | UINT8  | Speed of the passive temperature control (0=slow, 1=medium, 2=fast), from firmware R1.9.0 on † |
+| VENTILATIONCONFIG | 0x01    | 0x01     | rw     | UINT8  | Zone † (`01` = 1)                                                      |
+| VENTILATIONCONFIG | 0x01    | 0x02     | ro     | UINT8  | Flags of the allowed presets † (`0f` = 15)                             |
+| VENTILATIONCONFIG | 0x01    | 0x03     | rw     | INT16  | Ventilation speed in "Away" Level (75); a UINT16 in the app †          |
+| VENTILATIONCONFIG | 0x01    | 0x04     | rw     | INT16  | Ventilation speed in "Low" Level (110); a UINT16 in the app †          |
+| VENTILATIONCONFIG | 0x01    | 0x05     | rw     | INT16  | Ventilation speed in "Medium" Level (180); a UINT16 in the app †       |
+| VENTILATIONCONFIG | 0x01    | 0x06     | rw     | INT16  | Ventilation speed in "High" Level (370); a UINT16 in the app †         |
+| VENTILATIONCONFIG | 0x01    | 0x07     | rw     | UINT8  | Height above sea level (0=0-500, 1=500-1000, 2=1000-1500, 3=1500-2000) |
+| VENTILATIONCONFIG | 0x01    | 0x08     | ro     | UINT16 | Measured maximum flow † (`8b01` = 395)                                 |
+| VENTILATIONCONFIG | 0x01    | 0x09     | rw     | UINT8  | Ventilation control mode (0=flow control, 1=constant flow)             |
+| VENTILATIONCONFIG | 0x01    | 0x0A     | rw     | INT16  | Unbalance in direct fan control (DFC) mode, in 0.1 % † (`ecff` = -20 -> -2.0 %) |
+| VENTILATIONCONFIG | 0x01    | 0x0B     | rw     | UINT16 | Bathroom switch, activation delay (`300` = 300 sec)                    |
+| VENTILATIONCONFIG | 0x01    | 0x0C     | rw     | UINT8  | Bathroom switch, deactivation delay (`30` = 30 min)                    |
+| VENTILATIONCONFIG | 0x01    | 0x0D     | rw     | UINT8  | Bathroom switch, mode (0=fixed, 1=mirrored)                            |
+| VENTILATIONCONFIG | 0x01    | 0x0E     | rw     | UINT8  | Airflow unit (1=kg/h, 2=l/s, 3=m³/h) † (`03` = 3)                      |
+| VENTILATIONCONFIG | 0x01    | 0x0F     | rw     | BOOL   | Direct fan control (DFC) enabled † (`00` = 0)                          |
+| VENTILATIONCONFIG | 0x01    | 0x11     | rw     | UINT16 | Flow in direct fan control (DFC) mode † (`c800` = 200)                 |
+| VENTILATIONCONFIG | 0x01    | 0x12     | rw     | INT16  | Unbalance (`9dff` = -99 -> -9.9 %)                                     |
+| VENTILATIONCONFIG | 0x01    | 0x13     | ro     | UINT16 | Maximum reference flow, exhaust fan † (`0000` = 0)                     |
+| VENTILATIONCONFIG | 0x01    | 0x14     | ro     | UINT16 | Maximum reference flow, supply fan † (`0000` = 0)                      |
+| VENTILATIONCONFIG | 0x01    | 0x15     | ro     | UINT16 | Maximum reference fan speed, exhaust fan † (`980d` = 3480)             |
+| VENTILATIONCONFIG | 0x01    | 0x16     | ro     | UINT16 | Maximum reference fan speed, supply fan † (`660c` = 3174)              |
+| VENTILATIONCONFIG | 0x01    | 0x17     | ro     | UINT16 | Medium reference flow, exhaust fan † (`0000` = 0)                      |
+| VENTILATIONCONFIG | 0x01    | 0x18     | ro     | UINT16 | Medium reference flow, supply fan † (`0000` = 0)                       |
+| VENTILATIONCONFIG | 0x01    | 0x19     | ro     | UINT16 | Medium reference fan speed, exhaust fan † (`8107` = 1921)              |
+| VENTILATIONCONFIG | 0x01    | 0x1A     | ro     | UINT16 | Medium reference fan speed, supply fan † (`a106` = 1697)               |
+| VENTILATIONCONFIG | 0x01    | 0x1B     | ro     | UINT16 | Fan speed at maximum pressure, exhaust fan † (`0f05` = 1295)           |
+| VENTILATIONCONFIG | 0x01    | 0x1C     | ro     | UINT16 | Fan speed at maximum pressure, supply fan † (`0c05` = 1292)            |
+| VENTILATIONCONFIG | 0x01    | 0x1D     | ro     | UINT16 | Expected fan speed without pressure, exhaust fan † (`5304` = 1107)     |
+| VENTILATIONCONFIG | 0x01    | 0x1E     | ro     | UINT16 | Expected fan speed without pressure, supply fan † (`1304` = 1043)      |
+| VENTILATIONCONFIG | 0x01    | 0x1F     | ro     | UINT16 | Expected maximum flow †                                                |
+| VENTILATIONCONFIG | 0x01    | 0x20     | rw     | UINT8  | ComfoHood switch-off delay, from firmware R1.5.0 on †                  |
+| NODECONFIGURATION | 0x01    | 0x01     | rw     | UINT8  | Zone † (`01` = 1)                                                      |
+| NODECONFIGURATION | 0x01    | 0x03     | ro     | STRING | Maintainer password (NL=4210, BE=2468, DE=4210); 4 characters †        |
+| NODECONFIGURATION | 0x01    | 0x04     | ro     | BOOL   | ComfoSense allowed †. This table listed the orientation here before; the app reads it from `0x06` |
+| NODECONFIGURATION | 0x01    | 0x05     | ro     | BOOL   | ComfoSwitch allowed † (`01` = 1)                                       |
+| NODECONFIGURATION | 0x01    | 0x06     | rw     | UINT8  | Orientation (0=left, 1=right) † (`00` = 0)                             |
+| NODECONFIGURATION | 0x01    | 0x07     | rw     | UINT8  | Position of the condensation drain (0=none, 1=left, 2=right) † (`00` = 0) |
+| NODECONFIGURATION | 0x01    | 0x08     | rw     | BOOL   | Fireplace present † (`01` = 1)                                         |
+| NODECONFIGURATION | 0x01    | 0x0A     | rw     | UINT8  | User level of the menu (0=basic, 1=advanced, 2=installer) † (`00` = 0) |
+| NODECONFIGURATION | 0x01    | 0x0B     | rw     | UINT8  | Preset used to fine tune the airflow (0=away, 1=low, 2=medium, 3=high) † (`02` = 2) |
+| NODECONFIGURATION | 0x01    | 0x0C     | rw     | BOOL   | Commissioning finished † (`01` = 1)                                    |
+| NODECONFIGURATION | 0x01    | 0x0D     | rw     | UINT8  | Heat recovery type (0=HRV, 1=ERV), from firmware R1.5.0 on †           |
+
+### Other properties of the ventilation unit †
+
+The app also reads and writes these properties. None of them were checked on a unit.
+
+| Unit              | SubUnit   | Property | Access | Format | Description                                                              |
+|-------------------|-----------|----------|--------|--------|--------------------------------------------------------------------------|
+| COMFOBUS          | 0x01      | 0x02     | ro     | BOOL   | The CAN bus is off                                                       |
+| COMFOBUS          | 0x01      | 0x03     | ro     | UINT8  | CAN receive error counter                                                |
+| COMFOBUS          | 0x01      | 0x04     | ro     | UINT8  | CAN transmit error counter                                               |
+| VALVE             | 0x01-0x02 | 0x02     | rw     | UINT16 | Valve position, in 0.1 %                                                 |
+| FAN               | 0x01-0x02 | 0x02     | ro     | BOOL   | The fan may be disabled                                                  |
+| PREHEATER         | 0x01      | 0x02     | ro     | BOOL   | Preheater present                                                        |
+| PREHEATER         | 0x01      | 0x03     | ro     | UINT8  | Location of the preheater (0=left, 1=right)                              |
+| PREHEATER         | 0x01      | 0x04     | rw     | UINT8  | Duty cycle, in %                                                         |
+| PREHEATER         | 0x01      | 0x05     | rw     | UINT8  | Ratio, in %                                                              |
+| HMI               | 0x01      | 0x02     | ro     | BOOL   | Display present                                                          |
+| HMI               | 0x01      | 0x03     | rw     | UINT8  | Brightness                                                               |
+| HMI               | 0x01      | 0x04     | rw     | STRING | Language                                                                 |
+| HMI               | 0x01      | 0x05     | rw     | BOOL   | Child lock                                                               |
+| HMI               | 0x01      | 0x06     | rw     | UINT8  | Door state (also PDO 162)                                                |
+| HMI               | 0x01      | 0x07     | rw     | UINT8  | Button states (also PDO 161)                                             |
+| HMI               | 0x01      | 0x08     | ro     | BOOL   | LCD operational (also PDO 160)                                           |
+| RFCOMMUNICATION   | 0x01      | 0x02     | ro     | BOOL   | RF present                                                               |
+| RFCOMMUNICATION   | 0x01      | 0x03     | ro     | BOOL   | RF enabled                                                               |
+| RFCOMMUNICATION   | 0x01      | 0x04     | rw     | UINT8  | Priority of RF sensors (0=on, 1=autoonly, 2=off)                         |
+| RFCOMMUNICATION   | 0x01      | 0x05     | rw     | UINT8  | Function of RF sensors (0=flow proportional, 1=flow preset)              |
+| RFCOMMUNICATION   | 0x01      | 0x06     | rw     | UINT8  | RF duty, in %                                                            |
+| TEMPERATURESENSOR | 0x01-0x06 | 0x02     | ro     | BOOL   | Sensor present                                                           |
+| HUMIDITYSENSOR    | 0x01-0x06 | 0x02     | ro     | BOOL   | Sensor present                                                           |
+| PRESSURESENSOR    | 0x01-0x02 | 0x02     | ro     | BOOL   | Sensor present                                                           |
+| PERIPHERALS       | 0x01      | 0x0B     | ro     | UINT8  | The ComfoCool that is attached                                           |
+| ANALOGINPUT       | 0x00      | 0x01     | rw     | UINT8  | Priority of the analog inputs (0=on, 1=autoonly, 2=off)                  |
+| ANALOGINPUT       | 0x00      | 0x02     | rw     | UINT8  | Function of the analog inputs (0=flow proportional, 1=flow preset)       |
+| ANALOGINPUT       | 0x00      | 0x03     | ro     | BOOL   | Analog inputs present                                                    |
+| ANALOGINPUT       | 0x01-0x04 | 0x02     | rw     | UINT8  | Level for 0 %                                                            |
+| ANALOGINPUT       | 0x01-0x04 | 0x03     | rw     | UINT8  | Level for 100 %                                                          |
+| ANALOGINPUT       | 0x01-0x04 | 0x04     | rw     | UINT8  | Mode (0=steer, 1=control)                                                |
+| ANALOGINPUT       | 0x01-0x04 | 0x05     | rw     | UINT8  | Setpoint in control mode                                                 |
+| ANALOGINPUT       | 0x01-0x04 | 0x06     | rw     | UINT8  | Proportional band in control mode, in % (0-255)                          |
+| ANALOGINPUT       | 0x01-0x04 | 0x07     | rw     | UINT16 | Integral time in control mode                                            |
+| ANALOGINPUT       | 0x01-0x04 | 0x08     | rw     | BOOL   | Input enabled                                                            |
+| POSTHEATER        | 0x01      | 0x03     | rw     | INT16  | Proportional band                                                        |
+| POSTHEATER        | 0x01      | 0x04     | rw     | UINT16 | Integral time                                                            |
+| POSTHEATER        | 0x01      | 0x05     | rw     | INT16  | Comfort temperature, in 0.1 °C                                           |
+| CO2SENSOR         | 0x00      | 0x01     | rw     | UINT8  | Priority of the CO2 control (0=on, 1=autoonly, 2=off)                    |
+| CO2SENSOR         | 0x00      | 0x02     | rw     | UINT8  | Function of the CO2 control (0=flow proportional, 1=flow preset)         |
+| CO2SENSOR         | 0x01-0x08 | 0x02     | rw     | UINT16 | Level for 0 %                                                            |
+| CO2SENSOR         | 0x01-0x08 | 0x03     | rw     | UINT16 | Level for 100 %                                                          |
+| CO2SENSOR         | 0x01-0x08 | 0x05     | rw     | UINT16 | Setpoint in control mode                                                 |
+| CO2SENSOR         | 0x01-0x08 | 0x06     | rw     | UINT8  | Proportional band in control mode, in % (0-250)                          |
+| CO2SENSOR         | 0x01-0x08 | 0x07     | rw     | UINT16 | Integral time in control mode                                            |
+| CO2SENSOR         | 0x01-0x08 | 0x08     | rw     | BOOL   | CO2 control of the zone enabled                                          |
+
+On subunit `00` of ANALOGINPUT and CO2SENSOR, the app reads property `0x01` as the priority, not as the zone.
 
 ### Known properties for Node 0x30 (ComfoConnect LAN C)
 
 | Unit              | SubUnit | Property | Access | Format | Description                                                            |
 |-------------------|---------|----------|--------|--------|------------------------------------------------------------------------|
-| NODE              | 0x01    | 0x01     |        | UINT8  | ?? `ff` = 255                                                          |
-| NODE              | 0x01    | 0x02     |        | UINT8  | ?? `05` = 5                                                            |
-| NODE              | 0x01    | 0x03     |        | UINT8  | ?? `00` = 0                                                            |
+| NODE              | 0x01    | 0x01     | rw     | UINT8  | Zone † (`ff` = 255, every zone)                                        |
+| NODE              | 0x01    | 0x02     | ro     | UINT8  | Product id † (`05` = 5, Zehnder gateway)                               |
+| NODE              | 0x01    | 0x03     | ro     | UINT8  | Product variant † (`00` = 0)                                           |
 | NODE              | 0x01    | 0x04     | ro     | STRING | Serial number (DEM0999999999)                                          |
-| NODE              | 0x01    | 0x05     |        | UINT8  | ?? `01` = 1                                                            |
+| NODE              | 0x01    | 0x05     | ro     | UINT8  | Hardware version † (`01` = 1)                                          |
 | NODE              | 0x01    | 0x06     | ro     | UINT32 | Firmware version (See `version_decode()`)                              |
-| NODE              | 0x01    | 0x07     |        | UINT32 | ?? `008c10c0` = 3222309888                                             |
+| NODE              | 0x01    | 0x07     | ro     | UINT32 | Version of the object definitions, encoded like the firmware version † (`008c10c0`) |
 | NODE              | 0x01    | 0x14     | ro     | STRING | Unit Name (ComfoConnect LAN C)                                         |
 
 ### Known properties for a ComfoClime node (productId 0x14)
@@ -252,7 +367,9 @@ Each subunit has one or more timers that override a setting. The request is `com
 
 - `0x83 subunit timer`: get the timer. Reply: `active(u8) delay(i32) duration(i32) remaining(i32) value(u8)`. An inactive timer keeps the fields of its last run, so only use them when `active` is `01`.
 - `0x84 subunit timer delay(i32) duration(i32) value(u8)`: start the timer. A duration of `-1` runs until it is cancelled. A duration of `1` lets the unit pick its default (the speed and manual mode timers use this, like the official app).
-- `0x85 subunit timer`: cancel the timer.
+- `0x85 subunit timer`: cancel the timer. The official app cancels all timers of a subunit at once with timer `00` †.
+- `0x87 subunit`: get all timers of the subunit †. Reply: one byte, then the 14 bytes of the `0x83` reply for every
+  timer of the subunit, from timer 1 on.
 
 The constants are in `aiocomfoconnect/const.py`, and `ComfoConnect` has `get_timer`, `set_timer` and `cancel_timer`.
 
@@ -269,14 +386,39 @@ The constants are in `aiocomfoconnect/const.py`, and `ComfoConnect` has `get_tim
 | 0x01    | 0x0b  | `SCHEDULE_PRESET`, `TIMER_AWAY`                 | Away (`00`=away)                                      |
 | 0x02    | 0x01  | `SCHEDULE_BYPASS`, `TIMER_DEFAULT`              | Bypass (`01`=on/`02`=off, no timer is auto)           |
 | 0x03    | 0x01  | `SCHEDULE_TEMPERATURE_PROFILE`, `TIMER_DEFAULT` | Temperature profile (`00`=normal/`01`=cool/`02`=warm) |
+| 0x04    | 0x01  |                                                 | Standby (`00`=off/`01`=on) †                          |
 | 0x05    | 0x01  | `SCHEDULE_COMFOCOOL`, `TIMER_DEFAULT`           | ComfoCool (`00`=auto/`01`=off in the official app)    |
 | 0x06    | 0x01  | `SCHEDULE_SUPPLY_ONLY`, `TIMER_DEFAULT`         | Exhaust fan off (`01`), so supply only                |
 | 0x07    | 0x01  | `SCHEDULE_EXHAUST_ONLY`, `TIMER_DEFAULT`        | Supply fan off (`01`), so exhaust only                |
 | 0x08    | 0x01  | `SCHEDULE_MANUAL_MODE`, `TIMER_DEFAULT`         | Manual mode (`01`=manual, no timer is auto)           |
+| 0x09    | 0x01  |                                                 | ComfoHood (`00`=off/`01`=on) †                        |
+| 0x09    | 0x02  |                                                 | ComfoHood switch timer (`00`=off/`01`=on) †           |
+| 0x0a    | 0x01  |                                                 | Postheater (`00`=off/`01`=heat/`02`=comfort) †        |
+
+The durations the official app offers for a timer are 1, 2, 3, 6 and 12 hours and 1 day; for the ComfoCool and for
+supply fan off (exhaust only) also "continuous", a duration of `-1` †.
+
+### Week schedule †
+
+Next to the timers, every subunit has a week schedule of 10 entries. The official app reads and writes it like this:
+
+- `0x86 subunit`: get the whole schedule. Reply: 130 bytes, 13 bytes for each of the 10 entries.
+- `0x80 subunit entry`: get one entry. Reply: the 13 bytes of that entry.
+- `0x81 subunit entry day hour minute duration(i32) value(u8)`: enable an entry. The app leaves entry `00` alone and
+  adds new entries in the first free slot from `01` to `09`.
+- `0x82 subunit entry`: disable an entry.
+
+An entry is `enabled(u8) day(u8) hour(u8) minute(u8) duration(i32) remaining(i32) value(u8)`: the entry starts at
+`hour:minute`, lasts `duration` seconds (the app adds a day when the end time is earlier than the start time) and sets
+the subunit to `value`, with the same values as the timers. When `enabled` is not `01` the rest of the entry has no
+meaning. The days are: `00`=every day, `01`=Monday to `07`=Sunday, `08`=weekdays, `09`=weekend, `0a`=no day.
+
+The PDOs with base 32 and 320 report the active entry and the enabled entries (see
+[Schedule PDOs](PROTOCOL-PDO.md#schedule-pdos)).
 
 ## ERROR Unit commands
 
-- `0x80`: GETACTIVEERRORS
+- `0x80`: GETACTIVEERRORS. The reply is a bit set of 32 bytes: bit `n` is set when error `n` is active †.
 - `0x82`: RESETALLERRORS
 
 ### Error list
@@ -327,7 +469,7 @@ The constants are in `aiocomfoconnect/const.py`, and `ComfoConnect` has `get_tim
 | 68       | Pre-heater was present, but is no longer detected (PREHEAT_PRES ERROR)                                                                            | 
 | 69       | Postheater was present, but is no longer detected (POSTHEAT_CONNECT ERROR)                                                                        | 
 |          |                                                                                                                                                   |
-|          | # Firmware 1.4.0+                                                                                                                                 |
+|          | # Firmware 1.4.0+ (the official app uses this numbering for every version except exactly R1.4.0 †)                                              |
 | 70       | Analog input 1 was present, but is no longer detected (ANALOG_1_PRES ERROR)                                                                       | 
 | 71       | Analog input 2 was present, but is no longer detected (ANALOG_2_PRES ERROR)                                                                       | 
 | 72       | Analog input 3 was present, but is no longer detected (ANALOG_3_PRES ERROR)                                                                       | 
@@ -363,8 +505,9 @@ The constants are in `aiocomfoconnect/const.py`, and `ComfoConnect` has `get_tim
 | 102      | The number of CO2 sensors has decreased – one or more sensors are no longer detected                                                              | 
 | 103      | More than 8 sensors detected in a zone                                                                                                            | 
 | 104      | CO₂ Sensor C error                                                                                                                                | 
+| 105      | General I²C bus error †                                                                                                                           |
 |          |                                                                                                                                                   |
-|          | # Firmware 1.4.0                                                                                                                                  |
+|          | # Firmware 1.4.0 (the official app uses this numbering only for exactly R1.4.0 †)                                                               |
 | 70       | ComfoHood was present, but is no longer detected (HOOD_CONNECT ERROR)                                                                             | 
 | 71       | ComfoCool was present, but is no longer detected (CCOOL_CONNECT ERROR)                                                                            | 
 | 72       | ComfoFond was present, but is no longer detected (GROUND_HEAT_CONNECT ERROR)                                                                      | 
@@ -382,6 +525,44 @@ The constants are in `aiocomfoconnect/const.py`, and `ComfoConnect` has `get_tim
 | 84       | ComfoCool room temperature sensor error (CCOOL_TEMP ERROR)                                                                                        | 
 | 85       | ComfoCool condensor temperature sensor error (CCOOL_TEMP ERROR)                                                                                   | 
 | 86       | ComfoCool supply air temperature sensor error (CCOOL_TEMP ERROR)                                                                                  | 
+
+## Commands of other units †
+
+The official app uses these commands of the ventilation unit. Like the warning above says, some of them change the
+configuration or the state of the unit, so don't try them on a unit you care about.
+
+| Unit              | Command | Arguments                                   | Description                                                      |
+|-------------------|---------|---------------------------------------------|------------------------------------------------------------------|
+| NODE              | `0x80`  |                                             | Enter update mode                                                |
+| NODE              | `0x81`  |                                             | Enter factory mode                                               |
+| NODE              | `0x82`  |                                             | Enter operational mode                                           |
+| NODE              | `0x83`  |                                             | Enter service mode                                               |
+| NODECONFIGURATION | `0x80`  | which (u8)                                  | Revert to defaults: 0=factory, 1=installer, 2=user without the schedules, 3=user with the schedules |
+| NODECONFIGURATION | `0x82`  | event (u8)                                  | Commissioning wizard: 0=abort, 1=finish, 2=stop and save, 3=start |
+| FAN               | `0x81`  | one byte                                    | Enable the fan                                                   |
+| FAN               | `0x82`  |                                             | Disable the fan                                                  |
+| POWERSENSOR       | `0x80`  |                                             | Reset the analysis                                               |
+| PREHEATER         | `0x80`  |                                             | Reset the analysis                                               |
+| HMI               | `0x80`  |                                             | Get the languages                                                |
+| RFCOMMUNICATION   | `0x80`  |                                             | Start pairing an RF device (follow it with PDO 176)              |
+| RFCOMMUNICATION   | `0x81`  |                                             | Stop pairing                                                     |
+| FILTER            | `0x80`  |                                             | Begin the filter replacement                                     |
+| FILTER            | `0x81`  |                                             | End the filter replacement                                       |
+| FILTER            | `0x82`  |                                             | Abort the filter replacement                                     |
+| FILTER            | `0x83`  |                                             | Reset the days left of the filter                                |
+| VENTILATIONCONFIG | `0x80`  |                                             | Set the airflow units                                            |
+| PERIPHERALS       | `0x80`  |                                             | Reset the presence of the peripherals                            |
+| ERRORLOGGING      | `0x80`  | type (u8): 0=error, 1=assert                | Get the number of log entries                                    |
+| ERRORLOGGING      | `0x81`  |                                             | Get a log entry                                                  |
+| COMPONENTCHECK    | `0x80`  | component (u8)                              | Start the check of 0=none, 1=fan, 2=bypass, 3=preheater, 4=postheater, 5=ComfoFond, 6=ComfoCool |
+| COMPONENTCHECK    | `0x81`  |                                             | Stop the check                                                   |
+| COMPONENTCHECK    | `0x82`  |                                             | Reset the timer of the check                                     |
+| SERVICEPRINT      | `0x7e`  |                                             | Get the number of countries                                      |
+| SERVICEPRINT      | `0x7f`  | index (u8)                                  | Get the name of a country                                        |
+| SERVICEPRINT      | `0x80`  | country (string)                            | Get the number of article numbers                                |
+| SERVICEPRINT      | `0x81`  | country (string), index (u8)                | Get an article number                                            |
+| SERVICEPRINT      | `0x82`  | two strings                                 | Get the description of an article                                |
+| SERVICEPRINT      | `0x83`  | two strings                                 | Install an article                                               |
 
 ## Example list of commonly-used commands
 
