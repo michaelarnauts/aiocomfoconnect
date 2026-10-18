@@ -139,9 +139,10 @@ There are three commands which always exist on a given Unit:
   at most 7 properties in a group. The response holds the values one after the other, in the order of the request.
 
   This document used to give the syntax as `02 Unit SubUnit 01 Type ...`. That reads the same bytes for the example
-  below, because it reads one group (`Count` = `01`) from Unit `01`, SubUnit `01`, but for any other unit the order
-  above is the one the official app uses †. On a unit, `02 01 01 01 12 03 05` (one group: Unit `01`, SubUnit `01`,
-  two actual values: `0x03` and `0x05`) replied `02 02`. Only reading several groups at once has not been tried.
+  below, because it reads one group (`Count` = `01`) from Unit `01`, SubUnit `01`, but not for other units. Checked on
+  a unit with TEMPHUMCONTROL (`0x1D`), SubUnit `01`, properties `0x0A` and `0x0B`: the syntax above,
+  `02 01 1D 01 12 0A 0B`, replied `e6 00 d2 00` (230 and 210, the same as two single reads), while the old syntax,
+  `02 1D 01 01 12 0A 0B`, got an RMI error. Reading several groups in one request has not been tried yet.
 
   Example: Request: `02 01 01 01 15 03 04 06 05 14`, Response: `\02 BEA000000000000\00 \00\10\10\c0 \02 ComfoAirQ\00`
   This reads the following property values of the NODE unit (the same ones the official app reads to identify a node):
