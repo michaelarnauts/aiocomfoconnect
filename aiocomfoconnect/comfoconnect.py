@@ -150,8 +150,9 @@ class ComfoConnect(Bridge):
     ):
         """Initialize the ComfoConnect class.
 
-        When we received nothing for heartbeat_interval seconds, we ask the bridge for its time, and reconnect when it
-        doesn't answer. This detects a bridge that stopped answering without closing the connection. None disables it.
+        When we sent or received nothing for heartbeat_interval seconds, we ask the bridge for its time, and reconnect when
+        it doesn't answer. This keeps the bridge from closing a connection on which we send nothing, and detects a bridge
+        that stopped answering without closing the connection. None disables it.
 
         The connection_state_callback is called with a ConnectionState when the state of the session changes.
         """
@@ -290,10 +291,15 @@ class ComfoConnect(Bridge):
             _LOGGER.info("Reconnect loop stopped")
 
     async def _wait_for_disconnect(self):
-        """Wait until the connection is lost, or until the bridge doesn't answer the heartbeat."""
+        """Wait until the connection is lost, or until the bridge doesn't answer the heartbeat.
+
+        The heartbeat asks the bridge for its time when we sent or received nothing for heartbeat_interval seconds. The
+        bridge closes a connection on which we sent nothing for about 90 seconds, also while it pushes sensor values, and a
+        bridge that stopped answering doesn't send anything.
+        """
         # The read task ends when the connection is lost. It has already logged why.
         while not self._read_task.done():
-            idle = time.monotonic() - self._last_received
+            idle = time.monotonic() - min(self._last_sent, self._last_received)
             if self.heartbeat_interval is None or idle < self.heartbeat_interval:
                 timeout = None if self.heartbeat_interval is None else self.heartbeat_interval - idle
                 await asyncio.wait([self._read_task], timeout=timeout)

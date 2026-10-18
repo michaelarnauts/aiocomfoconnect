@@ -261,6 +261,36 @@ class TestReconnect:
         await roundtrip(client)
         assert fake_bridge.connections == 2
 
+    async def test_heartbeat_while_sensors_push(self, fake_bridge, make_client):
+        """The bridge closes a connection on which the client sent nothing for 90 seconds, even while it pushes sensor
+        values. So the heartbeat also asks the time when the client sent nothing for a while."""
+        client = make_client(heartbeat_interval=0.05)
+        await client.connect(LOCAL_UUID)
+        await client.register_sensor(create_sensor(sensor_id=276))
+
+        async def push():
+            while True:
+                fake_bridge.push_sensor(276, bytes([42]))
+                await asyncio.sleep(0.005)
+
+        pusher = asyncio.create_task(push())
+        try:
+            await fake_bridge.wait_for(lambda: len(fake_bridge.received(GO.CnTimeRequestType)) >= 2)
+        finally:
+            pusher.cancel()
+        assert fake_bridge.connections == 1
+
+    async def test_no_heartbeat_while_busy(self, fake_bridge, make_client):
+        """A client that sends requests and gets replies regularly sends no extra time requests."""
+        client = make_client(heartbeat_interval=0.1)
+        await client.connect(LOCAL_UUID)
+
+        for _ in range(20):
+            await client.cmd_rmi_request(b"\x01")
+            await asyncio.sleep(0.01)
+
+        assert not fake_bridge.received(GO.CnTimeRequestType)
+
     def test_heartbeat_by_default(self):
         """The heartbeat is on by default, every 30 seconds."""
         assert comfoconnect_module.ComfoConnect("127.0.0.1", BRIDGE_UUID).heartbeat_interval == 30
