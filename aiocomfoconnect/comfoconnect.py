@@ -54,6 +54,7 @@ from aiocomfoconnect.properties import (
     PROPERTY_HARDWARE_VERSION,
     PROPERTY_MODEL,
     PROPERTY_NAME,
+    PROPERTY_PRODUCT_VARIANT,
     PROPERTY_SERIAL_NUMBER,
     Property,
     PropertyConstraints,
@@ -120,6 +121,7 @@ class NodeInfo:
     serial_number: Optional[str]
     firmware: Optional[str]
     hardware_version: Optional[int]
+    product_variant: Optional[int]  # Which model of the product, e.g. 3 is a Q600 for a ComfoAir Q (see PROTOCOL-RMI.md).
 
 
 @dataclass
@@ -485,7 +487,7 @@ class ComfoConnect(Bridge):
 
         Raises ComfoConnectRmiError when none of the properties can be read, e.g. for a node that doesn't exist.
         """
-        props = [PROPERTY_NAME, PROPERTY_MODEL, PROPERTY_ARTICLE, PROPERTY_SERIAL_NUMBER, PROPERTY_FIRMWARE_VERSION, PROPERTY_HARDWARE_VERSION]
+        props = [PROPERTY_NAME, PROPERTY_MODEL, PROPERTY_ARTICLE, PROPERTY_SERIAL_NUMBER, PROPERTY_FIRMWARE_VERSION, PROPERTY_HARDWARE_VERSION, PROPERTY_PRODUCT_VARIANT]
         try:
             return NodeInfo(*await self.get_properties(props, node_id))
         except ComfoConnectRmiError as exc:

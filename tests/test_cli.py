@@ -241,8 +241,8 @@ class TestCommands:
             99: Node(node_id=99, product_id=200, zone_id=1, mode=1),
         }
         infos = {
-            1: NodeInfo(name="My unit", model="ComfoAir Q450", article_number="000000000", serial_number="FAKE0000000000", firmware="R1.12.0", hardware_version=2),
-            48: NodeInfo(name="My bridge", model=None, article_number=None, serial_number="FAKE0000000001", firmware="R1.5.1", hardware_version=1),
+            1: NodeInfo(name="My unit", model="ComfoAir Q450", article_number="000000000", serial_number="FAKE0000000000", firmware="R1.12.0", hardware_version=2, product_variant=2),
+            48: NodeInfo(name="My bridge", model=None, article_number=None, serial_number="FAKE0000000001", firmware="R1.5.1", hardware_version=1, product_variant=0),
         }
 
         async def get_node_info(node_id):
@@ -257,9 +257,9 @@ class TestCommands:
         assert capsys.readouterr().out.splitlines() == [
             "Nodes on the ComfoNet bus:",
             "* node 1: product 1 (comfoairq), zone 1, mode 1",
-            "  name: My unit, model: ComfoAir Q450, firmware: R1.12.0, hardware version: 2, serial number: FAKE0000000000",
+            "  name: My unit, model: ComfoAir Q450, product variant: 2, firmware: R1.12.0, hardware version: 2, serial number: FAKE0000000000",
             "* node 48: product 5 (zehndergateway), zone 0, mode 1",
-            "  name: My bridge, firmware: R1.5.1, hardware version: 1, serial number: FAKE0000000001",
+            "  name: My bridge, product variant: 0, firmware: R1.5.1, hardware version: 1, serial number: FAKE0000000001",
             "* node 99: product 200 (unknown), zone 1, mode 1",
             "  could not read the node info: RMI_ERROR (reference 9)",
         ]
