@@ -502,22 +502,22 @@ async def test_get_properties(props, request_hex, reply, expected):
 
 @pytest.mark.parametrize("node_id", [None, 5])
 async def test_get_node_info(node_id):
-    """get_node_info reads the name, model, article and serial number, and firmware and hardware version of a node in one request."""
+    """get_node_info reads the name, model, article and serial number, firmware and hardware version, and product variant of a node in one request."""
     comfoconnect = ComfoConnect("127.0.0.1", LOCAL_UUID)
-    reply = b"My unit\x00" + b"ComfoAir Q450\x00" + b"000000000\x00" + b"FAKE0000000000\x00" + bytes.fromhex("001010c0 02")
+    reply = b"My unit\x00" + b"ComfoAir Q450\x00" + b"000000000\x00" + b"FAKE0000000000\x00" + bytes.fromhex("001010c0 02 02")
 
     with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=Mock(message=reply))) as mock_rmi:
         info = await comfoconnect.get_node_info(node_id)
 
-    assert info == NodeInfo(name="My unit", model="ComfoAir Q450", article_number="000000000", serial_number="FAKE0000000000", firmware="R1.4.0", hardware_version=2)
-    mock_rmi.assert_awaited_once_with(bytes.fromhex("02 01 01 01 16 14 08 0b 04 06 05"), node_id=node_id)
+    assert info == NodeInfo(name="My unit", model="ComfoAir Q450", article_number="000000000", serial_number="FAKE0000000000", firmware="R1.4.0", hardware_version=2, product_variant=2)
+    mock_rmi.assert_awaited_once_with(bytes.fromhex("02 01 01 01 17 14 08 0b 04 06 05 03"), node_id=node_id)
 
 
 async def test_get_node_info_with_missing_properties():
     """A node without some of the properties (like the bridge, without model and article number) fails the request as a
     whole, so they are read one by one, and the missing ones are None."""
     comfoconnect = ComfoConnect("127.0.0.1", LOCAL_UUID)
-    values = {0x14: b"My bridge\x00", 0x04: b"FAKE0000000000\x00", 0x06: bytes.fromhex("011410c0"), 0x05: b"\x01"}
+    values = {0x14: b"My bridge\x00", 0x04: b"FAKE0000000000\x00", 0x06: bytes.fromhex("011410c0"), 0x05: b"\x01", 0x03: b"\x00"}
 
     def reply(request, node_id=None):  # pylint: disable=unused-argument
         if request[0] == 0x02 or request[4] not in values:
@@ -527,8 +527,8 @@ async def test_get_node_info_with_missing_properties():
     with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(side_effect=reply)) as mock_rmi:
         info = await comfoconnect.get_node_info(48)
 
-    assert info == NodeInfo(name="My bridge", model=None, article_number=None, serial_number="FAKE0000000000", firmware="R1.5.1", hardware_version=1)
-    assert mock_rmi.await_count == 7
+    assert info == NodeInfo(name="My bridge", model=None, article_number=None, serial_number="FAKE0000000000", firmware="R1.5.1", hardware_version=1, product_variant=0)
+    assert mock_rmi.await_count == 8
     assert {call.kwargs["node_id"] for call in mock_rmi.await_args_list} == {48}
 
 

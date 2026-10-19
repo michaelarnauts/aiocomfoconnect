@@ -49,6 +49,7 @@ class PropertyConstraints:
     step: int | float
 
 
+PROPERTY_PRODUCT_VARIANT = Property(UNIT_NODE, 0x01, 0x03, PdoType.TYPE_CN_UINT8)  # E.g. 1=Q350, 2=Q450, 3=Q600 on a ComfoAir Q.
 PROPERTY_SERIAL_NUMBER = Property(UNIT_NODE, 0x01, 0x04, PdoType.TYPE_CN_STRING)
 PROPERTY_HARDWARE_VERSION = Property(UNIT_NODE, 0x01, 0x05, PdoType.TYPE_CN_UINT8)
 PROPERTY_FIRMWARE_VERSION = Property(UNIT_NODE, 0x01, 0x06, PdoType.TYPE_CN_VERSION)  # A UINT32, decoded with version_decode().

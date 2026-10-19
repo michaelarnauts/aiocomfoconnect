@@ -208,6 +208,7 @@ async def run_list_nodes(args):
             fields = {
                 "name": info.name,
                 "model": info.model,
+                "product variant": info.product_variant,
                 "firmware": info.firmware,
                 "hardware version": info.hardware_version,
                 "serial number": info.serial_number,
