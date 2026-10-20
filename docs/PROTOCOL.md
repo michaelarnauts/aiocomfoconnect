@@ -211,9 +211,10 @@ A UUID that isn't registered is answered with `BAD_REQUEST`.
 
 #### StartSession (`StartSessionRequestType` and `StartSessionConfirmType`)
 
-The client logs in by sending a `type: StartSessionRequestType`. The bridge has 3 session slots, shared by the clients
-on the LAN and the cloud connection, so up to 3 clients can be logged in at the same time (seen on a LAN C
-with two clients). Requests that need a session, sent without one, are answered with `NOT_ALLOWED`.
+The client logs in by sending a `type: StartSessionRequestType`. A LAN C (firmware R1.5.1) has 5 session slots, the
+gateway in a ComfoAir Flex (R1.2.1) has 3. They are shared by the clients on the LAN and the cloud connection, so that
+many clients can be logged in at the same time (seen on a LAN C with two clients). Requests that need a session, sent
+without one, are answered with `NOT_ALLOWED`.
 
 ```javascript
 type: StartSessionRequestType
@@ -236,7 +237,7 @@ The confirmation also has a `resumed` field. The bridge sets it when a session w
 connection, or when the same connection sends a `StartSessionRequestType` again; not on a new session or a takeover.
 The official app treats a confirmation with `resumed` set as a failed connection and stops †.
 
-If all 3 session slots are taken, the bridge will respond with a `result` of `OTHER_SESSION`. The name of the client
+If all session slots are taken, the bridge will respond with a `result` of `OTHER_SESSION`. The name of the client
 whose session was least recently active will be in `devicename`.
 
 ```javascript
