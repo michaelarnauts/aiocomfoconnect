@@ -40,9 +40,6 @@ TIMEOUT = 5
 # How long we wait for the bridge to announce the ventilation unit before we give up.
 NODE_DISCOVERY_TIMEOUT = 5
 
-# How long we wait for the bridge to announce its own node, a little after the ventilation unit.
-BRIDGE_NODE_TIMEOUT = 2
-
 # Source UUID (16 bytes), destination UUID (16 bytes) and the length of the command (2 bytes)
 HEADER_LENGTH = 34
 
@@ -121,7 +118,7 @@ class Bridge:
 
         self._nodes: Dict[int, Node] = {}
         self._ventilation_node_found: Optional[asyncio.Event] = None
-        self._bridge_node_found: Optional[asyncio.Event] = None
+        self.__node_callback_fn: Optional[Callable[[Node], None]] = None
 
         self.__sensor_callback_fn: Optional[Callable[[int, int], None]] = None
         self._sensor_pdo_types: Dict[int, int] = {}
@@ -142,6 +139,10 @@ class Bridge:
     def set_alarm_callback(self, callback: Optional[Callable[[int, ProtobufMessage], None]]):
         """Set a callback to be called when an alarm is received."""
         self.__alarm_callback_fn = callback
+
+    def set_node_callback(self, callback: Optional[Callable[[Node], None]]):
+        """Set a callback to be called when the bridge announces a node, also when it goes offline (see Node.is_offline)."""
+        self.__node_callback_fn = callback
 
     async def connect(self, uuid: str):
         """Connect to the bridge and start reading messages."""
@@ -198,7 +199,6 @@ class Bridge:
         # The bridge announces its nodes at the start of every session, so forget what we knew.
         self._nodes = {}
         self._ventilation_node_found = asyncio.Event()
-        self._bridge_node_found = asyncio.Event()
 
         # Start background task to read messages
         self._read_task = asyncio.create_task(self._read_messages())
@@ -276,15 +276,15 @@ class Bridge:
         if node.is_offline:
             _LOGGER.debug("Node %s went offline", node.node_id)
             self._nodes.pop(node.node_id, None)
-            return
+        else:
+            _LOGGER.debug("Discovered node %s with product id %s in zone %s", node.node_id, node.product_id, node.zone_id)
+            self._nodes[node.node_id] = node
 
-        _LOGGER.debug("Discovered node %s with product id %s in zone %s", node.node_id, node.product_id, node.zone_id)
-        self._nodes[node.node_id] = node
+            if node.is_ventilation_unit and self._ventilation_node_found is not None:
+                self._ventilation_node_found.set()
 
-        if node.is_ventilation_unit and self._ventilation_node_found is not None:
-            self._ventilation_node_found.set()
-        if node.is_bridge and self._bridge_node_found is not None:
-            self._bridge_node_found.set()
+        if self.__node_callback_fn:
+            self.__node_callback_fn(node)
 
     @property
     def nodes(self) -> Dict[int, Node]:
@@ -338,19 +338,6 @@ class Bridge:
 
         return node_id
 
-    async def wait_for_bridge_node(self, timeout: float = None) -> Optional[Node]:
-        """Wait until the bridge has announced its own node and return it, or None when it doesn't in time."""
-        if timeout is None:
-            timeout = BRIDGE_NODE_TIMEOUT
-
-        if self._bridge_node_found is not None:
-            try:
-                await asyncio.wait_for(self._bridge_node_found.wait(), timeout)
-            except asyncio.TimeoutError:
-                pass
-
-        return self.bridge_node
-
     def _fail_pending(self, exc: Exception):
         """Fail the requests that wait for a reply, so they don't hang."""
         pending, self._pending = self._pending, {}
@@ -396,7 +383,6 @@ class Bridge:
         self._reference = None
         self._nodes = {}
         self._ventilation_node_found = None
-        self._bridge_node_found = None
 
     def is_connected(self) -> bool:
         """Returns True if the bridge is connected."""

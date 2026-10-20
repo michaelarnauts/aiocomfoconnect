@@ -50,7 +50,6 @@ class TestBridgeNodeDiscovery:
         """Create a connected-ish Bridge instance, ready to receive node notifications."""
         bridge = Bridge("192.168.1.100", LOCAL_UUID)
         bridge._ventilation_node_found = asyncio.Event()
-        bridge._bridge_node_found = asyncio.Event()
         return bridge
 
     @pytest.mark.asyncio
@@ -103,15 +102,16 @@ class TestBridgeNodeDiscovery:
         assert (bridge.bridge_node.node_id if bridge.bridge_node else None) == expected
 
     @pytest.mark.asyncio
-    async def test_wait_for_bridge_node(self, bridge):
-        """Test that waiting for the bridge node returns it once it is announced, or None when it isn't."""
-        assert await bridge.wait_for_bridge_node(timeout=0.01) is None
+    async def test_node_callback(self, bridge):
+        """Test that the node callback gets every announced node, also when it goes offline."""
+        announced = []
+        bridge.set_node_callback(announced.append)
 
-        waiter = asyncio.create_task(bridge.wait_for_bridge_node(timeout=1))
-        await asyncio.sleep(0)
-        node_notification(bridge, node_id=48, product_id=ProductId.ZEHNDERGATEWAY, zone_id=255)
+        node_notification(bridge, node_id=7, product_id=ProductId.CO2SENSOR)
+        node_notification(bridge, node_id=7, product_id=ProductId.CO2SENSOR, mode=zehnder_pb2.CnNodeNotification.NODE_OFFLINE)
 
-        assert (await waiter).node_id == 48
+        assert [(node.node_id, node.is_offline) for node in announced] == [(7, False), (7, True)]
+        assert bridge.nodes == {}
 
     @pytest.mark.asyncio
     async def test_offline_node_is_removed(self, bridge):

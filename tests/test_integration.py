@@ -101,6 +101,15 @@ class TestConnect:
         assert await client.get_speed() == "medium"
         assert fake_bridge.received(GO.CnRmiRequestType)[0].nodeId == 45
 
+    async def test_connect_announces_nodes(self, fake_bridge, make_client):
+        """The node callback gets the nodes the bridge announces when the session starts."""
+        announced = []
+        client = make_client(node_callback=announced.append)
+        await client.connect(LOCAL_UUID)
+        await fake_bridge.wait_for(lambda: len(announced) == 2)
+
+        assert [(node.node_id, node.product_id) for node in announced] == [(1, ProductId.COMFOAIRQ), (48, ProductId.ZEHNDERGATEWAY)]
+
     async def test_connect_without_bridge_node(self, fake_bridge, make_client):
         """connect() doesn't need the bridge to announce its own node."""
         fake_bridge.nodes = [(1, ProductId.COMFOAIRQ, 1)]

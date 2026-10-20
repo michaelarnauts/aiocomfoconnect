@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Dict, List, Literal, Optional
 
 from aiocomfoconnect import Bridge
-from aiocomfoconnect.bridge import Message
+from aiocomfoconnect.bridge import Message, Node
 from aiocomfoconnect.const import (
     ERRORS,
     ERRORS_140,
@@ -149,6 +149,7 @@ class ComfoConnect(Bridge):
         bridge_type: int = 0,
         heartbeat_interval: Optional[float] = HEARTBEAT_INTERVAL,
         connection_state_callback: Optional[Callable[[str], None]] = None,
+        node_callback: Optional[Callable[[Node], None]] = None,
     ):
         """Initialize the ComfoConnect class.
 
@@ -157,11 +158,15 @@ class ComfoConnect(Bridge):
         that stopped answering without closing the connection. None disables it.
 
         The connection_state_callback is called with a ConnectionState when the state of the session changes.
+
+        The node_callback is called with a Node every time the bridge announces one, at the start of every session and
+        when a node joins or goes offline (see Node.is_offline).
         """
         super().__init__(host, uuid, bridge_type)
 
         self.set_sensor_callback(self._sensor_callback)  # Set the callback to our _sensor_callback method, so we can proces the callbacks.
         self.set_alarm_callback(self._alarm_callback)  # Set the callback to our _alarm_callback method, so we can proces the callbacks.
+        self.set_node_callback(node_callback)
         self.sensor_delay = sensor_delay
         self.connect_timeout = connect_timeout
         self.heartbeat_interval = heartbeat_interval
@@ -244,13 +249,6 @@ class ComfoConnect(Bridge):
         # RMI commands, since it isn't always node 1 on newer firmware.
         await self.cmd_node_request()
         _LOGGER.info("Using node %s for the ventilation unit", await self.wait_for_ventilation_node())
-
-        # The bridge announces its own node a little later. Wait for it, so bridge_node is known once we're connected.
-        bridge_node = await self.wait_for_bridge_node()
-        if bridge_node is None:
-            _LOGGER.info("The bridge did not announce its own node")
-        else:
-            _LOGGER.debug("The bridge is node %s with product id %s", bridge_node.node_id, bridge_node.product_id)
 
         # Hold the sensor values for a specified amount of seconds.
         # This is to work around a bug where the bridge sends invalid sensor values when connecting.
