@@ -487,26 +487,25 @@ class ComfoConnect(Bridge):
         return values
 
     async def get_node_info(self, node_id: Optional[int] = None) -> NodeInfo:
-        """Get the NodeInfo of a node (the ventilation unit by default), in one request when the node has all its properties.
+        """Get the NodeInfo of a node (the ventilation unit by default). A property that the node doesn't have is None.
 
-        Raises ComfoConnectRmiError when none of the properties can be read, e.g. for a node that doesn't exist.
+        The properties are read one by one: a node fails a request for several as a whole when it lacks one of them, and
+        a ComfoConnect Pro answers it with fewer values than asked. Raises ComfoConnectRmiError when none of the
+        properties can be read, e.g. for a node that doesn't exist.
         """
         props = [PROPERTY_NAME, PROPERTY_MODEL, PROPERTY_ARTICLE, PROPERTY_SERIAL_NUMBER, PROPERTY_FIRMWARE_VERSION, PROPERTY_HARDWARE_VERSION, PROPERTY_PRODUCT_VARIANT]
-        try:
-            return NodeInfo(*await self.get_properties(props, node_id))
-        except ComfoConnectRmiError as exc:
-            error = exc
+        errors: List[ComfoConnectRmiError] = []
 
-        # A request fails as a whole when the node lacks one of the properties, so read them one by one.
         async def get_or_none(prop: Property) -> Any:
             try:
                 return await self.get_property(prop, node_id)
-            except ComfoConnectRmiError:
+            except ComfoConnectRmiError as exc:
+                errors.append(exc)
                 return None
 
         values = [await get_or_none(prop) for prop in props]
-        if all(value is None for value in values):
-            raise error  # Nothing could be read, e.g. the node doesn't exist.
+        if len(errors) == len(props):
+            raise errors[0]
         return NodeInfo(*values)
 
     async def get_single_property(self, unit: int, subunit: int, property_id: int, property_type: int = None, node_id: Optional[int] = None) -> Any:
