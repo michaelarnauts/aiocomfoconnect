@@ -161,6 +161,14 @@ class TestComfoConnect:
             assert await comfoconnect.get_single_property(0x01, 0x01, 0x04, property_type) == expected
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("property_type", [PdoType.TYPE_CN_UINT8, PdoType.TYPE_CN_STRING, PdoType.TYPE_CN_VERSION])
+    async def test_get_single_property_without_value(self, comfoconnect, property_type):
+        """A node that answers with an empty message, like the node of a ComfoConnect Pro, doesn't have the property."""
+        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=Mock(message=b""))):
+            with pytest.raises(ComfoConnectRmiError, match="no value"):
+                await comfoconnect.get_single_property(0x01, 0x01, 0x04, property_type)
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize("property_type", [PdoType.TYPE_CN_BOOL, PdoType.TYPE_CN_STRING, PdoType.TYPE_CN_TIME, PdoType.TYPE_CN_VERSION, None])
     async def test_get_property_constraints_rejects_non_numeric(self, comfoconnect, property_type):
         """Test that only numeric property types have a range."""
@@ -538,6 +546,15 @@ async def test_get_node_info_with_missing_properties():
         info = await comfoconnect.get_node_info(48)
 
     assert info == NodeInfo(name="My bridge", model=None, article_number=None, serial_number="FAKE0000000000", firmware="R1.5.1", hardware_version=1, product_variant=0)
+
+
+async def test_get_node_info_of_node_without_values():
+    """A node that answers every property with an empty message, like the node of a ComfoConnect Pro, has no node info."""
+    comfoconnect = ComfoConnect("127.0.0.1", LOCAL_UUID)
+
+    with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=Mock(message=b""))):
+        with pytest.raises(ComfoConnectRmiError):
+            await comfoconnect.get_node_info(20)
 
 
 async def test_get_node_info_of_unknown_node():

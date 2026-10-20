@@ -509,8 +509,14 @@ class ComfoConnect(Bridge):
         return NodeInfo(*values)
 
     async def get_single_property(self, unit: int, subunit: int, property_id: int, property_type: int = None, node_id: Optional[int] = None) -> Any:
-        """Get a property and convert to the right type."""
+        """Get a property and convert to the right type.
+
+        Raises ComfoConnectRmiError when the node doesn't have the property: it answers with an RMI error, or, like the
+        node of a ComfoConnect Pro, with an empty message.
+        """
         result = await self.cmd_rmi_request(bytes([0x01, unit, subunit, 0x10, property_id]), node_id=node_id)
+        if not result.message:
+            raise ComfoConnectRmiError(f"The node sent no value for property {property_id}")
         return _decode_value(property_type, result.message)
 
     async def get_property_constraints(self, prop: Property, node_id: Optional[int] = None) -> PropertyConstraints:
