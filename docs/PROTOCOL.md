@@ -110,7 +110,7 @@ Every confirm carries a `result` in the `GatewayOperation`. These are the values
 | 1      | BAD_REQUEST    | Something was wrong with the request                                                     |
 | 2      | INTERNAL_ERROR | The request was ok, but handling it failed                                               |
 | 3      | NOT_REACHABLE  | The backend cannot route the request                                                     |
-| 4      | OTHER_SESSION  | The bridge already has a session with another client                                     |
+| 4      | OTHER_SESSION  | All session slots of the bridge are taken by other clients                               |
 | 5      | NOT_ALLOWED    | The request is not allowed (like a RegisterApp with a wrong PIN)                         |
 | 6      | NO_RESOURCES   | Not enough resources, e.g. memory, to complete the request                               |
 | 7      | NOT_EXIST      | The ComfoNet node or property does not exist                                             |
@@ -203,9 +203,17 @@ the registration list; the bridge keeps the devicename of the first registration
 first to find out whether it is registered: it registers a new UUID directly, with PIN `0` first and then the PIN the
 user enters.
 
+An invalid UUID is answered with `BAD_REQUEST`. The bridge keeps at most 16 registered apps: when the list is full, it
+drops the app that was used least and still answers `OK`.
+
+`DeregisterAppRequestType` can remove any registered app, also the client's own; a session of that app is then closed.
+A UUID that isn't registered is answered with `BAD_REQUEST`.
+
 #### StartSession (`StartSessionRequestType` and `StartSessionConfirmType`)
 
-The client logs in by sending a `type: StartSessionRequestType`. Only one client can be logged in at the same time.
+The client logs in by sending a `type: StartSessionRequestType`. The bridge has 3 session slots, shared by the clients
+on the LAN and the cloud connection, so up to 3 clients can be logged in at the same time (seen on a LAN C
+with two clients). Requests that need a session, sent without one, are answered with `NOT_ALLOWED`.
 
 ```javascript
 type: StartSessionRequestType
@@ -224,11 +232,12 @@ A ComfoConnect Pro fills in `devicename: "ccpro"` in this confirmation, while a 
 uses this to recognise a Pro, since the gateway type from the discovery isn't known when a bridge is added by IP
 address.
 
-The confirmation also has a `resumed` field. The official app treats a confirmation with `resumed` set as a failed
-connection and stops †.
+The confirmation also has a `resumed` field. The bridge sets it when a session with the same UUID moves to a new
+connection, or when the same connection sends a `StartSessionRequestType` again; not on a new session or a takeover.
+The official app treats a confirmation with `resumed` set as a failed connection and stops †.
 
-If another client is already logged in, the bridge will respond with a `result` of `OTHER_SESSION`. The name of the
-other device will be in `devicename`.
+If all 3 session slots are taken, the bridge will respond with a `result` of `OTHER_SESSION`. The name of the client
+whose session was least recently active will be in `devicename`.
 
 ```javascript
 type: StartSessionConfirmType
@@ -238,7 +247,7 @@ reference: 16
 devicename: "Google Nexus 5X"
 ```
 
-You can force the takeover of this session by specifying a `takeover: 1`.
+You can force a takeover of a session by specifying a `takeover: 1`.
 
 ```javascript
 type: StartSessionConfirmType
@@ -386,7 +395,8 @@ waiting for a reply, it sends a `CnTimeRequest`. When it has received nothing at
 connection lost and closes it †.
 
 The bridge closes the connection after about 90 seconds in which the client sent nothing, also while it keeps pushing
-sensor values (seen on a unit: twice after 90 seconds).
+sensor values (seen on a unit: twice after 90 seconds). Every message the client sends counts, also a `KeepAlive` or a
+`NoOperation`, which get no reply. A session without activity for 90 seconds is closed as well.
 
 aiocomfoconnect uses a heartbeat: when it has sent or received nothing for 30 seconds, it sends a `CnTimeRequest`, and
 when that isn't answered it closes the connection and reconnects. On an established session, it also closes the
