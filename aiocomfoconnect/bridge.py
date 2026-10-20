@@ -151,7 +151,7 @@ class Bridge:
         """Connect to the bridge and start reading messages."""
         await self._open_connection(uuid)
 
-    async def register(self, uuid: str, name: str, pin: int):
+    async def register(self, uuid: str, name: str, pin: int) -> None:
         """Register this app on the bridge and start a session.
 
         Like the official app, this registers directly: a bridge accepts an app that is registered already, as long as

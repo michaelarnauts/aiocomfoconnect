@@ -197,6 +197,12 @@ result: NOT_ALLOWED
 reference: 15
 ```
 
+Registering a UUID that is registered already succeeds as well, with the right PIN, and doesn't add another entry to
+the registration list; the bridge keeps the devicename of the first registration. With a wrong PIN it fails with
+`NOT_ALLOWED`, also for a UUID that is registered already. (Seen on a LAN C.) The official app doesn't start a session
+first to find out whether it is registered: it registers a new UUID directly, with PIN `0` first and then the PIN the
+user enters.
+
 #### StartSession (`StartSessionRequestType` and `StartSessionConfirmType`)
 
 The client logs in by sending a `type: StartSessionRequestType`. Only one client can be logged in at the same time.
