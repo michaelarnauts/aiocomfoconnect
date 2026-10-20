@@ -15,8 +15,10 @@ decoded them as `-1`. Signed PDO types still preserve negative values.
 | 1    | CN_UINT8    | `00` (0) until `ff` (255) |
 | 2    | CN_UINT16   | `3412` = 1234             |
 | 3    | CN_UINT32   | `7856 3412` = 12345678    |
+| 4    | CN_UINT64   |                           |
 | 5    | CN_INT8     |                           |
 | 6    | CN_INT16    | `3412` = 1234             |
+| 7    | CN_INT32    |                           |
 | 8    | CN_INT64    |                           |
 | 9    | CN_STRING   |                           |
 | 10   | CN_TIME     |                           |
