@@ -328,9 +328,19 @@ The `zone` is a bit set of zones: zone 1 is `1`, zone 2 is `2`, zone 3 is `4`, a
 ventilation unit with one zone it is always `1`. The official app subscribes to the CO2 levels of a CO2 sensor in the
 zone of that sensor, and hands a notification to every zone whose bit is set in its `zone` field †.
 
-The official app subscribes with a `timeout` of `16777215` (`0xffffff`) †. It can also set the optional `interval`
-field, but only with intervals it got for a remote (not LAN) connection. To unsubscribe, it sends a `CnRpdoRequestType` with the `pdid`
-and the `zone` but without a `type`; the protobuf definition says that this deletes the subscription †.
+A subscription is identified by its `pdid` and its `zone`. The bridge doesn't know which pdids exist or what their
+type is: it accepts any `pdid` below `16384` (`0x4000`), and never checks the `type` against the `pdid`. A higher
+`pdid` is answered with `NOT_EXIST`. Clients that subscribe to the same `pdid` and `zone` share one subscription on the
+bridge, which is only removed when the last of them unsubscribes. The bridge has room for 192 subscriptions; when they
+are all in use, it answers `NO_RESOURCES`. Unsubscribing from something that isn't subscribed is answered with
+`NOT_EXIST`.
+
+The official app subscribes with a `timeout` of `16777215` (`0xffffff`) †, but the bridge doesn't use the `timeout`.
+The optional `interval` field is in seconds, and is kept per client: the bridge then sends a notification for that
+`pdid` to that client at most once per interval, rounded down to a power of 2 (an `interval` of `10` gives one every 8
+seconds). A LAN C (firmware R1.5.1) does this; the gateway in a ComfoAir Flex (R1.2.1) ignores the `interval`. The
+official app only sets it with intervals it got for a remote (not LAN) connection. To unsubscribe, it sends a
+`CnRpdoRequestType` with the `pdid` and the `zone` but without a `type`, which deletes the subscription.
 
 ```javascript
 type: CnRpdoRequestType
