@@ -82,14 +82,11 @@ async def run_register(args):
     """Register an app on the bridge."""
     async with connected(args, connect=False) as comfoconnect:
         try:
-            registered = await comfoconnect.register(args.uuid, args.name, args.pin)
+            await comfoconnect.register(args.uuid, args.name, args.pin)
         except ComfoConnectNotAllowed as exc:
             raise CliError("Registration failed. Please check the PIN.") from exc
 
-        if registered:
-            print(f"UUID {args.uuid} is now registered.")
-        else:
-            print(f"UUID {args.uuid} is already registered.")
+        print(f"UUID {args.uuid} is registered.")
 
         await print_registered_apps(comfoconnect)
 
