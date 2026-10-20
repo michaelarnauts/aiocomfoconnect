@@ -141,7 +141,10 @@ class Bridge:
         self.__alarm_callback_fn = callback
 
     def set_node_callback(self, callback: Optional[Callable[[Node], None]]):
-        """Set a callback to be called when the bridge announces a node, also when it goes offline (see Node.is_offline)."""
+        """Set a callback to be called every time the bridge announces a node, also when it goes offline (see Node.is_offline).
+
+        The bridge announces the nodes when a session starts, often more than once, so a node can be announced again.
+        """
         self.__node_callback_fn = callback
 
     async def connect(self, uuid: str):
@@ -301,7 +304,7 @@ class Bridge:
     def bridge_node(self) -> Optional[Node]:
         """The node of the bridge itself, or None when the bridge hasn't announced it (yet).
 
-        A ComfoAir Flex with a ComfoConnect LAN C has two, and then it's the LAN C (see BRIDGE_PRODUCT_IDS).
+        A ComfoAir Flex with a ComfoConnect LAN C would have two, and then it's the LAN C (see BRIDGE_PRODUCT_IDS).
         """
         candidates = [node for node in self._nodes.values() if node.is_bridge]
         return min(candidates, key=lambda node: (BRIDGE_PRODUCT_IDS.index(node.product_id), node.node_id)) if candidates else None

@@ -31,7 +31,7 @@ class ProductId:
 VENTILATION_UNIT_PRODUCT_IDS = (ProductId.COMFOAIRQ, ProductId.COMFOAIRFLEX)
 
 # The product ids of the bridge itself on the bus, in order of preference: a ComfoConnect Pro, a ComfoConnect LAN C,
-# and the WiFi connection module built into a ComfoAir Flex. A Flex with a LAN C has both of the last two.
+# and the WiFi connection module built into a ComfoAir Flex. A Flex with a LAN C would have both of the last two.
 BRIDGE_PRODUCT_IDS = (ProductId.COMFOCONNECTPRO, ProductId.ZEHNDERGATEWAY, ProductId.COMFOAIRFLEXCONNECTIONBOARD)
 
 

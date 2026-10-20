@@ -159,8 +159,8 @@ class ComfoConnect(Bridge):
 
         The connection_state_callback is called with a ConnectionState when the state of the session changes.
 
-        The node_callback is called with a Node every time the bridge announces one, at the start of every session and
-        when a node joins or goes offline (see Node.is_offline).
+        The node_callback is called with a Node every time the bridge announces one: at the start of every session, already
+        while connect() runs and often more than once, and when a node joins or goes offline (see Node.is_offline).
         """
         super().__init__(host, uuid, bridge_type)
 
