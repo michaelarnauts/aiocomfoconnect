@@ -77,7 +77,6 @@ class BridgeDiscoveryProtocol(asyncio.DatagramProtocol):
                 Bridge(
                     host=parser.searchGatewayResponse.ipaddress,
                     uuid=uuid,
-                    bridge_type=parser.searchGatewayResponse.type,
                 )
             )
 

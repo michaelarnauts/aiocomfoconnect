@@ -146,7 +146,6 @@ class ComfoConnect(Bridge):
         alarm_callback=None,
         sensor_delay=5,
         connect_timeout=30,
-        bridge_type: int = 0,
         heartbeat_interval: Optional[float] = HEARTBEAT_INTERVAL,
         connection_state_callback: Optional[Callable[[str], None]] = None,
         node_callback: Optional[Callable[[Node], None]] = None,
@@ -162,7 +161,7 @@ class ComfoConnect(Bridge):
         The node_callback is called with a Node every time the bridge announces one: at the start of every session, already
         while connect() runs and often more than once, and when a node joins or goes offline (see Node.is_offline).
         """
-        super().__init__(host, uuid, bridge_type)
+        super().__init__(host, uuid)
 
         self.set_sensor_callback(self._sensor_callback)  # Set the callback to our _sensor_callback method, so we can proces the callbacks.
         self.set_alarm_callback(self._alarm_callback)  # Set the callback to our _alarm_callback method, so we can proces the callbacks.

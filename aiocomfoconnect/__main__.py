@@ -43,7 +43,7 @@ async def connected(args, *, connect: bool = True, **kwargs) -> AsyncIterator[Co
     if not bridges:
         raise BridgeNotFoundException("No bridge found")
 
-    comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid, bridge_type=bridges[0].bridge_type, **kwargs)
+    comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid, **kwargs)
     try:
         if connect:
             try:

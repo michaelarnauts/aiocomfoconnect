@@ -77,7 +77,6 @@ $ python -m aiocomfoconnect set-property --host 192.168.1.213 30 1 4 6 120  # Se
 - Properties that are an enum, like `PROPERTY_SENSOR_VENTILATION_TEMP_PASSIVE`, `PROPERTY_SENSOR_VENTILATION_HUMIDITY_COMFORT` and `PROPERTY_SENSOR_VENTILATION_HUMIDITY_PROTECTION` (off / auto / on), `PROPERTY_TEMPERATURE_PROFILE_MODE` (adaptive / fixed), `PROPERTY_CLIME_SEASON` and `PROPERTY_CLIME_TEMPERATURE_PROFILE`, have `options`: `get_property` returns the option and `set_property` takes it. `get_property_constraints` still uses the raw values.
 - Temperatures in tenths of a degree, like `PROPERTY_RMOT_HEATING_THRESHOLD`, `PROPERTY_PROFILE_TEMPERATURE_NORMAL` and the ComfoClime temperatures, have `scale=0.1`: `get_property` and `get_property_constraints` return °C (215 becomes 21.5) and `set_property` takes °C.
 - `async get_property_constraints(prop, node_id=None)`: Get the value of a numeric property, together with the range and step size the unit accepts.
-- `bridge_type`: The type of the bridge (`GatewayType.LANC`, `SEASON` or `PRO`). Discovery reports it, and a ComfoConnect Pro is also recognised once a session has started.
 
 ### Low-level API
 
