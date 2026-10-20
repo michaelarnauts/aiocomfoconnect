@@ -403,8 +403,10 @@ message: "ComfoAir Q450 B R RF ST Quality\000"
 ```
 
 When the RMI itself fails, the bridge answers with `result: RMI_ERROR` and puts the error code in the `result` field
-of the `CnRmiResponse` (see [Error codes](PROTOCOL-RMI.md#error-codes)). The official app sends a request a second time
-when the first one failed or got no answer, also after an `RMI_ERROR` †.
+of the `CnRmiResponse` (see [Error codes](PROTOCOL-RMI.md#error-codes)). When the node doesn't answer within 1 second,
+the bridge answers with `RMI_ERROR` and error code `45`. The bridge handles up to 4 RMI requests at the same time; more
+requests wait until one is done. The official app sends a request a second time when the first one failed or got no
+answer, also after an `RMI_ERROR` †.
 
 For an overview about the known RMI Requests, check [PROTOCOL-RMI.md](PROTOCOL-RMI.md)
 
@@ -453,7 +455,7 @@ RMI-Commands are sent and received using extended-IDs:
     1F000000
     + SrcAddr        << 0 6 bits  source Node-Id
     + DstAddr        << 6 6 bits  destination Node-Id
-    + AnotherCounter <<12 2 bits  we dont know what this is, set it to 0, everything else wont work
+    + AnotherCounter <<12 2 bits  request counter: the bridge adds 1 (0 to 3) for every request to a node, copied over to the response
     + MultiMsg       <<14 1 bit   if this is a message composed of multiple CAN-frames
     + ErrorOccured   <<15 1 bit   When Response: If an error occured
     + IsRequest      <<16 1 bit   If the message is a request
