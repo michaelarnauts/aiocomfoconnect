@@ -88,17 +88,17 @@ A CO2 sensor also has a property `0E` (BOOL, rw) on its NODE unit, which the app
 
 If an error occurs the reason can be one of the following:
 
-| Number | Description                                 |
-|--------|---------------------------------------------|
-| 11     | Unknown Command                             |
-| 12     | Unknown Unit                                |
-| 13     | Unknown SubUnit                             |
-| 14     | Unknown property                            |
-| 15     | Type can not have a range                   |
-| 30     | Value given not in Range                    |
-| 32     | Property not gettable or settable           |
-| 40     | Internal error                              |
-| 41     | Internal error, maybe your command is wrong |
+| Number | Description                                                                                                |
+|--------|------------------------------------------------------------------------------------------------------------|
+| 11     | Unknown command: the unit has no such command                                                              |
+| 12     | Unknown unit                                                                                               |
+| 13     | Unknown subunit: higher than the number of subunits, or the command isn't allowed on this subunit          |
+| 14     | Unknown property                                                                                           |
+| 15     | A range or step size was asked for a type that has none (BOOL, STRING, VERSION)                            |
+| 30     | Value not in range (on a set; the step size isn't checked), or an invalid argument for a command           |
+| 32     | The property can't be read (get) or written (set)                                                          |
+| 40     | The reply doesn't fit                                                                                      |
+| 41     | The request is too short, e.g. a missing property id, value or argument                                    |
 
 ## General commands
 
@@ -322,7 +322,7 @@ On subunit `00` of ANALOGINPUT and CO2SENSOR, the app reads property `0x01` as t
 | NODE              | 0x01    | 0x05     | ro     | UINT8  | Hardware version † (`01` = 1)                                          |
 | NODE              | 0x01    | 0x06     | ro     | UINT32 | Firmware version (See `version_decode()`)                              |
 | NODE              | 0x01    | 0x07     | ro     | UINT32 | Version of the object definitions, encoded like the firmware version † (`008c10c0`) |
-| NODE              | 0x01    | 0x14     | ro     | STRING | Unit Name (ComfoConnect LAN C)                                         |
+| NODE              | 0x01    | 0x14     | rw     | STRING | Unit Name (ComfoConnect LAN C)                                         |
 
 ### Known properties for a ComfoClime node (productId 0x14)
 
@@ -424,8 +424,13 @@ The PDOs with base 32 and 320 report the active entry and the enabled entries (s
 
 ## ERROR Unit commands
 
-- `0x80`: GETACTIVEERRORS. The reply is a bit set of 32 bytes: bit `n` is set when error `n` is active †.
+These commands are sent to subunit `0x01`, e.g. `80 03 01`.
+
+- `0x80`: GETACTIVEERRORS. The reply is a bit set of 32 bytes: bit `n` is set when error `n` is active.
+- `0x81 error`: reset one error, given by its id (u8).
 - `0x82`: RESETALLERRORS
+
+After an error was reset, the node sends its alarm again.
 
 ### Error list
 
