@@ -99,6 +99,8 @@ If an error occurs the reason can be one of the following:
 | 32     | The property can't be read (get) or written (set)                                                          |
 | 40     | The reply doesn't fit                                                                                      |
 | 41     | The request is too short, e.g. a missing property id, value or argument                                    |
+| 45     | The node didn't answer within 1 second (set by the bridge)                                                 |
+| 52     | The bridge is still busy with another RMI to that node (set by the bridge)                                 |
 
 ## General commands
 
