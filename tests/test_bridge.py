@@ -80,6 +80,39 @@ class TestBridgeNodeDiscovery:
         assert bridge.comfoclime_node_id is None
         assert bridge.comfoclime_zone_id is None
 
+    @pytest.mark.parametrize(
+        ("nodes", "expected"),
+        [
+            ([(48, ProductId.ZEHNDERGATEWAY)], 48),
+            ([(20, ProductId.COMFOCONNECTPRO)], 20),
+            # The WiFi connection module built into a ComfoAir Flex.
+            ([(41, ProductId.COMFOAIRFLEXCONNECTIONBOARD)], 41),
+            # A ComfoAir Flex with a LAN C has both, and then it's the LAN C.
+            ([(41, ProductId.COMFOAIRFLEXCONNECTIONBOARD), (48, ProductId.ZEHNDERGATEWAY)], 48),
+            ([(7, ProductId.CO2SENSOR)], None),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_bridge_node(self, bridge, nodes, expected):
+        """Test that the bridge finds its own node among the others."""
+        node_notification(bridge, node_id=1, product_id=ProductId.COMFOAIRQ)
+        for node_id, product_id in nodes:
+            node_notification(bridge, node_id=node_id, product_id=product_id)
+
+        assert (bridge.bridge_node.node_id if bridge.bridge_node else None) == expected
+
+    @pytest.mark.asyncio
+    async def test_node_callback(self, bridge):
+        """Test that the node callback gets every announced node, also when it goes offline."""
+        announced = []
+        bridge.set_node_callback(announced.append)
+
+        node_notification(bridge, node_id=7, product_id=ProductId.CO2SENSOR)
+        node_notification(bridge, node_id=7, product_id=ProductId.CO2SENSOR, mode=zehnder_pb2.CnNodeNotification.NODE_OFFLINE)
+
+        assert [(node.node_id, node.is_offline) for node in announced] == [(7, False), (7, True)]
+        assert bridge.nodes == {}
+
     @pytest.mark.asyncio
     async def test_offline_node_is_removed(self, bridge):
         """Test that a node that goes offline is forgotten."""

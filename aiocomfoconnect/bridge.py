@@ -14,7 +14,7 @@ from typing import Awaitable, Callable, Dict, Iterator, Optional
 from google.protobuf.message import DecodeError
 from google.protobuf.message import Message as ProtobufMessage
 
-from .const import NUMERIC_PROPERTY_TYPES, VENTILATION_UNIT_PRODUCT_IDS, GatewayType, ProductId
+from .const import BRIDGE_PRODUCT_IDS, NUMERIC_PROPERTY_TYPES, VENTILATION_UNIT_PRODUCT_IDS, GatewayType, ProductId
 from .exceptions import (
     AioComfoConnectNotConnected,
     AioComfoConnectNotReachable,
@@ -82,6 +82,11 @@ class Node:
         return self.product_id in VENTILATION_UNIT_PRODUCT_IDS
 
     @property
+    def is_bridge(self) -> bool:
+        """Returns True if this node is a bridge, like the ComfoConnect LAN C."""
+        return self.product_id in BRIDGE_PRODUCT_IDS
+
+    @property
     def is_comfoclime(self) -> bool:
         """Returns True if this node is a ComfoClime heat pump module."""
         return self.product_id == ProductId.COMFOCLIME
@@ -113,6 +118,7 @@ class Bridge:
 
         self._nodes: Dict[int, Node] = {}
         self._ventilation_node_found: Optional[asyncio.Event] = None
+        self.__node_callback_fn: Optional[Callable[[Node], None]] = None
 
         self.__sensor_callback_fn: Optional[Callable[[int, int], None]] = None
         self._sensor_pdo_types: Dict[int, int] = {}
@@ -133,6 +139,13 @@ class Bridge:
     def set_alarm_callback(self, callback: Optional[Callable[[int, ProtobufMessage], None]]):
         """Set a callback to be called when an alarm is received."""
         self.__alarm_callback_fn = callback
+
+    def set_node_callback(self, callback: Optional[Callable[[Node], None]]):
+        """Set a callback to be called every time the bridge announces a node, also when it goes offline (see Node.is_offline).
+
+        The bridge announces the nodes when a session starts, often more than once, so a node can be announced again.
+        """
+        self.__node_callback_fn = callback
 
     async def connect(self, uuid: str):
         """Connect to the bridge and start reading messages."""
@@ -266,13 +279,15 @@ class Bridge:
         if node.is_offline:
             _LOGGER.debug("Node %s went offline", node.node_id)
             self._nodes.pop(node.node_id, None)
-            return
+        else:
+            _LOGGER.debug("Discovered node %s with product id %s in zone %s", node.node_id, node.product_id, node.zone_id)
+            self._nodes[node.node_id] = node
 
-        _LOGGER.debug("Discovered node %s with product id %s in zone %s", node.node_id, node.product_id, node.zone_id)
-        self._nodes[node.node_id] = node
+            if node.is_ventilation_unit and self._ventilation_node_found is not None:
+                self._ventilation_node_found.set()
 
-        if node.is_ventilation_unit and self._ventilation_node_found is not None:
-            self._ventilation_node_found.set()
+        if self.__node_callback_fn:
+            self.__node_callback_fn(node)
 
     @property
     def nodes(self) -> Dict[int, Node]:
@@ -284,6 +299,15 @@ class Bridge:
         """The node id of the ventilation unit, or None when the bridge hasn't announced it (yet)."""
         candidates = [node.node_id for node in self._nodes.values() if node.is_ventilation_unit]
         return min(candidates) if candidates else None
+
+    @property
+    def bridge_node(self) -> Optional[Node]:
+        """The node of the bridge itself, or None when the bridge hasn't announced it (yet).
+
+        A ComfoAir Flex with a ComfoConnect LAN C would have two, and then it's the LAN C (see BRIDGE_PRODUCT_IDS).
+        """
+        candidates = [node for node in self._nodes.values() if node.is_bridge]
+        return min(candidates, key=lambda node: (BRIDGE_PRODUCT_IDS.index(node.product_id), node.node_id)) if candidates else None
 
     @property
     def comfoclime_node_id(self) -> Optional[int]:

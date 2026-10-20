@@ -47,10 +47,12 @@ $ python -m aiocomfoconnect set-property --host 192.168.1.213 30 1 4 6 120  # Se
 
 - `async connect()`: Connect to the bridge. The connection is kept: when it is lost, it reconnects, and when nothing was sent or received for `heartbeat_interval` seconds (30 by default, `None` disables it), it asks the bridge for its time. That keeps the bridge from closing the connection (it does so after about 90 seconds in which the client sent nothing, even while it pushes sensor values), and detects a bridge that stopped answering.
 - `connection_state_callback`: Pass it to `ComfoConnect()` to be called with a `ConnectionState` when the state of the session changes.
+- `node_callback`: Pass it to `ComfoConnect()` to be called with a `Node` every time the bridge announces one: at the start of every session (already while `connect()` runs, and often more than once), and when a node joins or goes offline (`node.is_offline`).
 - `async disconnect()`: Disconnect from the bridge.
 - `async register_sensor(sensor)`: Register a sensor.
 - `async deregister_sensor(sensor)`: Deregister a sensor.
 - `sensor_values`: The latest value of every registered sensor, by sensor id, converted like for the sensor callback (`None` until the bridge sent one).
+- `bridge_node`: The `Node` of the bridge itself on the ComfoNet bus: product id 222 for a ComfoConnect Pro, 5 for a ComfoConnect LAN C, or 9 for the WiFi connection module of a ComfoAir Flex. It is `None` when the bridge didn't announce it (yet): it does so a little after the ventilation unit.
 - `async get_mode()`: Get the ventilation mode.
 - `async set_mode(mode)`: Set the ventilation mode. (auto / manual) Selecting `auto` also cancels the temporary fan-speed override and returns control to the unit's schedule.
 - `async get_comfocool_mode()`: Get Comfocool mode

@@ -32,7 +32,7 @@ class FakeBridge:
 
     def __init__(self):
         # The nodes announced on a CnNodeRequest, as (node_id, product_id, zone_id).
-        self.nodes: List[Tuple[int, int, int]] = [(1, ProductId.COMFOAIRQ, 1)]
+        self.nodes: List[Tuple[int, int, int]] = [(1, ProductId.COMFOAIRQ, 1), (48, ProductId.ZEHNDERGATEWAY, 255)]
         # The result code of a StartSessionRequest, e.g. GO.NOT_ALLOWED for an app that isn't registered.
         self.session_result: int = GO.OK
         # The result code of a CnRpdoRequest per pdid, OK when not listed.
