@@ -51,12 +51,14 @@ class PdoType:
     TYPE_CN_UINT8 = 0x01
     TYPE_CN_UINT16 = 0x02
     TYPE_CN_UINT32 = 0x03
+    TYPE_CN_UINT64 = 0x04
     TYPE_CN_INT8 = 0x05
     TYPE_CN_INT16 = 0x06
+    TYPE_CN_INT32 = 0x07
     TYPE_CN_INT64 = 0x08
     TYPE_CN_STRING = 0x09
-    TYPE_CN_TIME = 0x10
-    TYPE_CN_VERSION = 0x11
+    TYPE_CN_TIME = 0x0A
+    TYPE_CN_VERSION = 0x0B
 
 
 # The size in bytes and the signedness of the numeric PDO and property types.
@@ -64,8 +66,10 @@ NUMERIC_PROPERTY_TYPES = {
     PdoType.TYPE_CN_UINT8: (1, False),
     PdoType.TYPE_CN_UINT16: (2, False),
     PdoType.TYPE_CN_UINT32: (4, False),
+    PdoType.TYPE_CN_UINT64: (8, False),
     PdoType.TYPE_CN_INT8: (1, True),
     PdoType.TYPE_CN_INT16: (2, True),
+    PdoType.TYPE_CN_INT32: (4, True),
     PdoType.TYPE_CN_INT64: (8, True),
 }
 
