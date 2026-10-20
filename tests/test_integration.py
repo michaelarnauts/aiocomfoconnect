@@ -66,6 +66,7 @@ class TestConnect:
 
         assert client.is_connected()
         assert client.ventilation_node_id == 1
+        assert client.bridge_node.node_id == 48
         assert [msg.takeover for msg in fake_bridge.received(GO.StartSessionRequestType)] == [False]
         assert len(fake_bridge.received(GO.CnNodeRequestType)) == 1
         assert not client._reconnect_task.done()
@@ -96,8 +97,18 @@ class TestConnect:
         await client.connect(LOCAL_UUID)
 
         assert client.ventilation_node_id == 45
+        assert client.bridge_node.node_id == 41
         assert await client.get_speed() == "medium"
         assert fake_bridge.received(GO.CnRmiRequestType)[0].nodeId == 45
+
+    async def test_connect_without_bridge_node(self, fake_bridge, make_client):
+        """connect() doesn't need the bridge to announce its own node."""
+        fake_bridge.nodes = [(1, ProductId.COMFOAIRQ, 1)]
+        client = make_client()
+        await client.connect(LOCAL_UUID)
+
+        assert client.is_connected()
+        assert client.bridge_node is None
 
     async def test_connect_without_ventilation_unit(self, fake_bridge, make_client):
         """connect() fails when the bridge doesn't announce a ventilation unit, and doesn't retry."""

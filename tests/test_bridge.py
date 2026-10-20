@@ -50,6 +50,7 @@ class TestBridgeNodeDiscovery:
         """Create a connected-ish Bridge instance, ready to receive node notifications."""
         bridge = Bridge("192.168.1.100", LOCAL_UUID)
         bridge._ventilation_node_found = asyncio.Event()
+        bridge._bridge_node_found = asyncio.Event()
         return bridge
 
     @pytest.mark.asyncio
@@ -79,6 +80,38 @@ class TestBridgeNodeDiscovery:
 
         assert bridge.comfoclime_node_id is None
         assert bridge.comfoclime_zone_id is None
+
+    @pytest.mark.parametrize(
+        ("nodes", "expected"),
+        [
+            ([(48, ProductId.ZEHNDERGATEWAY)], 48),
+            ([(20, ProductId.COMFOCONNECTPRO)], 20),
+            # The WiFi connection module built into a ComfoAir Flex.
+            ([(41, ProductId.COMFOAIRFLEXCONNECTIONBOARD)], 41),
+            # A ComfoAir Flex with a LAN C has both, and then it's the LAN C.
+            ([(41, ProductId.COMFOAIRFLEXCONNECTIONBOARD), (48, ProductId.ZEHNDERGATEWAY)], 48),
+            ([(7, ProductId.CO2SENSOR)], None),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_bridge_node(self, bridge, nodes, expected):
+        """Test that the bridge finds its own node among the others."""
+        node_notification(bridge, node_id=1, product_id=ProductId.COMFOAIRQ)
+        for node_id, product_id in nodes:
+            node_notification(bridge, node_id=node_id, product_id=product_id)
+
+        assert (bridge.bridge_node.node_id if bridge.bridge_node else None) == expected
+
+    @pytest.mark.asyncio
+    async def test_wait_for_bridge_node(self, bridge):
+        """Test that waiting for the bridge node returns it once it is announced, or None when it isn't."""
+        assert await bridge.wait_for_bridge_node(timeout=0.01) is None
+
+        waiter = asyncio.create_task(bridge.wait_for_bridge_node(timeout=1))
+        await asyncio.sleep(0)
+        node_notification(bridge, node_id=48, product_id=ProductId.ZEHNDERGATEWAY, zone_id=255)
+
+        assert (await waiter).node_id == 48
 
     @pytest.mark.asyncio
     async def test_offline_node_is_removed(self, bridge):

@@ -51,6 +51,7 @@ $ python -m aiocomfoconnect set-property --host 192.168.1.213 30 1 4 6 120  # Se
 - `async register_sensor(sensor)`: Register a sensor.
 - `async deregister_sensor(sensor)`: Deregister a sensor.
 - `sensor_values`: The latest value of every registered sensor, by sensor id, converted like for the sensor callback (`None` until the bridge sent one).
+- `bridge_node`: The `Node` of the bridge itself on the ComfoNet bus: product id 222 for a ComfoConnect Pro, 5 for a ComfoConnect LAN C, or 9 for the WiFi connection module of a ComfoAir Flex. `connect()` waits a moment for it, and it is `None` when the bridge didn't announce it.
 - `async get_mode()`: Get the ventilation mode.
 - `async set_mode(mode)`: Set the ventilation mode. (auto / manual) Selecting `auto` also cancels the temporary fan-speed override and returns control to the unit's schedule.
 - `async get_comfocool_mode()`: Get Comfocool mode

@@ -14,7 +14,7 @@ from typing import Awaitable, Callable, Dict, Iterator, Optional
 from google.protobuf.message import DecodeError
 from google.protobuf.message import Message as ProtobufMessage
 
-from .const import NUMERIC_PROPERTY_TYPES, VENTILATION_UNIT_PRODUCT_IDS, GatewayType, ProductId
+from .const import BRIDGE_PRODUCT_IDS, NUMERIC_PROPERTY_TYPES, VENTILATION_UNIT_PRODUCT_IDS, GatewayType, ProductId
 from .exceptions import (
     AioComfoConnectNotConnected,
     AioComfoConnectNotReachable,
@@ -39,6 +39,9 @@ TIMEOUT = 5
 
 # How long we wait for the bridge to announce the ventilation unit before we give up.
 NODE_DISCOVERY_TIMEOUT = 5
+
+# How long we wait for the bridge to announce its own node, a little after the ventilation unit.
+BRIDGE_NODE_TIMEOUT = 2
 
 # Source UUID (16 bytes), destination UUID (16 bytes) and the length of the command (2 bytes)
 HEADER_LENGTH = 34
@@ -82,6 +85,11 @@ class Node:
         return self.product_id in VENTILATION_UNIT_PRODUCT_IDS
 
     @property
+    def is_bridge(self) -> bool:
+        """Returns True if this node is a bridge, like the ComfoConnect LAN C."""
+        return self.product_id in BRIDGE_PRODUCT_IDS
+
+    @property
     def is_comfoclime(self) -> bool:
         """Returns True if this node is a ComfoClime heat pump module."""
         return self.product_id == ProductId.COMFOCLIME
@@ -113,6 +121,7 @@ class Bridge:
 
         self._nodes: Dict[int, Node] = {}
         self._ventilation_node_found: Optional[asyncio.Event] = None
+        self._bridge_node_found: Optional[asyncio.Event] = None
 
         self.__sensor_callback_fn: Optional[Callable[[int, int], None]] = None
         self._sensor_pdo_types: Dict[int, int] = {}
@@ -189,6 +198,7 @@ class Bridge:
         # The bridge announces its nodes at the start of every session, so forget what we knew.
         self._nodes = {}
         self._ventilation_node_found = asyncio.Event()
+        self._bridge_node_found = asyncio.Event()
 
         # Start background task to read messages
         self._read_task = asyncio.create_task(self._read_messages())
@@ -273,6 +283,8 @@ class Bridge:
 
         if node.is_ventilation_unit and self._ventilation_node_found is not None:
             self._ventilation_node_found.set()
+        if node.is_bridge and self._bridge_node_found is not None:
+            self._bridge_node_found.set()
 
     @property
     def nodes(self) -> Dict[int, Node]:
@@ -284,6 +296,15 @@ class Bridge:
         """The node id of the ventilation unit, or None when the bridge hasn't announced it (yet)."""
         candidates = [node.node_id for node in self._nodes.values() if node.is_ventilation_unit]
         return min(candidates) if candidates else None
+
+    @property
+    def bridge_node(self) -> Optional[Node]:
+        """The node of the bridge itself, or None when the bridge hasn't announced it (yet).
+
+        A ComfoAir Flex with a ComfoConnect LAN C has two, and then it's the LAN C (see BRIDGE_PRODUCT_IDS).
+        """
+        candidates = [node for node in self._nodes.values() if node.is_bridge]
+        return min(candidates, key=lambda node: (BRIDGE_PRODUCT_IDS.index(node.product_id), node.node_id)) if candidates else None
 
     @property
     def comfoclime_node_id(self) -> Optional[int]:
@@ -316,6 +337,19 @@ class Bridge:
             raise VentilationUnitNotFoundException(f"The bridge did not announce a ventilation unit within {timeout} seconds")
 
         return node_id
+
+    async def wait_for_bridge_node(self, timeout: float = None) -> Optional[Node]:
+        """Wait until the bridge has announced its own node and return it, or None when it doesn't in time."""
+        if timeout is None:
+            timeout = BRIDGE_NODE_TIMEOUT
+
+        if self._bridge_node_found is not None:
+            try:
+                await asyncio.wait_for(self._bridge_node_found.wait(), timeout)
+            except asyncio.TimeoutError:
+                pass
+
+        return self.bridge_node
 
     def _fail_pending(self, exc: Exception):
         """Fail the requests that wait for a reply, so they don't hang."""
@@ -362,6 +396,7 @@ class Bridge:
         self._reference = None
         self._nodes = {}
         self._ventilation_node_found = None
+        self._bridge_node_found = None
 
     def is_connected(self) -> bool:
         """Returns True if the bridge is connected."""

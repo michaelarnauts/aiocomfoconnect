@@ -245,6 +245,13 @@ class ComfoConnect(Bridge):
         await self.cmd_node_request()
         _LOGGER.info("Using node %s for the ventilation unit", await self.wait_for_ventilation_node())
 
+        # The bridge announces its own node a little later. Wait for it, so bridge_node is known once we're connected.
+        bridge_node = await self.wait_for_bridge_node()
+        if bridge_node is None:
+            _LOGGER.info("The bridge did not announce its own node")
+        else:
+            _LOGGER.debug("The bridge is node %s with product id %s", bridge_node.node_id, bridge_node.product_id)
+
         # Hold the sensor values for a specified amount of seconds.
         # This is to work around a bug where the bridge sends invalid sensor values when connecting.
         for sensor_id in self._sensors:
