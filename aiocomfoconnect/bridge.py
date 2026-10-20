@@ -14,7 +14,7 @@ from typing import Awaitable, Callable, Dict, Iterator, Optional
 from google.protobuf.message import DecodeError
 from google.protobuf.message import Message as ProtobufMessage
 
-from .const import BRIDGE_PRODUCT_IDS, NUMERIC_PROPERTY_TYPES, VENTILATION_UNIT_PRODUCT_IDS, GatewayType, ProductId
+from .const import BRIDGE_PRODUCT_IDS, NUMERIC_PROPERTY_TYPES, VENTILATION_UNIT_PRODUCT_IDS, ProductId
 from .exceptions import (
     AioComfoConnectNotConnected,
     AioComfoConnectNotReachable,
@@ -101,12 +101,9 @@ class Bridge:
         self,
         host: str,
         uuid: str,
-        bridge_type: int = 0,
     ):
         self.host: str = host
         self.uuid: str = uuid
-        # One of GatewayType. Discovery reports it, and a ComfoConnect Pro also identifies itself when a session starts.
-        self.bridge_type: int = bridge_type
         self._local_uuid: Optional[str] = None
 
         self._reader: Optional[StreamReader] = None
@@ -151,27 +148,16 @@ class Bridge:
         """Connect to the bridge and start reading messages."""
         await self._open_connection(uuid)
 
-    async def register(self, uuid: str, name: str, pin: int) -> bool:
+    async def register(self, uuid: str, name: str, pin: int) -> None:
         """Register this app on the bridge and start a session.
 
-        For LAN C bridges, attempts to start a session first; if the session
-        succeeds the app is already registered and no re-registration occurs.
-        For Pro bridges, registers directly to avoid a connection timeout that
-        the Pro issues when the app is not yet registered.
-
-        Returns True if the app was newly registered, False if it was already registered.
+        Like the official app, this registers directly: a bridge accepts an app that is registered already, as long as
+        the PIN is right. We don't start a session first to find out, since a ComfoConnect Pro doesn't answer that for an
+        app that isn't registered. ComfoConnectNotAllowed is raised for a wrong PIN.
         """
         await self._open_connection(uuid)
-        if self.bridge_type != GatewayType.PRO:
-            # LAN C: check whether we are already registered by starting a session.
-            try:
-                await self.cmd_start_session()
-                return False  # Already registered; session is now active.
-            except ComfoConnectNotAllowed:
-                pass  # Not registered yet; fall through to register below.
         await self.cmd_register_app(uuid, name, pin)
         await self.cmd_start_session()
-        return True
 
     async def _open_connection(self, uuid: str):
         """Open TCP connection to the bridge and start reading messages."""
@@ -496,16 +482,11 @@ class Bridge:
         """Starts the session on the device by logging in and optionally disconnecting an already existing session."""
         _LOGGER.debug("StartSessionRequest")
         # pylint: disable=no-member
-        reply = await self._send(
+        return await self._send(
             zehnder_pb2.StartSessionRequest,
             zehnder_pb2.GatewayOperation.StartSessionRequestType,
             {"takeover": take_over},
         )
-        # A ComfoConnect Pro sets the devicename of a successful session to "ccpro", a LAN C leaves it empty. This also
-        # tells us the type of a bridge that was connected to by IP address, without discovery.
-        if getattr(reply, "devicename", None) == "ccpro":
-            self.bridge_type = GatewayType.PRO
-        return reply
 
     def cmd_close_session(self) -> Awaitable[Message]:
         """Stops the current session."""

@@ -35,7 +35,7 @@ def bridge():
     comfoconnect.cmd_deregister_app = AsyncMock()
     comfoconnect.cmd_list_registered_apps = AsyncMock(return_value=SimpleNamespace(apps=[]))
 
-    discovered = [SimpleNamespace(host=FAKE_HOST, uuid=FAKE_BRIDGE_UUID, bridge_type=0)]
+    discovered = [SimpleNamespace(host=FAKE_HOST, uuid=FAKE_BRIDGE_UUID)]
     with (
         patch.object(cli, "discover_bridges", AsyncMock(return_value=discovered)),
         patch.object(cli, "ComfoConnect", MagicMock(return_value=comfoconnect)),
@@ -169,7 +169,7 @@ class TestConnected:
             pass
 
         cli.discover_bridges.assert_awaited_once_with(FAKE_HOST)
-        cli.ComfoConnect.assert_called_once_with(FAKE_HOST, FAKE_BRIDGE_UUID, bridge_type=0)
+        cli.ComfoConnect.assert_called_once_with(FAKE_HOST, FAKE_BRIDGE_UUID)
 
 
 class TestCommands:

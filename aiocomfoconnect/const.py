@@ -36,14 +36,6 @@ BRIDGE_PRODUCT_IDS = (ProductId.COMFOCONNECTPRO, ProductId.ZEHNDERGATEWAY, Produ
 
 
 # PDO Types
-class GatewayType:
-    """Defines the type of a bridge, with the values of the GatewayType in the discovery response."""
-
-    LANC = 0  # ComfoConnect LAN C
-    SEASON = 1  # The built-in WiFi module of a ComfoAir Flex
-    PRO = 2  # ComfoConnect Pro
-
-
 class ConnectionState:
     """The state of the session with the bridge, as reported to the connection state callback."""
 

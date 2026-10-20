@@ -43,7 +43,7 @@ async def connected(args, *, connect: bool = True, **kwargs) -> AsyncIterator[Co
     if not bridges:
         raise BridgeNotFoundException("No bridge found")
 
-    comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid, bridge_type=bridges[0].bridge_type, **kwargs)
+    comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid, **kwargs)
     try:
         if connect:
             try:
@@ -82,14 +82,11 @@ async def run_register(args):
     """Register an app on the bridge."""
     async with connected(args, connect=False) as comfoconnect:
         try:
-            registered = await comfoconnect.register(args.uuid, args.name, args.pin)
+            await comfoconnect.register(args.uuid, args.name, args.pin)
         except ComfoConnectNotAllowed as exc:
             raise CliError("Registration failed. Please check the PIN.") from exc
 
-        if registered:
-            print(f"UUID {args.uuid} is now registered.")
-        else:
-            print(f"UUID {args.uuid} is already registered.")
+        print(f"UUID {args.uuid} is registered.")
 
         await print_registered_apps(comfoconnect)
 
