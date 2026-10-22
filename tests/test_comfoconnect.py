@@ -14,6 +14,7 @@ from aiocomfoconnect.exceptions import (
     NodeNotFoundException,
 )
 from aiocomfoconnect.properties import (
+    PROPERTY_FLOW_AWAY,
     PROPERTY_CLIME_HEATING_COMFORT_TEMP,
     PROPERTY_CLIME_AUTO_SEASON,
     PROPERTY_CLIME_HEATPUMP_STANDBY,
@@ -366,6 +367,17 @@ class TestComfoConnect:
             await comfoconnect.set_property(PROPERTY_PROFILE_TEMPERATURE_NORMAL, value)
 
         assert mock_rmi.await_args_list[1].args == (bytes([0x03, 0x1D, 0x01, 0x0B]) + raw.to_bytes(2, "little", signed=True),)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("value", [90, 90.0, 89.6])
+    async def test_set_unscaled_property(self, comfoconnect, value):
+        """A property without a scale takes a float too, like Home Assistant sends, rounded to the whole number the unit stores."""
+        node_notification(comfoconnect, node_id=1, product_id=ProductId.COMFOAIRQ)
+
+        with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock()) as mock_rmi:
+            await comfoconnect.set_property(PROPERTY_FLOW_AWAY, value)
+
+        assert mock_rmi.await_args.args == (bytes([0x03, PROPERTY_FLOW_AWAY.unit, 0x01, 0x03, 90, 0x00]),)
 
     @pytest.mark.asyncio
     async def test_get_firmware_version(self, comfoconnect):
