@@ -537,10 +537,13 @@ class ComfoConnect(Bridge):
     async def set_property(self, prop: Property, value: int | float | str, node_id: Optional[int] = None) -> Any:
         """Set a property on the node it lives on (or node_id), encoded for its type.
 
-        A property with options takes an option, a scaled property takes the scaled value.
+        A property with options takes an option, a scaled property takes the scaled value. A numeric value is rounded to
+        the whole number the unit stores, so a float like 90.0 is fine for a property without a scale too.
         """
         if prop.scale is not None:
             value = round(value / prop.scale)
+        elif prop.options is None and prop.property_type in NUMERIC_PROPERTY_TYPES:
+            value = round(value)
         if prop.options is not None:
             values = {option: raw for raw, option in prop.options.items()}
             if value not in values:
