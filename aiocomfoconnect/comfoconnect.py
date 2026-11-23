@@ -178,6 +178,8 @@ class ComfoConnect(Bridge):
         self._sensors: Dict[int, Sensor] = {}
         self._sensors_values: Dict[int, Any] = {}
         self._sensor_holds: Dict[int, asyncio.Handle] = {}
+        # The subscriptions that register_sensor is waiting for, done when the bridge answered.
+        self._sensor_subscriptions: Dict[int, asyncio.Future] = {}
 
         self._reconnect_task: Optional[asyncio.Task] = None
         self._connect_lock = asyncio.Lock()
@@ -405,8 +407,13 @@ class ComfoConnect(Bridge):
         """Register a sensor on the bridge.
 
         A sensor that is already registered isn't subscribed again, since some bridges refuse a second subscription to the
-        same sensor. Its latest value goes to the sensor callback right away instead, so every caller gets a value.
+        same sensor. Its latest value goes to the sensor callback right away instead, so every caller gets a value. While
+        the first subscription is still waiting for the bridge, we wait for it, and subscribe ourselves when it failed.
         """
+        while sensor.id in self._sensor_subscriptions:
+            # Shielded, so cancelling us doesn't cancel the wait of the other registration.
+            await asyncio.shield(self._sensor_subscriptions[sensor.id])
+
         if sensor.id in self._sensors:
             self._sensors[sensor.id] = sensor
             value = self._sensors_values.get(sensor.id)
@@ -422,6 +429,7 @@ class ComfoConnect(Bridge):
         # they need their own hold. The hold that was started when we connected has probably expired already.
         self._hold_sensor(sensor.id)
 
+        subscription = self._sensor_subscriptions[sensor.id] = asyncio.get_running_loop().create_future()
         try:
             await self.cmd_rpdo_request(sensor.id, sensor.type)
         except ComfoConnectNotAllowed:
@@ -436,6 +444,9 @@ class ComfoConnect(Bridge):
             self._sensors.pop(sensor.id, None)
             self._sensors_values.pop(sensor.id, None)
             raise
+        finally:
+            del self._sensor_subscriptions[sensor.id]
+            subscription.set_result(None)
 
     async def deregister_sensor(self, sensor: Sensor):
         """Deregister a sensor on the bridge."""

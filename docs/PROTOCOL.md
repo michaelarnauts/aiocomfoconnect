@@ -246,6 +246,10 @@ The confirmation also has a `resumed` field. The bridge sets it when a session w
 connection, or when the same connection sends a `StartSessionRequestType` again; not on a new session or a takeover.
 The official app treats a confirmation with `resumed` set as a failed connection and stops †.
 
+On a LAN C (firmware R1.5.1), the session ends when its connection is closed, also without a `CloseSessionRequestType`:
+a new connection with the same UUID, even a second later, gets a new session. It only gets `resumed` while another
+connection with the same UUID is still open. That other connection stays open and keeps getting answers.
+
 If all session slots are taken, the bridge will respond with a `result` of `OTHER_SESSION`. The name of the client
 whose session was least recently active will be in `devicename`.
 
@@ -344,6 +348,9 @@ bridge, which is only removed when the last of them unsubscribes. The bridge has
 are all in use, it answers `NO_RESOURCES`. Unsubscribing from something that isn't subscribed is answered with
 `NOT_EXIST`.
 
+A second subscription to the same `pdid` on the same session is answered with `OK` by a LAN C (firmware R1.5.1). Other
+bridges answer it with `NOT_ALLOWED` and keep the session: other requests and the notifications keep working.
+
 The official app subscribes with a `timeout` of `16777215` (`0xffffff`) †, but the bridge doesn't use the `timeout`.
 The optional `interval` field is in seconds, and is kept per client: the bridge then sends a notification for that
 `pdid` to that client at most once per interval, rounded down to a power of 2 (an `interval` of `10` gives one every 8
@@ -423,7 +430,9 @@ sensor values (seen on a unit: twice after 90 seconds). Every message the client
 aiocomfoconnect uses a heartbeat: when it has sent or received nothing for 30 seconds, it sends a `CnTimeRequest`, and
 when that isn't answered it closes the connection and reconnects. On an established session, it also closes the
 connection and starts a new session when a request is answered with `NOT_ALLOWED` or `OTHER_SESSION`, because the bridge
-then dropped the session without closing the connection.
+then dropped the session without closing the connection. A `NOT_ALLOWED` on a `CnRpdoRequestType` is the exception,
+since a bridge can refuse only that subscription: a session that is really gone refuses the heartbeat and every other
+request as well.
 
 # ComfoControl CAN/RMI Protocol
 
