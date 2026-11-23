@@ -59,6 +59,7 @@ from aiocomfoconnect.properties import (
     Property,
     PropertyConstraints,
 )
+from aiocomfoconnect.protobuf import zehnder_pb2
 from aiocomfoconnect.sensors import Sensor
 from aiocomfoconnect.util import bytearray_to_bits, encode_pdo_value, version_decode
 
@@ -177,6 +178,8 @@ class ComfoConnect(Bridge):
         self._sensors: Dict[int, Sensor] = {}
         self._sensors_values: Dict[int, Any] = {}
         self._sensor_holds: Dict[int, asyncio.Handle] = {}
+        # The subscriptions that register_sensor is waiting for, done when the bridge answered.
+        self._sensor_subscriptions: Dict[int, asyncio.Future] = {}
 
         self._reconnect_task: Optional[asyncio.Task] = None
         self._connect_lock = asyncio.Lock()
@@ -259,6 +262,9 @@ class ComfoConnect(Bridge):
         for sensor in list(self._sensors.values()):
             try:
                 await self.cmd_rpdo_request(sensor.id, sensor.type)
+            except ComfoConnectNotAllowed:
+                # A resumed session can still have the sensor, see register_sensor.
+                _LOGGER.debug("The bridge refused the subscription to sensor %s (%s), keeping it", sensor.id, sensor.name)
             except (ComfoConnectError, AioComfoConnectTimeout) as exc:
                 _LOGGER.warning("Failed to subscribe to sensor %s (%s): %r", sensor.id, sensor.name, exc)
 
@@ -364,10 +370,16 @@ class ComfoConnect(Bridge):
         The bridge can drop our session without closing the connection, e.g. when another app takes over a session with our
         uuid. It then answers every request with NOT_ALLOWED (or OTHER_SESSION). Closing the connection lets the reconnect
         loop start a new session. The request still raises its error.
+
+        A NOT_ALLOWED on a CnRpdoRequest doesn't mean that: some bridges refuse only that subscription when the sensor is
+        already subscribed on the session, and keep the session. When the session is gone, the heartbeat and the next
+        other request get NOT_ALLOWED too.
         """
         try:
             return await super()._send(request, request_type, params, reply, timeout)
-        except (ComfoConnectNotAllowed, ComfoConnectOtherSession):
+        except (ComfoConnectNotAllowed, ComfoConnectOtherSession) as exc:
+            if isinstance(exc, ComfoConnectNotAllowed) and request_type == zehnder_pb2.GatewayOperation.CnRpdoRequestType:  # pylint: disable=no-member
+                raise
             if self._connection_state == ConnectionState.CONNECTED and self._writer is not None:
                 _LOGGER.warning("The bridge dropped our session, reconnecting")
                 self._writer.close()
@@ -392,8 +404,24 @@ class ComfoConnect(Bridge):
             self._set_connection_state(ConnectionState.DISCONNECTED)
 
     async def register_sensor(self, sensor: Sensor):
-        """Register a sensor on the bridge."""
-        previous = self._sensors.get(sensor.id)
+        """Register a sensor on the bridge.
+
+        A sensor that is already registered isn't subscribed again, since some bridges refuse a second subscription to the
+        same sensor. Its latest value goes to the sensor callback right away instead, so every caller gets a value. While
+        the first subscription is still waiting for the bridge, we wait for it, and subscribe ourselves when it failed.
+        """
+        while sensor.id in self._sensor_subscriptions:
+            # Shielded, so cancelling us doesn't cancel the wait of the other registration.
+            await asyncio.shield(self._sensor_subscriptions[sensor.id])
+
+        if sensor.id in self._sensors:
+            self._sensors[sensor.id] = sensor
+            value = self._sensors_values.get(sensor.id)
+            # A held sensor emits its value when the hold ends.
+            if value is not None and sensor.id not in self._sensor_holds and self._sensor_callback_fn is not None:
+                self._sensor_callback_fn(sensor, _sensor_value(sensor, value))
+            return
+
         self._sensors[sensor.id] = sensor
         self._sensors_values[sensor.id] = None
 
@@ -401,19 +429,24 @@ class ComfoConnect(Bridge):
         # they need their own hold. The hold that was started when we connected has probably expired already.
         self._hold_sensor(sensor.id)
 
+        subscription = self._sensor_subscriptions[sensor.id] = asyncio.get_running_loop().create_future()
         try:
             await self.cmd_rpdo_request(sensor.id, sensor.type)
+        except ComfoConnectNotAllowed:
+            # The session already has this sensor, e.g. a resumed session that kept the subscriptions of the previous one,
+            # and the bridge keeps sending its values. When the session is gone instead, the next session subscribes again.
+            _LOGGER.debug("The bridge refused the subscription to sensor %s (%s), keeping it", sensor.id, sensor.name)
         except BaseException:
             # Only keep the sensor when the bridge accepted the subscription, so we don't retry it on every reconnect.
             handle = self._sensor_holds.pop(sensor.id, None)
             if handle is not None:
                 handle.cancel()
-            if previous is None:
-                self._sensors.pop(sensor.id, None)
-                self._sensors_values.pop(sensor.id, None)
-            else:
-                self._sensors[sensor.id] = previous
+            self._sensors.pop(sensor.id, None)
+            self._sensors_values.pop(sensor.id, None)
             raise
+        finally:
+            del self._sensor_subscriptions[sensor.id]
+            subscription.set_result(None)
 
     async def deregister_sensor(self, sensor: Sensor):
         """Deregister a sensor on the bridge."""
