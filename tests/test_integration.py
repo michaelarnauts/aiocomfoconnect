@@ -524,6 +524,39 @@ class TestConnectionState:
         assert fake_bridge.connections == 2
         await roundtrip(client)
 
+    async def test_refused_subscription_keeps_session(self, fake_bridge, make_client):
+        """A NOT_ALLOWED on a subscription only refuses that subscription: the session stays and the sensor is kept."""
+        states = []
+        values = []
+        client = make_client(connection_state_callback=states.append, sensor_callback=lambda sensor, value: values.append(value))
+        await client.connect(LOCAL_UUID)
+
+        fake_bridge.rpdo_results[56] = GO.NOT_ALLOWED
+        await client.register_sensor(create_sensor(sensor_id=56))
+        assert 56 in client._sensors
+
+        # The bridge still sends the values of the sensor, e.g. for a resumed session that already had it.
+        fake_bridge.push_sensor(56, bytes([1]))
+        await roundtrip(client)
+        assert values == [1]
+
+        await asyncio.sleep(0.05)
+        assert states == [ConnectionState.CONNECTED]
+        assert fake_bridge.connections == 1
+
+    async def test_lost_session_refused_subscription(self, fake_bridge, make_client):
+        """When the session is gone, a refused subscription keeps the sensor, and the new session subscribes to it."""
+        states = []
+        client = make_client(connection_state_callback=states.append, heartbeat_interval=0.02)
+        await client.connect(LOCAL_UUID)
+
+        fake_bridge.lost_sessions = {1}
+        await client.register_sensor(create_sensor(sensor_id=276))
+
+        await fake_bridge.wait_for(lambda: len(states) == 3)
+        assert states == [ConnectionState.CONNECTED, ConnectionState.DISCONNECTED, ConnectionState.CONNECTED]
+        assert [msg.pdid for msg in fake_bridge.received(GO.CnRpdoRequestType, 2)] == [276]
+
     async def test_failed_connect(self, fake_bridge, make_client):
         """A connect() that fails raises its error, and doesn't call the callback."""
         fake_bridge.session_result = GO.NOT_ALLOWED
@@ -585,6 +618,39 @@ class TestSensors:
         assert 276 not in client._sensors
         assert 276 not in client._sensors_values
         assert 276 not in client._sensor_holds
+
+    async def test_register_sensor_twice(self, fake_bridge, make_client):
+        """A sensor that is already registered isn't subscribed again, and its latest value goes to the callback at once."""
+        values = []
+        client = make_client(sensor_callback=lambda sensor, value: values.append((sensor.name, value)))
+        await client.connect(LOCAL_UUID)
+        await client.register_sensor(create_sensor(sensor_id=56, name="first"))
+        fake_bridge.push_sensor(56, bytes([1]))
+        await roundtrip(client)
+
+        await client.register_sensor(create_sensor(sensor_id=56, name="second"))
+
+        assert [msg.pdid for msg in fake_bridge.received(GO.CnRpdoRequestType)] == [56]
+        assert values == [("first", 1), ("second", 1)]
+
+    async def test_register_sensor_twice_without_value(self, fake_bridge, make_client):
+        """A second registration before the sensor has a value emits nothing, and the value comes once, when it arrives."""
+        values = []
+        client = make_client(sensor_callback=lambda sensor, value: values.append(value), sensor_delay=0.05)
+        await client.connect(LOCAL_UUID)
+        await client.register_sensor(create_sensor(sensor_id=56))
+        fake_bridge.push_sensor(56, bytes([0]))
+        await roundtrip(client)
+
+        # Still held: the second registration doesn't restart the hold or emit the held value.
+        await client.register_sensor(create_sensor(sensor_id=56))
+        assert not values
+        assert client._sensors_values[56] == 0
+
+        await fake_bridge.wait_for(lambda: values)
+        await asyncio.sleep(0.06)
+        assert values == [0]
+        assert len(fake_bridge.received(GO.CnRpdoRequestType)) == 1
 
     async def test_register_sensors_concurrently(self, fake_bridge, make_client):
         """Many sensors can be subscribed at the same time."""
