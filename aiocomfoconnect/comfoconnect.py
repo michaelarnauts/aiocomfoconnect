@@ -260,6 +260,9 @@ class ComfoConnect(Bridge):
         for sensor in list(self._sensors.values()):
             try:
                 await self.cmd_rpdo_request(sensor.id, sensor.type)
+            except ComfoConnectNotAllowed:
+                # A resumed session can still have the sensor, see register_sensor.
+                _LOGGER.debug("The bridge refused the subscription to sensor %s (%s), keeping it", sensor.id, sensor.name)
             except (ComfoConnectError, AioComfoConnectTimeout) as exc:
                 _LOGGER.warning("Failed to subscribe to sensor %s (%s): %r", sensor.id, sensor.name, exc)
 

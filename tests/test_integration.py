@@ -383,6 +383,21 @@ class TestReconnect:
 
         assert set(client._sensors) == {276, 277}
 
+    async def test_refused_resubscription_after_reconnect(self, fake_bridge, make_client, caplog):
+        """A subscription that a resumed session refuses with NOT_ALLOWED after a reconnect keeps the sensor, without a warning."""
+        states = []
+        client = make_client(connection_state_callback=states.append)
+        await client.connect(LOCAL_UUID)
+        await client.register_sensor(create_sensor(sensor_id=276))
+
+        fake_bridge.rpdo_results[276] = GO.NOT_ALLOWED
+        fake_bridge.drop()
+        await fake_bridge.wait_for(lambda: len(states) == 3)
+
+        assert 276 in client._sensors
+        assert fake_bridge.connections == 2
+        assert not [record for record in caplog.records if record.levelname == "WARNING" and "subscribe" in record.getMessage()]
+
     async def test_register_sensor_while_resubscribing(self, fake_bridge, make_client):
         """Registering a sensor while the sensors are subscribed again doesn't break the session."""
         client = make_client()
